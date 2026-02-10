@@ -14,7 +14,7 @@ services:
     ports:
       - 5432:5432
   backend:
-    image: python:3.9
+    image: python:3.12
     working_dir: /app
     command: ["./start.sh"]
     volumes:
@@ -25,7 +25,11 @@ services:
       - DB_PASSWORD=password
       - DB_HOST=db
       - DEBUG=True
-      - SECRET_KEY=secret
+      - SECRET_KEY=${SECRET_KEY}
+      - COVERALLS_REPO_TOKEN=${COVERALLS_REPO_TOKEN:-}
+      - MAILJET_APIKEY=$MAILJET_APIKEY
+      - MAILJET_SECRET=$MAILJET_SECRET
+      - WEBDOMAIN=$WEBDOMAIN
     depends_on:
       - db
   frontend:

@@ -19,6 +19,7 @@ services:
     command: ["./start.sh"]
     volumes:
       - ./backend:/app:delegated
+      - ./.git:/app/.git:ro
     environment:
       - DB_SCHEMA=african_bamboo_dashboard
       - DB_USER=akvo

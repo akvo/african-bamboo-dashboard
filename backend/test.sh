@@ -25,7 +25,7 @@ if [[ -n "${COVERALLS_REPO_TOKEN:-}" ]] ; then
 fi
 
 echo "Generate Django DBML"
-./manage.py dbml >> db.dbml
+./manage.py dbml > db.dbml
 echo "Done"
 
 flake8

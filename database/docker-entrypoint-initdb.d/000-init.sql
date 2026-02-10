@@ -1,4 +1,4 @@
-CREATE USER akvo WITH PASSWORD 'password';
+CREATE USER akvo WITH CREATEDB PASSWORD 'password';
 
 CREATE DATABASE african_bamboo_dashboard
 WITH OWNER = akvo

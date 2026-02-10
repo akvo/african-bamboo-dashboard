@@ -14,7 +14,7 @@ services:
     ports:
       - 5432:5432
   backend:
-    image: python:3.9
+    image: python:3.12
     working_dir: /app
     command: ["./start.sh"]
     volumes:

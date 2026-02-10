@@ -73,3 +73,17 @@ Frontend (port 3000) → Next.js API rewrite → Backend DRF (port 8000) → Pos
 
 - **Frontend**: ESLint 9 (flat config) + Prettier. Config in `frontend/eslint.config.mjs`
 - **Backend**: Black (formatter) + Flake8 (linter, 80 char max) + isort (import sorting). Config in `backend/.flake8`
+
+### Backend Linting Rules (MUST follow when writing Python code)
+
+All backend Python code MUST pass `flake8` with the project config (`backend/.flake8`):
+- **Max line length: 80 characters** — no exceptions. Break long strings, imports, and function signatures across multiple lines.
+- **No unused imports** (F401) — remove any import that is not used in the file.
+- **No unused variables** (F841) — remove or prefix with `_` if intentionally unused.
+- Ignored rules: E203 (whitespace before `:`), W503 (line break before binary operator).
+
+When writing backend code, always:
+1. Keep every line under 80 characters. Use parentheses, implicit string concatenation, or backslash continuation to break long lines.
+2. Run `black . && isort . && flake8` mentally before finalizing code — the CI will fail on any violation.
+3. Use double quotes for strings (Black default).
+4. Sort imports with isort (stdlib → third-party → local), one import per line for `from` imports when they exceed 80 chars.

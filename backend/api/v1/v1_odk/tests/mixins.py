@@ -11,7 +11,7 @@ class OdkTestHelperMixin:
         """Create a SystemUser with Kobo credentials
         for testing."""
         user = SystemUser.objects.create_superuser(
-            email="kobo@kobo.local",
+            email="kobouser@kf.kobotoolbox.org.local",
             password="Changeme123",
             name="kobouser",
         )

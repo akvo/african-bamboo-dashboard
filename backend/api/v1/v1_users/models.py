@@ -55,3 +55,4 @@ class SystemUser(AbstractBaseUser, PermissionsMixin, SoftDeletes):
 
     class Meta:
         db_table = "system_user"
+        unique_together = [("kobo_username", "kobo_url")]

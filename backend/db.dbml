@@ -1,7 +1,7 @@
 Project "None" {
   database_type: 'PostgreSQL'
   Note: '''None
-  Last Updated At 02-12-2026 07:51AM UTC'''
+  Last Updated At 02-12-2026 08:44AM UTC'''
 }
 
 enum admin.positive_small_integer_logentry_action_flag {
@@ -310,6 +310,7 @@ SystemUser(id, password, last_login, is_superuser, deleted_at, email, name, kobo
 
   indexes {
     (email) [unique, name: 'system_user_email_key', type: btree]
+    (kobo_username,kobo_url) [unique, name: 'system_user_kobo_username_kobo_url_1158bdc0_uniq', type: btree]
     (id) [pk, unique, name: 'system_user_pkey', type: btree]
   }
 }

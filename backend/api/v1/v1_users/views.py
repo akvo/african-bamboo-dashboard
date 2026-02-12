@@ -1,5 +1,7 @@
 from datetime import datetime
+from urllib.parse import urlparse
 
+from django.conf import settings
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
@@ -52,12 +54,13 @@ def login(request, version):
         )
 
     # Create or update SystemUser
+    host = urlparse(kobo_url).hostname
     user, _ = SystemUser.objects.update_or_create(
         kobo_username=kobo_username,
         kobo_url=kobo_url,
         defaults={
             "name": kobo_username,
-            "email": (f"{kobo_username}@kobo.local"),
+            "email": f"{kobo_username}@{host}.local",
             "kobo_password": encrypt(kobo_password),
         },
     )
@@ -78,6 +81,9 @@ def login(request, version):
         "AUTH_TOKEN",
         str(refresh.access_token),
         expires=expiration_time,
+        httponly=True,
+        secure=not settings.DEBUG,
+        samesite="Lax",
     )
     return response
 

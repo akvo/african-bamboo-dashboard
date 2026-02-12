@@ -119,7 +119,7 @@ class PlotModelTest(TestCase):
             submission=self.submission,
         )
         self.assertEqual(plot.plot_name, "Farmer A")
-        self.assertFalse(plot.is_draft is False)
+        self.assertTrue(plot.is_draft)
 
     def test_plot_str(self):
         plot = Plot(plot_name="Farmer B", is_draft=True)

@@ -18,6 +18,7 @@ from utils.encryption import decrypt
 from utils.kobo_client import KoboClient
 
 
+@extend_schema(tags=["Forms"])
 class FormMetadataViewSet(viewsets.ModelViewSet):
     queryset = FormMetadata.objects.all()
     serializer_class = FormMetadataSerializer
@@ -35,7 +36,11 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
         form = self.get_object()
         user = request.user
 
-        if not user.kobo_url or not user.kobo_username:
+        if (
+            not user.kobo_url or
+            not user.kobo_username or
+            not user.kobo_password
+        ):
             return Response(
                 {"message": ("No Kobo credentials")},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -95,6 +100,7 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
         )
 
 
+@extend_schema(tags=["Submissions"])
 class SubmissionViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Submission.objects.all()
     permission_classes = [IsAuthenticated]
@@ -130,6 +136,7 @@ class SubmissionViewSet(viewsets.ReadOnlyModelViewSet):
         return Response({"latest_submission_time": latest})
 
 
+@extend_schema(tags=["Plots"])
 class PlotViewSet(viewsets.ModelViewSet):
     queryset = Plot.objects.all()
     serializer_class = PlotSerializer

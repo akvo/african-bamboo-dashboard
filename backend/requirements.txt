@@ -27,3 +27,5 @@ zipp==3.23.0
 drf-spectacular==0.29.0
 djangorestframework==3.16.1
 djangorestframework_simplejwt==5.5.1
+cryptography==44.0.2
+requests==2.32.3

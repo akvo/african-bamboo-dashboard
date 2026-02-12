@@ -10,9 +10,9 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 
+from datetime import timedelta
 from os import environ
 from pathlib import Path
-from datetime import timedelta
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -32,12 +32,8 @@ ALLOWED_HOSTS = ["*"]
 
 # Application definition
 
-INSTALLED_APPS = [
-    "api.v1.v1_init",
-    "rest_framework",
-    "rest_framework_simplejwt",
-    "drf_spectacular",
-    "django_dbml",
+# Default django apps
+DJANGO_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -45,6 +41,23 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
 ]
+
+# Add API apps below
+API_APPS = [
+    "api.v1.v1_init",
+    "api.v1.v1_users",
+    "api.v1.v1_odk",
+]
+
+# Add third party apps below
+EXTERNAL_APPS = [
+    "rest_framework",
+    "rest_framework_simplejwt",
+    "drf_spectacular",
+    "django_dbml",
+]
+
+INSTALLED_APPS = DJANGO_APPS + API_APPS + EXTERNAL_APPS
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
@@ -172,9 +185,7 @@ SPECTACULAR_SETTINGS = {
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(hours=12),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
-    "AUTH_TOKEN_CLASSES": {
-        "rest_framework_simplejwt.tokens.AccessToken",
-    },
+    "AUTH_TOKEN_CLASSES": ("rest_framework_simplejwt.tokens.AccessToken",),
 }
 
 # MAIL SETUP
@@ -186,3 +197,6 @@ EMAIL_FROM = environ.get("EMAIL_FROM") or "noreply@akvo.org"
 # APP SETUP
 WEBDOMAIN = environ.get("WEBDOMAIN", "http://localhost:3000")
 TEST_ENV = environ.get("TEST_ENV") or False
+
+# Override the default user model
+AUTH_USER_MODEL = "v1_users.SystemUser"

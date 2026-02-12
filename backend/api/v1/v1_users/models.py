@@ -1,0 +1,80 @@
+import uuid
+from datetime import timedelta
+
+from django.contrib.auth.base_user import AbstractBaseUser
+from django.contrib.auth.models import PermissionsMixin
+from django.core import signing
+from django.db import models
+from django.utils import timezone
+
+from utils.custom_manager import UserManager
+from utils.soft_deletes_model import SoftDeletes
+
+
+class SystemUser(AbstractBaseUser, PermissionsMixin, SoftDeletes):
+    email = models.EmailField(unique=True)
+    name = models.CharField(max_length=100)
+    email_verified = models.BooleanField(default=False)
+    email_verification_code = models.UUIDField(default=None, null=True)
+    email_verification_expiry = models.DateTimeField(null=True, blank=True)
+    reset_password_code = models.UUIDField(default=None, null=True, blank=True)
+    reset_password_code_expiry = models.DateTimeField(null=True, blank=True)
+
+    kobo_url = models.URLField(
+        max_length=500,
+        null=True,
+        blank=True,
+        help_text="KoboToolbox server URL",
+    )
+    kobo_username = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        help_text="KoboToolbox username",
+    )
+    kobo_password = models.TextField(
+        null=True,
+        blank=True,
+        help_text="Encrypted KoboToolbox password",
+    )
+
+    objects = UserManager()
+
+    USERNAME_FIELD = "email"
+    REQUIRED_FIELDS = ["name"]
+
+    def delete(self, using=None, keep_parents=False, hard: bool = False):
+        if hard:
+            return super().delete(using, keep_parents)
+        self.deleted_at = timezone.now()
+        self.save(update_fields=["deleted_at"])
+
+    def soft_delete(self) -> None:
+        self.delete(hard=False)
+
+    def restore(self) -> None:
+        self.deleted_at = None
+        self.save(update_fields=["deleted_at"])
+
+    def get_sign_pk(self):
+        return signing.dumps(self.pk)
+
+    def generate_reset_password_code(self):
+        self.reset_password_code = uuid.uuid4()
+        self.reset_password_code_expiry = timezone.now() + timedelta(hours=1)
+        self.save(
+            update_fields=["reset_password_code", "reset_password_code_expiry"]
+        )
+        return self.reset_password_code
+
+    def is_reset_code_valid(self):
+        if self.reset_password_code and self.reset_password_code_expiry:
+            return timezone.now() < self.reset_password_code_expiry
+        return False
+
+    @property
+    def is_staff(self):
+        return self.is_superuser
+
+    class Meta:
+        db_table = "system_user"

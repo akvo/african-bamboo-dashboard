@@ -6,23 +6,35 @@ import requests
 class KoboClient:
     """Server-side client for KoboToolbox API v2."""
 
+    DEFAULT_TIMEOUT = 30  # seconds
+
     def __init__(
         self,
         base_url: str,
         username: str,
         password: str,
+        timeout: int = None,
     ):
         self.base_url = base_url.rstrip("/")
+        self.timeout = timeout or self.DEFAULT_TIMEOUT
         self.session = requests.Session()
-        credentials = b64encode(f"{username}:{password}".encode()).decode()
-        self.session.headers["Authorization"] = f"Basic {credentials}"
+        credentials = (
+            b64encode(f"{username}:{password}".encode()).decode()
+        )
+        self.session.headers["Authorization"] = (
+            f"Basic {credentials}"
+        )
 
     def verify_credentials(self) -> bool:
         """Validate credentials with a lightweight
         API call."""
         try:
             url = f"{self.base_url}" "/api/v2/assets.json"
-            resp = self.session.get(url, params={"limit": 0})
+            resp = self.session.get(
+                url,
+                params={"limit": 0},
+                timeout=self.timeout,
+            )
             return resp.status_code == 200
         except requests.RequestException:
             return False
@@ -38,6 +50,7 @@ class KoboClient:
         resp = self.session.get(
             url,
             params={"limit": limit, "start": start},
+            timeout=self.timeout,
         )
         resp.raise_for_status()
         return resp.json()
@@ -59,6 +72,7 @@ class KoboClient:
                 "limit": limit,
                 "start": start,
             },
+            timeout=self.timeout,
         )
         resp.raise_for_status()
         return resp.json()

@@ -1,5 +1,4 @@
 from rest_framework import serializers
-from rest_framework.exceptions import APIException
 
 
 class DefaultResponseSerializer(serializers.Serializer):
@@ -11,11 +10,13 @@ class DefaultResponseSerializer(serializers.Serializer):
     )
 
 
-class DefaultErrorResponseSerializer(APIException):
+class DefaultErrorResponseSerializer(serializers.Serializer):
     message = serializers.CharField(
-        max_length=None, min_length=None, required=False, trim_whitespace=True
+        max_length=None,
+        min_length=None,
+        required=False,
+        trim_whitespace=True,
     )
-    default_detail = "Service temporarily unavailable, try again later."
 
 
 class CommonOptionSerializer(serializers.Serializer):

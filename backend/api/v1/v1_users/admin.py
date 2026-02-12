@@ -11,14 +11,13 @@ class SystemUserAdmin(UserAdmin):
     list_display = (
         "email",
         "name",
-        "email_verified",
     )
-    list_filter = ("email_verified",)
+    list_filter = ()
     fieldsets = (
         (None, {"fields": ("email", "name", "password")}),
         (
             "Permissions",
-            {"fields": ("email_verified",)},
+            {"fields": ()},
         ),
     )
     add_fieldsets = (

@@ -41,6 +41,6 @@ class UserModelTestCase(TestCase):
         )
         self.assertIsNotNone(admin.id)
         total_admin = SystemUser.objects.filter(
-            is_superuser=True, email_verified=False
+            is_superuser=True
         ).count()
         self.assertEqual(total_admin, 1)

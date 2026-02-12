@@ -23,7 +23,6 @@ class MyProfileTestCase(TestCase, ProfileTestHelperMixin):
                 "id",
                 "name",
                 "email",
-                "email_verified",
                 "kobo_url",
                 "kobo_username",
             ],

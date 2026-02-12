@@ -29,8 +29,6 @@ class ProfileTestHelperMixin:
 
     def get_auth_token(
         self: HasTestClientProtocol,
-        email: str = None,
-        password: str = None,
         kobo_url: str = ("https://kf.kobotoolbox.org"),
         kobo_username: str = "testuser",
         kobo_password: str = "testpass",

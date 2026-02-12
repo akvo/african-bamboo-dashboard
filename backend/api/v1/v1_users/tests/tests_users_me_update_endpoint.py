@@ -31,7 +31,6 @@ class UpdateProfileTestCase(TestCase, ProfileTestHelperMixin):
                 "id",
                 "name",
                 "email",
-                "email_verified",
                 "kobo_url",
                 "kobo_username",
             ],
@@ -40,9 +39,6 @@ class UpdateProfileTestCase(TestCase, ProfileTestHelperMixin):
         self.assertEqual(res["name"], updated_user.name)
 
     def test_successfully_update_my_email(self):
-        self.user.email_verified = True
-        self.user.save()
-
         payload = {
             "email": "jane.doe@example.com",
         }
@@ -57,8 +53,3 @@ class UpdateProfileTestCase(TestCase, ProfileTestHelperMixin):
 
         updated_user = SystemUser.objects.get(pk=self.user.id)
         self.assertEqual(res["email"], updated_user.email)
-        self.assertFalse(updated_user.email_verified)
-        self.assertNotEqual(
-            updated_user.email_verification_code,
-            self.user.email_verification_code,
-        )

@@ -1,7 +1,7 @@
 Project "None" {
   database_type: 'PostgreSQL'
   Note: '''None
-  Last Updated At 02-12-2026 04:37AM UTC'''
+  Last Updated At 02-12-2026 07:51AM UTC'''
 }
 
 enum admin.positive_small_integer_logentry_action_flag {
@@ -293,7 +293,7 @@ ref: v1_odk.Submission.form_id > v1_odk.FormMetadata.asset_uid
 
 Table v1_users.SystemUser {
   Note: '''
-SystemUser(id, password, last_login, is_superuser, deleted_at, email, name, email_verified, email_verification_code, email_verification_expiry, reset_password_code, reset_password_code_expiry, kobo_url, kobo_username, kobo_password)
+SystemUser(id, password, last_login, is_superuser, deleted_at, email, name, kobo_url, kobo_username, kobo_password)
 
 *DB table: system_user*'''
 
@@ -304,11 +304,6 @@ SystemUser(id, password, last_login, is_superuser, deleted_at, email, name, emai
   deleted_at date_time [null]
   email email [unique, not null]
   name char [not null]
-  email_verified boolean [default:`False`, not null]
-  email_verification_code uuid [default:`None`, null]
-  email_verification_expiry date_time [null]
-  reset_password_code uuid [default:`None`, null]
-  reset_password_code_expiry date_time [null]
   kobo_url url [note: '''KoboToolbox server URL''', null]
   kobo_username char [note: '''KoboToolbox username''', null]
   kobo_password text [note: '''Encrypted KoboToolbox password''', null]

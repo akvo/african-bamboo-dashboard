@@ -39,12 +39,12 @@ class SubmissionViewTest(TestCase, OdkTestHelperMixin):
         self.assertNotIn("raw_data", results[0])
 
     def test_filter_by_asset_uid(self):
-        FormMetadata.objects.create(
+        form_y = FormMetadata.objects.create(
             asset_uid="formY", name="Form Y"
         )
         Submission.objects.create(
             uuid="sub-002",
-            form_id="formY",
+            form=form_y,
             kobo_id="200",
             submission_time=1700000001000,
             raw_data={},

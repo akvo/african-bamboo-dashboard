@@ -22,8 +22,15 @@ class FormMetadataSerializer(serializers.ModelSerializer):
 
 class SubmissionListSerializer(serializers.ModelSerializer):
     """Lightweight list — excludes raw_data."""
-    region = serializers.CharField(source="raw_data.region", read_only=True)
-    woreda = serializers.CharField(source="raw_data.woreda", read_only=True)
+    form = serializers.CharField(
+        source="form.asset_uid", read_only=True
+    )
+    region = serializers.CharField(
+        source="raw_data.region", read_only=True
+    )
+    woreda = serializers.CharField(
+        source="raw_data.woreda", read_only=True
+    )
 
     class Meta:
         model = Submission
@@ -41,6 +48,9 @@ class SubmissionListSerializer(serializers.ModelSerializer):
 
 class SubmissionDetailSerializer(serializers.ModelSerializer):
     """Full serializer with raw_data."""
+    form = serializers.CharField(
+        source="form.asset_uid", read_only=True
+    )
 
     class Meta:
         model = Submission
@@ -52,6 +62,11 @@ class PlotSerializer(serializers.ModelSerializer):
         source="submission.uuid",
         read_only=True,
         allow_null=True,
+    )
+    form_id = serializers.SlugRelatedField(
+        slug_field="asset_uid",
+        queryset=FormMetadata.objects.all(),
+        source="form",
     )
 
     class Meta:

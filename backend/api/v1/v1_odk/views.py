@@ -23,6 +23,7 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
     queryset = FormMetadata.objects.all()
     serializer_class = FormMetadataSerializer
     permission_classes = [IsAuthenticated]
+    lookup_field = "asset_uid"
 
     @extend_schema(
         request=SyncTriggerSerializer,
@@ -30,7 +31,7 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
         summary="Trigger sync from KoboToolbox",
     )
     @action(detail=True, methods=["post"])
-    def sync(self, request, pk=None):
+    def sync(self, request, asset_uid=None):
         """Fetch submissions from KoboToolbox
         and upsert into local DB."""
         form = self.get_object()
@@ -104,6 +105,7 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
 class SubmissionViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Submission.objects.all()
     permission_classes = [IsAuthenticated]
+    lookup_field = "uuid"
 
     def get_serializer_class(self):
         if self.action == "retrieve":
@@ -141,13 +143,14 @@ class PlotViewSet(viewsets.ModelViewSet):
     queryset = Plot.objects.all()
     serializer_class = PlotSerializer
     permission_classes = [IsAuthenticated]
+    lookup_field = "uuid"
 
     def get_queryset(self):
         qs = super().get_queryset()
         form_id = self.request.query_params.get("form_id")
         is_draft = self.request.query_params.get("is_draft")
         if form_id:
-            qs = qs.filter(form_id=form_id)
+            qs = qs.filter(form__asset_uid=form_id)
         if is_draft is not None:
             qs = qs.filter(is_draft=(is_draft.lower() == "true"))
         return qs

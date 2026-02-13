@@ -1,7 +1,7 @@
 from django.test import TestCase
 from django.test.utils import override_settings
 
-from api.v1.v1_odk.models import Plot
+from api.v1.v1_odk.models import FormMetadata, Plot
 from api.v1.v1_odk.tests.mixins import OdkTestHelperMixin
 
 
@@ -10,6 +10,9 @@ class PlotViewTest(TestCase, OdkTestHelperMixin):
     def setUp(self):
         self.user = self.create_kobo_user()
         self.auth = self.get_auth_header()
+        self.form = FormMetadata.objects.create(
+            asset_uid="form1", name="Form 1",
+        )
         self.plot_data = {
             "plot_name": "Farmer A",
             "instance_name": "inst-1",
@@ -26,6 +29,14 @@ class PlotViewTest(TestCase, OdkTestHelperMixin):
             "created_at": 1700000000000,
         }
 
+    def _create_plot(self, **overrides):
+        """Create a Plot via ORM using FK reference."""
+        data = {**self.plot_data}
+        data.pop("form_id")
+        data["form"] = self.form
+        data.update(overrides)
+        return Plot.objects.create(**data)
+
     def test_create_plot(self):
         resp = self.client.post(
             "/api/v1/odk/plots/",
@@ -39,7 +50,7 @@ class PlotViewTest(TestCase, OdkTestHelperMixin):
         )
 
     def test_list_plots(self):
-        Plot.objects.create(**self.plot_data)
+        self._create_plot()
         resp = self.client.get(
             "/api/v1/odk/plots/",
             **self.auth,
@@ -50,7 +61,7 @@ class PlotViewTest(TestCase, OdkTestHelperMixin):
         )
 
     def test_filter_by_form_id(self):
-        Plot.objects.create(**self.plot_data)
+        self._create_plot()
         resp = self.client.get(
             "/api/v1/odk/plots/?form_id=form1",
             **self.auth,
@@ -67,7 +78,7 @@ class PlotViewTest(TestCase, OdkTestHelperMixin):
         )
 
     def test_filter_by_is_draft(self):
-        Plot.objects.create(**self.plot_data)
+        self._create_plot()
         resp = self.client.get(
             "/api/v1/odk/plots/?is_draft=true",
             **self.auth,
@@ -84,7 +95,7 @@ class PlotViewTest(TestCase, OdkTestHelperMixin):
         )
 
     def test_overlap_candidates(self):
-        Plot.objects.create(**self.plot_data)
+        self._create_plot()
         resp = self.client.post(
             "/api/v1/odk/plots/"
             "overlap_candidates/",
@@ -101,7 +112,7 @@ class PlotViewTest(TestCase, OdkTestHelperMixin):
         self.assertEqual(len(resp.json()), 1)
 
     def test_overlap_no_match(self):
-        Plot.objects.create(**self.plot_data)
+        self._create_plot()
         resp = self.client.post(
             "/api/v1/odk/plots/"
             "overlap_candidates/",
@@ -118,7 +129,7 @@ class PlotViewTest(TestCase, OdkTestHelperMixin):
         self.assertEqual(len(resp.json()), 0)
 
     def test_overlap_exclude_uuid(self):
-        plot = Plot.objects.create(**self.plot_data)
+        plot = self._create_plot()
         resp = self.client.post(
             "/api/v1/odk/plots/"
             "overlap_candidates/",

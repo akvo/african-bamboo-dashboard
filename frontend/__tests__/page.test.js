@@ -2,21 +2,23 @@ import "@testing-library/jest-dom";
 import { render, screen } from "@testing-library/react";
 import Home from "@/app/page";
 
-describe("Home", () => {
-  it("renders the home page", () => {
+describe("Home (Landing Page)", () => {
+  it("renders the title", () => {
     render(<Home />);
-    expect(screen.getByRole("main")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: /african bamboo/i })
+    ).toBeInTheDocument();
   });
 
-  it("renders the deploy link", () => {
+  it("renders the sign-in link", () => {
     render(<Home />);
-    const deployLink = screen.getByRole("link", { name: /deploy now/i });
-    expect(deployLink).toBeInTheDocument();
+    const link = screen.getByRole("link", { name: /sign in to dashboard/i });
+    expect(link).toBeInTheDocument();
+    expect(link).toHaveAttribute("href", "/login");
   });
 
-  it("renders the docs link", () => {
+  it("renders the subtitle", () => {
     render(<Home />);
-    const docsLink = screen.getByRole("link", { name: /read our docs/i });
-    expect(docsLink).toBeInTheDocument();
+    expect(screen.getByText(/carbon sequestration/i)).toBeInTheDocument();
   });
 });

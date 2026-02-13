@@ -33,11 +33,14 @@ services:
     depends_on:
       - db
   frontend:
-    image: akvo/akvo-node-18-alpine:20250306.055839.23cadbd
+    image: akvo/akvo-node-20-alpine:20250923.063900.7ce4b53
     command: ["./start.sh"]
     volumes:
       - ./frontend:/app:delegated
     working_dir: /app
+    environment:
+      - WEBDOMAIN=${WEBDOMAIN}
+      - SESSION_SECRET=${SESSION_SECRET}
     depends_on:
       - backend
 volumes:

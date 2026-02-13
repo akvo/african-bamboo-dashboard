@@ -7,6 +7,7 @@ const createJestConfig = nextJest({
 /** @type {import('jest').Config} */
 const config = {
   testEnvironment: "jsdom",
+  transformIgnorePatterns: ["/node_modules/(?!jose)"],
 };
 
 export default createJestConfig(config);

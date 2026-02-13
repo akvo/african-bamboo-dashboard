@@ -1,813 +1,379 @@
 # Technical Execution Plan: Authentication Flow & Submissions Table View
 
+> **Status: COMPLETED** — All 6 phases implemented and committed.
+
 ## Context
 
-The African Bamboo Dashboard frontend is a fresh Next.js 15 scaffold with no components, contexts, or auth logic. The backend already provides a complete API: KoboToolbox-based JWT authentication (`POST /api/v1/auth/login`), user profile (`GET /api/v1/users/me`), and paginated submissions (`GET /api/v1/odk/submissions/`). The frontend needs a Login page and a data-centric Dashboard with a Submissions table, matching the provided design mockups. This plan uses shadcn/ui components (Radix UI primitives + Tailwind CSS) for a modular, accessible architecture.
+The African Bamboo Dashboard frontend is a Next.js 15 App Router application with React 19, Tailwind CSS v4, and shadcn/ui. The backend provides a complete API: KoboToolbox-based JWT authentication (`POST /api/v1/auth/login`), user profile (`GET /api/v1/users/me`), paginated submissions (`GET /api/v1/odk/submissions/`), and form management with sync (`POST /api/v1/odk/forms/{id}/sync/`).
 
 **Design references:**
-- `docs/assets/dashboard-and-submissions-table-view/main page.jpg` — Dashboard with sidebar, stats cards, filters, data table
-- `docs/assets/dashboard-and-submissions-table-view/Sidebar navigation.png` — Collapsible dark sidebar (expanded + collapsed states)
-- `docs/assets/dashboard-and-submissions-table-view/african-bamboo-logo-inverse.svg` — Logo for sidebar
+- `docs/assets/dashboard-and-submissions-table-view/main page.jpg`
+- `docs/assets/dashboard-and-submissions-table-view/Sidebar navigation.png`
+- `docs/assets/dashboard-and-submissions-table-view/african-bamboo-logo-inverse.svg`
 
 ---
 
-## Phase 1: Foundation — shadcn/ui Setup & Theming
+## Phase 1: Foundation — shadcn/ui Setup & Theming ✅
 
-### 1.1 Install shadcn/ui + dependencies
+**Commit:** `b743ba6`
 
-```bash
-cd frontend
-npx shadcn@latest init    # Select: JS, App Router, src/ directory, @/ alias
-```
+### What was done
 
-This creates:
-- `components.json` — shadcn/ui config
-- `src/lib/utils.js` — `cn()` utility (clsx + tailwind-merge)
+1. Initialized shadcn/ui via `npx shadcn@latest init` (JS, App Router, `src/` directory, `@/` alias)
+2. Installed components: button, input, label, card, badge, tabs, table, dropdown-menu, select, separator, skeleton, tooltip, avatar, sheet
+3. Configured Tailwind CSS v4 theming in `globals.css` with CSS variables (HSL format) and `@theme inline` block
+4. Copied logo SVG to `frontend/public/logo.svg` with `fill:currentColor` for flexible theming
 
-Additional dependencies installed automatically: `clsx`, `tailwind-merge`, `class-variance-authority`, `lucide-react`, `@radix-ui/react-slot`.
+### Key theming decisions
+- **Primary:** Gold/yellow (`45 93% 47%` / `#EAB308`) for action buttons
+- **Sidebar:** Dark background (`0 0% 10%` / `#1a1a1a`) with white text
+- **Status badges:** Green (approved), yellow (on hold), red (rejected)
 
-### 1.2 Install required shadcn/ui components
-
-```bash
-npx shadcn@latest add button input label card badge tabs table \
-  dropdown-menu select separator skeleton tooltip avatar sheet
-```
-
-### 1.3 Configure Tailwind CSS v4 theming
-
-**File: `frontend/src/app/globals.css`** — Replace with shadcn/ui CSS variable system adapted for Tailwind v4:
-
-```css
-@import "tailwindcss";
-
-@custom-variant dark (&:is(.dark *));
-
-:root {
-  --background: 0 0% 100%;
-  --foreground: 222.2 84% 4.9%;
-  --card: 0 0% 100%;
-  --card-foreground: 222.2 84% 4.9%;
-  --primary: 45 93% 47%;          /* Gold/yellow #EAB308 */
-  --primary-foreground: 0 0% 0%;
-  --secondary: 210 40% 96%;
-  --secondary-foreground: 222.2 47% 11%;
-  --muted: 210 40% 96%;
-  --muted-foreground: 215.4 16% 47%;
-  --accent: 210 40% 96%;
-  --accent-foreground: 222.2 47% 11%;
-  --destructive: 0 84% 60%;
-  --destructive-foreground: 0 0% 98%;
-  --border: 214.3 32% 91%;
-  --input: 214.3 32% 91%;
-  --ring: 45 93% 47%;
-  --radius: 0.5rem;
-  --sidebar-background: 0 0% 10%;       /* #1a1a1a */
-  --sidebar-foreground: 0 0% 100%;
-  --sidebar-accent: 0 0% 18%;
-  --sidebar-accent-foreground: 0 0% 100%;
-  --sidebar-border: 0 0% 20%;
-  --sidebar-ring: 45 93% 47%;
-  /* Status badge colors */
-  --status-approved: 142 76% 36%;
-  --status-on-hold: 45 93% 47%;
-  --status-rejected: 0 84% 60%;
-}
-
-@theme inline {
-  --color-background: hsl(var(--background));
-  --color-foreground: hsl(var(--foreground));
-  --color-card: hsl(var(--card));
-  --color-card-foreground: hsl(var(--card-foreground));
-  --color-primary: hsl(var(--primary));
-  --color-primary-foreground: hsl(var(--primary-foreground));
-  --color-secondary: hsl(var(--secondary));
-  --color-secondary-foreground: hsl(var(--secondary-foreground));
-  --color-muted: hsl(var(--muted));
-  --color-muted-foreground: hsl(var(--muted-foreground));
-  --color-accent: hsl(var(--accent));
-  --color-accent-foreground: hsl(var(--accent-foreground));
-  --color-destructive: hsl(var(--destructive));
-  --color-destructive-foreground: hsl(var(--destructive-foreground));
-  --color-border: hsl(var(--border));
-  --color-input: hsl(var(--input));
-  --color-ring: hsl(var(--ring));
-  --color-sidebar-background: hsl(var(--sidebar-background));
-  --color-sidebar-foreground: hsl(var(--sidebar-foreground));
-  --color-sidebar-accent: hsl(var(--sidebar-accent));
-  --color-sidebar-accent-foreground: hsl(var(--sidebar-accent-foreground));
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-body {
-  background: hsl(var(--background));
-  color: hsl(var(--foreground));
-}
-```
-
-### 1.4 Move logo to public assets
-
-Copy `docs/assets/dashboard-and-submissions-table-view/african-bamboo-logo-inverse.svg` to `frontend/public/logo.svg`.
-
-**Files created/modified in Phase 1:**
-- `frontend/components.json` (generated by CLI)
-- `frontend/src/lib/utils.js` (generated by CLI)
-- `frontend/src/components/ui/*.js` (generated by CLI — button, input, label, card, badge, tabs, table, dropdown-menu, select, separator, skeleton, tooltip, avatar, sheet)
-- `frontend/src/app/globals.css` (modified)
-- `frontend/public/logo.svg` (copied)
+### Files created/modified
+- `frontend/components.json`
+- `frontend/src/lib/utils.js` — `cn()` utility
+- `frontend/src/components/ui/*.jsx` — 14 shadcn components
+- `frontend/src/app/globals.css` — Tailwind v4 theming
+- `frontend/public/logo.svg`
 
 ---
 
-## Phase 2: Auth Infrastructure — jose Sessions, Server Actions, Middleware
+## Phase 2: Auth Infrastructure ✅
 
-### 2.1 Install dependencies
+**Commit:** `d0c2405`, `12d7811` (redirect loop fix)
 
+### What was done
+
+1. **Session management** (`src/lib/session.js`) — jose `SignJWT`/`jwtVerify` for stateless encrypted httpOnly cookies (12h expiry). Single file with both crypto and cookie functions (no `server-only` guard — required for Edge runtime middleware compatibility).
+
+2. **Server Actions** (`src/app/actions/auth.js`) — `login()` and `logout()` functions. Login calls backend via `process.env.WEBDOMAIN` (full URL, e.g. `http://localhost:3000`), creates session cookie, redirects to `/dashboard`.
+
+3. **Data Access Layer** (`src/lib/dal.js`) — `verifySession()` using React `cache` for deduplication. Server-only, redirects to `/login` if session invalid.
+
+4. **Middleware** (`src/middleware.js`) — Edge-compatible route protection. Imports `decrypt` directly from `session.js`. Protects `/dashboard` routes, redirects authenticated users away from `/login`.
+
+5. **API client** (`src/lib/api.js`) — Axios instance with `setApiToken()` and 401 interceptor.
+
+6. **Auth context** (`src/context/AuthContext.js`) — Sets axios token **synchronously during render** (via `useRef` pattern) to prevent race condition where child hooks fire API calls before token is configured.
+
+7. **Custom hooks:**
+   - `src/hooks/useForms.js` — Context-based `FormsProvider` with shared `activeForm` state, `registerForm`, `syncForm`
+   - `src/hooks/useSubmissions.js` — Submissions data fetching with pagination
+
+### Key deviations from original plan
+- **No `server-only` in session.js** — Caused silent failure in Edge runtime middleware, leading to redirect loops. Removed to keep single file.
+- **No separate `session-crypto.js`** — Initially split for Edge compatibility, later merged back since removing `server-only` solved the issue.
+- **`WEBDOMAIN` env var** — Used existing `WEBDOMAIN` from docker-compose instead of creating `BACKEND_URL`. Contains full URL (e.g. `http://localhost:3000`).
+- **Synchronous token setting** — AuthContext sets axios token during render (not in `useEffect`) to prevent race condition with child hooks.
+- **`useForms` is context-based** — Originally a plain hook, converted to `FormsProvider` context so `activeForm` state is shared across dashboard page and filter bar.
+
+### Environment variables
 ```bash
-cd frontend
-yarn add jose server-only
+WEBDOMAIN=http://localhost:3000    # Full URL, used by server actions
+SESSION_SECRET=<openssl rand -base64 32>
 ```
 
-### 2.2 Session library with jose (encrypt/decrypt)
-
-**File: `frontend/src/lib/session.js`**
-
-Uses `jose` (SignJWT, jwtVerify) for stateless session management following the [official Next.js auth guide](https://nextjs.org/docs/app/guides/authentication). The session cookie wraps the backend JWT token + user data in a server-side encrypted cookie.
-
-```js
-import "server-only";
-import { SignJWT, jwtVerify } from "jose";
-import { cookies } from "next/headers";
-
-const secretKey = process.env.SESSION_SECRET;
-const encodedKey = new TextEncoder().encode(secretKey);
-
-// Encrypt session payload into a signed JWT
-export async function encrypt(payload) {
-  return new SignJWT(payload)
-    .setProtectedHeader({ alg: "HS256" })
-    .setIssuedAt()
-    .setExpirationTime("12h")
-    .sign(encodedKey);
-}
-
-// Decrypt and verify session JWT
-export async function decrypt(session) {
-  try {
-    const { payload } = await jwtVerify(session, encodedKey, {
-      algorithms: ["HS256"],
-    });
-    return payload;
-  } catch (error) {
-    console.log("Failed to verify session");
-    return null;
-  }
-}
-
-// Create session cookie after successful login
-export async function createSession({ user, token, expirationTime }) {
-  const expiresAt = new Date(expirationTime);
-  const session = await encrypt({ user, token, expiresAt: expiresAt.toISOString() });
-  const cookieStore = await cookies();
-
-  cookieStore.set("session", session, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    expires: expiresAt,
-    sameSite: "lax",
-    path: "/",
-  });
-}
-
-// Update session expiry (extend on activity)
-export async function updateSession() {
-  const cookieStore = await cookies();
-  const session = cookieStore.get("session")?.value;
-  const payload = await decrypt(session);
-  if (!session || !payload) return null;
-
-  const expires = new Date(Date.now() + 12 * 60 * 60 * 1000);
-  cookieStore.set("session", session, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    expires,
-    sameSite: "lax",
-    path: "/",
-  });
-}
-
-// Delete session (logout)
-export async function deleteSession() {
-  const cookieStore = await cookies();
-  cookieStore.delete("session");
-}
-```
-
-**Environment variable required:** Add `SESSION_SECRET` to `.env`:
-```bash
-# Generate: openssl rand -base64 32
-SESSION_SECRET=your_secret_key_here
-```
-
-### 2.3 Server Actions for auth
-
-**File: `frontend/src/app/actions/auth.js`**
-
-Server Actions handle login/logout securely on the server side — credentials never touch client JS.
-
-```js
-"use server";
-import { redirect } from "next/navigation";
-import { createSession, deleteSession } from "@/lib/session";
-
-export async function login(prevState, formData) {
-  const koboUrl = formData.get("kobo_url");
-  const koboUsername = formData.get("kobo_username");
-  const koboPassword = formData.get("kobo_password");
-
-  // Call backend auth API (server-to-server, no CORS issues)
-  const res = await fetch("http://backend:8000/api/v1/auth/login", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      kobo_url: koboUrl,
-      kobo_username: koboUsername,
-      kobo_password: koboPassword,
-    }),
-  });
-
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    return { error: data.message || "Invalid KoboToolbox credentials" };
-  }
-
-  const data = await res.json();
-
-  // Create encrypted session cookie with user + backend JWT token
-  await createSession({
-    user: data.user,
-    token: data.token,
-    expirationTime: data.expiration_time,
-  });
-
-  redirect("/dashboard");
-}
-
-export async function logout() {
-  await deleteSession();
-  redirect("/login");
-}
-```
-
-### 2.4 Data Access Layer (DAL)
-
-**File: `frontend/src/lib/dal.js`**
-
-Centralizes session verification for server components and server-side data fetching. Uses React `cache` to deduplicate within a render pass.
-
-```js
-import "server-only";
-import { cache } from "react";
-import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
-import { decrypt } from "@/lib/session";
-
-// Verify session and return user + token (server-side only)
-export const verifySession = cache(async () => {
-  const cookieStore = await cookies();
-  const session = cookieStore.get("session")?.value;
-  const payload = await decrypt(session);
-
-  if (!payload?.user) {
-    redirect("/login");
-  }
-
-  return { user: payload.user, token: payload.token };
-});
-```
-
-### 2.5 Middleware for route protection
-
-**File: `frontend/src/middleware.js`**
-
-Optimistic cookie check — redirects unauthenticated users away from protected routes and authenticated users away from login. Uses `jose` decrypt (Edge-compatible).
-
-```js
-import { NextResponse } from "next/server";
-import { decrypt } from "@/lib/session";
-
-const protectedRoutes = ["/dashboard"];
-const publicRoutes = ["/login"];
-
-export default async function middleware(req) {
-  const path = req.nextUrl.pathname;
-  const isProtected = protectedRoutes.some((r) => path.startsWith(r));
-  const isPublic = publicRoutes.includes(path);
-
-  const session = req.cookies.get("session")?.value;
-  const payload = await decrypt(session);
-
-  if (isProtected && !payload?.user) {
-    return NextResponse.redirect(new URL("/login", req.nextUrl));
-  }
-
-  if (isPublic && payload?.user) {
-    return NextResponse.redirect(new URL("/dashboard", req.nextUrl));
-  }
-
-  return NextResponse.next();
-}
-
-export const config = {
-  matcher: ["/((?!api|_next/static|_next/image|.*\\.png$|.*\\.svg$|.*\\.ico$).*)"],
-};
-```
-
-### 2.6 Axios API client (for client-side data fetching)
-
-**File: `frontend/src/lib/api.js`**
-
-For client components that need to fetch data (submissions, forms), use axios with the backend JWT token. The token is passed from server → client via a context provider.
-
-```js
-import axios from "axios";
-
-const api = axios.create({ baseURL: "/api" });
-
-// Set auth token dynamically (called from context provider)
-export function setApiToken(token) {
-  if (token) {
-    api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
-  } else {
-    delete api.defaults.headers.common["Authorization"];
-  }
-}
-
-// Response interceptor: handle 401
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      window.location.href = "/login";
-    }
-    return Promise.reject(error);
-  }
-);
-
-export default api;
-```
-
-### 2.7 Auth context (client-side user state)
-
-**File: `frontend/src/context/AuthContext.js`**
-
-Thin client-side context that receives user + token from server and provides them to child client components. Does NOT handle login (that's a Server Action).
-
-```
-AuthProvider (client component)
-├── Props: { user, token } — passed from server component
-├── On mount: call setApiToken(token) to configure axios
-├── Provide: { user, token }
-└── logout: calls the logout Server Action
-```
-
-### 2.8 Custom hooks
-
-**File: `frontend/src/hooks/useAuth.js`**
-- Wrapper around `useContext(AuthContext)` with guard
-
-**File: `frontend/src/hooks/useSubmissions.js`**
-- Encapsulates submissions data fetching via axios, pagination state, filtering
-- Params: `{ assetUid, limit, offset, search }`
-- Returns: `{ data, count, isLoading, error, page, setPage, totalPages }`
-
-**File: `frontend/src/hooks/useForms.js`**
-- Fetch registered forms list for form selector
-
-**Files created in Phase 2:**
+### Files created
 - `frontend/src/lib/session.js`
 - `frontend/src/lib/dal.js`
 - `frontend/src/lib/api.js`
 - `frontend/src/app/actions/auth.js`
 - `frontend/src/middleware.js`
 - `frontend/src/context/AuthContext.js`
-- `frontend/src/hooks/useAuth.js`
-- `frontend/src/hooks/useSubmissions.js`
 - `frontend/src/hooks/useForms.js`
-- `frontend/.env` (SESSION_SECRET)
+- `frontend/src/hooks/useSubmissions.js`
 
 ---
 
-## Phase 3: Login Page
+## Phase 3: Login Page ✅
 
-### 3.1 Route & layout
+**Commit:** `2418637`
 
-**File: `frontend/src/app/login/page.js`** — Server component shell
-**File: `frontend/src/app/login/login-form.js`** — Client component with form logic
+### What was done
 
-### 3.2 Login form component
+1. **Login page** (`src/app/login/page.js`) — Server component with centered Card layout and `<Logo>` component
+2. **Login form** (`src/app/login/login-form.js`) — Client component using React 19 `useActionState` with `login` Server Action
 
-Uses shadcn/ui: `Card`, `CardHeader`, `CardContent`, `Input`, `Label`, `Button`
+### Login form features
+- KoboToolbox Server URL (pre-filled with `https://kf.kobotoolbox.org`)
+- Username and Password fields
+- Password show/hide toggle with `aria-label`
+- Error display with `role="alert"` and `aria-live="polite"`
+- Loading spinner via `pending` state from `useActionState`
+- Native `<form action={action}>` — no `onSubmit`/`preventDefault`
 
-```
-LoginPage (server component)
-└── <div> centered full-screen, light background
-    └── Card (max-w-md, centered)
-        ├── CardHeader
-        │   ├── Logo (african-bamboo-logo, dark version)
-        │   ├── Title: "Sign in to your account"
-        │   └── Description: "Enter your KoboToolbox credentials"
-        └── CardContent
-            └── LoginForm (client component)
-                ├── Input: KoboToolbox Server URL (name="kobo_url", default: https://kf.kobotoolbox.org)
-                ├── Input: Username (name="kobo_username")
-                ├── Input: Password (name="kobo_password", type="password")
-                ├── Error alert (role="alert", aria-live="polite")
-                └── Button: "Sign in" (disabled={pending}, loading state with spinner)
-```
+### Key deviation
+- **Inline SVG Logo component** (`src/components/logo.js`) — Uses `currentColor` fill so logo inherits text color from parent CSS. `<Image>` tag can't pass CSS color to SVG fills, so an inline SVG component was created instead.
 
-### 3.3 Form behavior (Server Action + useActionState)
-- Uses React 19 `useActionState` hook with the `login` Server Action from `@/app/actions/auth`
-- `<form action={action}>` — native form submission, no `onSubmit`/`preventDefault`
-- `pending` state from `useActionState` disables the button and shows spinner
-- Server Action validates, calls backend, creates session cookie, redirects to `/dashboard`
-- On error: Server Action returns `{ error: "message" }`, displayed via `state?.error`
-- KoboToolbox URL field pre-filled with `https://kf.kobotoolbox.org` (editable)
-
-### 3.4 Accessibility
-- All inputs have `<Label>` with `htmlFor`
-- Error messages use `role="alert"` + `aria-live="polite"`
-- Form is keyboard-navigable (Tab through fields → Enter to submit)
-- Focus moves to first error field on validation failure
-- Password input has show/hide toggle with `aria-label`
-
-**Files created in Phase 3:**
+### Files created
 - `frontend/src/app/login/page.js`
 - `frontend/src/app/login/login-form.js`
+- `frontend/src/components/logo.js`
 
 ---
 
-## Phase 4: Dashboard Layout — Sidebar & Shell
+## Phase 4: Dashboard Layout — Sidebar & Shell ✅
 
-### 4.1 Dashboard layout with sidebar
+**Commit:** `4bd34de`
 
-**File: `frontend/src/app/dashboard/layout.js`**
+### What was done
 
-This is a **server component** that calls `verifySession()` from the DAL to get user + token, then passes them to a client-side `AuthProvider`.
+1. **Dashboard layout** (`src/app/dashboard/layout.js`) — Server component that calls `verifySession()`, wraps children in `AuthProvider` and `FormsProvider`
+2. **Sidebar** (`src/components/app-sidebar.js`) — Collapsible dark sidebar with two states
 
-```
-DashboardLayout (server component)
-├── verifySession() → { user, token }
-├── AuthProvider (client component, receives user + token as props)
-│   └── <div className="flex h-screen">
-│       ├── AppSidebar (collapsible)
-│       └── <main className="flex-1 overflow-auto p-6">
-│           {children}
-│       </main>
-```
+### Sidebar navigation
+| Item | Icon | Route |
+|------|------|-------|
+| Dashboard | BarChart3 | `/dashboard` |
+| Map | Map | `/dashboard/map` |
+| Forms | FileText | `/dashboard/forms` |
+| Support | LifeBuoy | `/dashboard/support` (expanded only) |
+| Settings | Settings | `/dashboard/settings` |
 
-### 4.2 Sidebar component
+### Responsive behavior
+| Breakpoint | Behavior |
+|------------|----------|
+| **Mobile (<768px)** | Sidebar hidden, hamburger → Sheet drawer from left |
+| **Desktop (>=768px)** | Sidebar visible, toggle between expanded (w-60) and collapsed (w-16) |
 
-**File: `frontend/src/components/app-sidebar.js`**
+### Key deviations
+- **No separate `sidebar-nav-item.js`** — Nav item logic inlined in `app-sidebar.js` as `NavItem` function component
+- **"Forms" instead of "Farmers and Enumerators"** — Nav item changed to link to `/dashboard/forms` with FileText icon
+- **`FormsProvider` in layout** — Wraps all dashboard children so `useForms()` shares state
 
-Two states matching the mockup:
-- **Expanded** (w-60): Logo + text, search input, nav items with labels, bottom items (Support, Settings)
-- **Collapsed** (w-16): Logo icon only, nav icons with tooltips, Settings icon at bottom
-
-```
-AppSidebar (client component)
-├── State: isCollapsed (boolean, toggled via button or responsive breakpoint)
-├── <aside> dark background (bg-sidebar-background)
-│   ├── SidebarHeader
-│   │   └── Logo (full or icon-only based on state)
-│   ├── SidebarSearch (expanded only)
-│   │   └── Input with search icon
-│   ├── SidebarNav
-│   │   ├── NavItem: Dashboard (BarChart3 icon) — active state
-│   │   ├── NavItem: Map (Map icon) — disabled/placeholder
-│   │   └── NavItem: Farmers and Enumerators (Users icon) — disabled/placeholder
-│   ├── Spacer (flex-1)
-│   └── SidebarFooter
-│       ├── NavItem: Support (HelpCircle icon) — expanded only
-│       └── NavItem: Settings (Settings icon)
-```
-
-### 4.3 Nav item component
-
-**File: `frontend/src/components/sidebar-nav-item.js`**
-
-- Props: `{ icon, label, href, isActive, isCollapsed }`
-- Expanded: icon + label text
-- Collapsed: icon only, wrapped in `Tooltip` for accessibility
-- Active state: lighter background (`bg-sidebar-accent`)
-- Uses Next.js `Link` for navigation
-
-### 4.4 Responsive behavior
-- **Desktop (>=1024px)**: Sidebar visible, starts expanded, collapsible via toggle
-- **Tablet (768-1023px)**: Sidebar collapsed by default (icon-only)
-- **Mobile (<768px)**: Sidebar hidden, accessible via hamburger menu → `Sheet` (slide-over from left)
-
-**Files created in Phase 4:**
+### Files created
 - `frontend/src/app/dashboard/layout.js`
 - `frontend/src/components/app-sidebar.js`
-- `frontend/src/components/sidebar-nav-item.js`
 
 ---
 
-## Phase 5: Dashboard Page — Stats, Filters, Submissions Table
+## Phase 5: Dashboard Content ✅
 
-### 5.1 Dashboard page
+**Commit:** `c54e17a`, `e483663` (forms page + context refactor)
 
-**File: `frontend/src/app/dashboard/page.js`** (server component shell)
-**File: `frontend/src/app/dashboard/dashboard-content.js`** (client component)
+### What was done
 
+1. **Dashboard page** (`src/app/dashboard/page.js`) — Client component with stats, filters, table, and pagination. Uses `activeForm` from shared `useForms()` context.
+
+2. **Forms page** (`src/app/dashboard/forms/page.js`) — Register new forms + table listing with sync button per row.
+
+3. **Settings page** (`src/app/dashboard/settings/page.js`) — Profile display (read-only) + logout button.
+
+### Dashboard page structure
 ```
-DashboardPage
-└── DashboardContent (client component)
-    ├── DashboardHeader
-    │   ├── Title: "African Bamboo - Carbon Sequestration Dashboard"
-    │   ├── Subtitle: "Digital MRV Data Monitoring & Verification"
-    │   └── Button: "+ Add data" (primary/gold)
-    ├── StatsCardsRow
-    │   ├── StatCard: Target capacity — 20,420
-    │   ├── StatCard: Current progress — 210
-    │   ├── StatCard: 2026 Target — 1,000
-    │   └── StatCard: Carbon potential — 1,000
-    ├── FilterBar
-    │   ├── Select: Region (left)
-    │   └── DateRangeGroup (right)
-    │       ├── Select: "Last 7 days"
-    │       ├── DateDisplay: "Jan 24 - Feb 24 2023"
-    │       └── Button: "Reset"
-    ├── FormSectionHeader
-    │   ├── Title: form name (from API)
-    │   ├── Badge: "240 Data points"
-    │   ├── Description
-    │   └── Button: "Export data" (outline)
-    ├── TableControls
-    │   ├── Tabs: View all | Approved | On hold | Rejected
-    │   └── SearchInput (right)
-    └── SubmissionsTable
-        ├── TableHeader (sortable columns)
-        ├── TableBody (rows from API data)
-        └── TablePagination: Previous | Page X of Y | Next
+DashboardPage (client component)
+├── DashboardHeader (title + Add data button)
+├── StatsCardsRow (4 stat cards)
+├── FilterBar (form dropdown + date range + reset)
+├── FormSectionHeader (active form name + data count badge + export button)
+├── TableControls (status tabs + search input)
+├── SubmissionsTable (data rows with status badges)
+└── TablePagination (previous/next + page indicator)
 ```
 
-### 5.2 Stat card component
-
-**File: `frontend/src/components/stat-card.js`**
-
-Uses shadcn/ui `Card`. Props: `{ title, value, subtitle, onMenuClick }`.
-
+### Forms page structure
 ```
-Card (border, rounded)
-├── CardHeader (flex row, justify-between)
-│   ├── <span> title (muted text, small)
-│   └── DropdownMenu (3-dot icon)
-└── CardContent
-    ├── <div> value (text-3xl font-bold)
-    └── <p> subtitle (muted, small)
+FormsPage
+├── Register Form Card (asset UID + form name inputs + register button)
+├── Status alert (success/error feedback)
+└── Registered Forms Table
+    ├── Columns: Name, Asset UID, Submissions, Last Synced, Actions
+    └── Sync button per row (triggers POST /forms/{id}/sync/)
 ```
 
-### 5.3 Submissions table component
+### Filter bar
+- Form dropdown — controlled by `activeForm` / `setActiveForm` from `useForms()` context
+- Date range selector (Last 7/30/90 days)
+- Date display
+- Reset button
 
-**File: `frontend/src/components/submissions-table.js`**
-
-Uses shadcn/ui `Table`, `TableHeader`, `TableBody`, `TableRow`, `TableCell`, `TableHead`, `Badge`, `Skeleton`.
-
-**Columns (matching mockup):**
-| Column | Source Field | Notes |
-|--------|-------------|-------|
-| Checkbox | — | Row selection for bulk actions |
-| Plot name | `instance_name` | Name + secondary text |
-| Status | derived from `raw_data` | Badge: Approved (green), On hold (yellow), Rejected (red) |
-| Start date | `raw_data` field | Formatted date |
-| End date | `raw_data` field | Formatted date |
-| Enumerator | `submitted_by` | Name + phone |
-| Region | `raw_data` field | Region name |
-| Woreda | `raw_data` field | Sub-region |
-| Open Area GeoMapping | `raw_data` field | Coordinates |
-| Title Deed | `raw_data` field | Link/icon |
-
-**Data flow:**
-1. `useSubmissions` hook fetches `GET /api/v1/odk/submissions/?asset_uid=X&limit=10&offset=Y`
-2. Pagination driven by `count` from API response + local `offset` state
-3. Status tab filtering done client-side (or via query param if backend supports it)
-4. Search filters `instance_name` client-side within loaded page
-
-### 5.4 Table pagination component
-
-**File: `frontend/src/components/table-pagination.js`**
-
-Props: `{ currentPage, totalPages, onPageChange }`
-
-```
-<div className="flex items-center justify-between">
-  <Button variant="outline" disabled={page===1}>Previous</Button>
-  <span>Page {current} of {total}</span>
-  <Button variant="outline" disabled={page===total}>Next</Button>
-</div>
-```
-
-### 5.5 Status badge component
-
-**File: `frontend/src/components/status-badge.js`**
-
-Uses shadcn/ui `Badge` with variant mapping:
-- `approved` → green background, green text
-- `on_hold` → yellow background, yellow text
-- `rejected` → red background, red text
-
-Accessibility: includes icon + text (not color-only indication).
-
-**Files created in Phase 5:**
-- `frontend/src/app/dashboard/page.js`
-- `frontend/src/app/dashboard/dashboard-content.js`
+### Components created
 - `frontend/src/components/stat-card.js`
-- `frontend/src/components/submissions-table.js`
+- `frontend/src/components/status-badge.js` (approved/on_hold/rejected)
 - `frontend/src/components/table-pagination.js`
-- `frontend/src/components/status-badge.js`
 - `frontend/src/components/filter-bar.js`
 - `frontend/src/components/dashboard-header.js`
+- `frontend/src/components/submissions-table.js`
+- `frontend/src/app/dashboard/forms/page.js`
+- `frontend/src/app/dashboard/settings/page.js`
+- `frontend/src/app/dashboard/support/page.js`
+
+### Key deviations
+- **No separate `dashboard-content.js`** — Content merged directly into `page.js` as a client component
+- **Forms management page** — Added `/dashboard/forms` with register + sync (not in original plan)
+- **Settings page** — Profile display + logout (not in original plan)
+- **`useForms` as context** — `FormsProvider` wraps dashboard layout, `activeForm` shared between dashboard page and filter bar
 
 ---
 
-## Phase 6: Root Layout & Routing Updates
+## Phase 6: Landing Page, Layout Updates & Tests ✅
 
-### 6.1 Update root layout
+**Commits:** `7ccc562`, `a5e1f10`
 
-**File: `frontend/src/app/layout.js`** (modify existing)
+### What was done
 
-- Update `metadata` title/description
-- Keep Geist fonts
-- Add `suppressHydrationWarning` to `<html>`
+1. **Landing page** (`src/app/page.js`) — Dark background, large logo, title, subtitle, "Sign in to Dashboard" button linking to `/login`. No auto-redirect.
 
-### 6.2 Root page redirect
+2. **Root layout** (`src/app/layout.js`) — Updated metadata: title "African Bamboo Dashboard", description with project tagline.
 
-**File: `frontend/src/app/page.js`** (modify existing)
+3. **Tests** (3 test suites, 10 tests total):
+   - `__tests__/page.test.js` — Landing page: title, sign-in link, subtitle
+   - `__tests__/login-form.test.js` — Login form: input fields, sign-in button, pre-filled URL, password toggle
+   - `__tests__/filter-bar.test.js` — Filter bar: form selector, date range, reset button
 
-- Replace default Next.js content with redirect to `/dashboard`
-- Uses `redirect()` from `next/navigation`
+4. **Jest config** — Added `transformIgnorePatterns` to handle `jose` ESM module
 
-### 6.3 Update tests
+5. **Button UI polish** — Added `cursor-pointer`, `disabled:cursor-not-allowed`, `aria-busy:cursor-progress`
 
-**File: `frontend/__tests__/page.test.js`** (modify existing)
+6. **Backend** — Added `region` and `woreda` fields to `SubmissionListSerializer`
 
-- Update to reflect new page structure
+### Key deviations
+- **Landing page instead of redirect** — Original plan called for `redirect("/dashboard")`, implemented as a branded landing page with login button instead
+- **No `submissions-table.test.js`** — Skipped in favor of filter-bar tests (submissions table requires complex mocking)
+
+### Files created/modified
+- `frontend/src/app/page.js` (rewritten)
+- `frontend/src/app/layout.js` (metadata updated)
+- `frontend/__tests__/page.test.js` (rewritten)
+- `frontend/__tests__/login-form.test.js` (new)
+- `frontend/__tests__/filter-bar.test.js` (new)
+- `frontend/jest.config.mjs` (transformIgnorePatterns)
+- `frontend/src/components/ui/button.jsx` (cursor states)
+- `backend/api/v1/v1_odk/serializers.py` (region/woreda)
 
 ---
 
-## Component Hierarchy (Complete)
+## Component Hierarchy (Actual)
 
 ```
-RootLayout (layout.js)
+RootLayout (src/app/layout.js)
+├── / → Home (landing page with login button)
+│
 ├── /login → LoginPage (server component)
 │   └── LoginForm (client: useActionState + login Server Action)
 │
-├── /dashboard → DashboardLayout (server: verifySession → passes user+token)
-│   ├── AuthProvider (client: receives user+token, configures axios)
-│   ├── AppSidebar
-│   │   ├── SidebarHeader (Logo)
-│   │   ├── SidebarNav
-│   │   │   └── SidebarNavItem (x3: Dashboard, Map, Farmers)
-│   │   └── SidebarFooter (Support, Settings)
+├── /dashboard → DashboardLayout (server: verifySession → user+token)
+│   ├── AuthProvider (client: sets axios token synchronously)
+│   ├── FormsProvider (client: shared forms + activeForm state)
+│   ├── AppSidebar (client: collapsible, mobile Sheet)
+│   │   ├── Logo (inline SVG, currentColor)
+│   │   ├── NavItem: Dashboard, Map, Forms
+│   │   └── Footer: Support, Settings
 │   └── <main>
-│       └── /dashboard (index) → DashboardPage
-│           └── DashboardContent
-│               ├── DashboardHeader (title + Add data button)
-│               ├── StatsCardsRow
-│               │   └── StatCard (x4)
-│               ├── FilterBar (Region select + date range + reset)
-│               ├── FormSectionHeader (form name + badge + export)
-│               ├── TableControls (Tabs + SearchInput)
-│               ├── SubmissionsTable
-│               │   ├── TableHeader (sortable)
-│               │   ├── TableBody → TableRow (per submission)
-│               │   │   └── StatusBadge
-│               │   └── Skeleton (loading state)
-│               └── TablePagination
+│       ├── /dashboard → DashboardPage (client)
+│       │   ├── DashboardHeader
+│       │   ├── StatCard (x4)
+│       │   ├── FilterBar (form dropdown controls activeForm)
+│       │   ├── FormSectionHeader
+│       │   ├── Tabs + Search
+│       │   ├── SubmissionsTable + StatusBadge
+│       │   └── TablePagination
+│       ├── /dashboard/forms → FormsPage
+│       │   ├── Register Form Card
+│       │   └── Forms Table (with sync button)
+│       ├── /dashboard/settings → SettingsPage
+│       │   ├── Profile Card (read-only)
+│       │   └── Logout Button
+│       ├── /dashboard/map → MapPage (placeholder)
+│       └── /dashboard/support → SupportPage (placeholder)
 ```
 
 ---
 
-## State Management
+## State Management (Actual)
 
 | State | Location | Persistence |
 |-------|----------|-------------|
-| Auth session (user, token) | jose-encrypted httpOnly cookie (`session`) | Cookie (12h expiry) |
-| Auth context (client) | `AuthContext` — receives user+token from server | In-memory (per page load) |
-| Sidebar collapsed | `useState` in DashboardLayout | None (resets on nav) |
-| Current page/offset | `useState` in DashboardContent | URL search params (optional) |
-| Active status tab | `useState` in DashboardContent | None |
-| Search query | `useState` in DashboardContent | None |
-| Submissions data | `useSubmissions` hook (fetch-on-mount + on param change) | None (refetched) |
-| Forms list | `useForms` hook | None |
+| Auth session (user, token) | jose-encrypted httpOnly cookie | Cookie (12h expiry) |
+| Auth context (client) | `AuthContext` — user+token from server | In-memory |
+| Forms list + activeForm | `FormsContext` via `FormsProvider` | In-memory (shared across dashboard) |
+| Sidebar collapsed | `useState` in AppSidebar | None (resets on nav) |
+| Active status tab | `useState` in DashboardPage | None |
+| Search query | `useState` in DashboardPage | None |
+| Submissions data | `useSubmissions` hook | None (refetched on param change) |
 
 ---
 
-## Accessibility Strategy
+## File Summary (All files created/modified)
 
-| Concern | Implementation |
-|---------|---------------|
-| **Keyboard navigation** | All interactive elements focusable; Tab order matches visual layout; Radix primitives handle this |
-| **Focus management** | Focus moves to error on form failure; Skip-to-content link in layout |
-| **Screen readers** | `aria-label` on icon-only buttons; `role="alert"` for errors; `aria-live="polite"` for status updates |
-| **Color contrast** | 4.5:1 minimum; status badges use icon+text, not color alone |
-| **Form labels** | Every `Input` has associated `Label` via `htmlFor` |
-| **Table a11y** | Proper `<table>` semantics via shadcn Table; `scope="col"` on headers |
-| **Reduced motion** | Respect `prefers-reduced-motion` for transitions |
-| **Sidebar tooltips** | Collapsed nav items show `Tooltip` with label text |
-
----
-
-## Responsive Design Strategy
-
-| Breakpoint | Sidebar | Table | Stats Cards | Layout |
-|------------|---------|-------|-------------|--------|
-| **Mobile (<768px)** | Hidden; hamburger → Sheet | Horizontal scroll (`overflow-x-auto`) | 2-column grid or stacked | Single column |
-| **Tablet (768-1023px)** | Collapsed (icons only) | Horizontal scroll, key columns visible | 2x2 grid | Sidebar + main |
-| **Desktop (>=1024px)** | Expanded (icons + labels) | Full table, all columns | 4-column row | Sidebar + main |
-
----
-
-## File Summary (All files to create/modify)
-
-| Action | Path | Purpose |
-|--------|------|---------|
-| Generate | `frontend/components.json` | shadcn/ui config |
-| Generate | `frontend/src/lib/utils.js` | `cn()` utility |
-| Generate | `frontend/src/components/ui/*.js` | shadcn components (button, input, etc.) |
-| Modify | `frontend/src/app/globals.css` | Tailwind v4 theming with CSS variables |
-| Modify | `frontend/src/app/layout.js` | Update metadata, fonts |
-| Modify | `frontend/src/app/page.js` | Root redirect to /dashboard |
-| Copy | `frontend/public/logo.svg` | Sidebar logo asset |
-| Create | `frontend/.env` | SESSION_SECRET |
-| Create | `frontend/src/lib/session.js` | jose encrypt/decrypt, cookie management |
-| Create | `frontend/src/lib/dal.js` | verifySession (server-side DAL) |
-| Create | `frontend/src/lib/api.js` | Axios client for client-side fetching |
-| Create | `frontend/src/app/actions/auth.js` | login/logout Server Actions |
-| Create | `frontend/src/middleware.js` | Route protection (cookie check) |
-| Create | `frontend/src/context/AuthContext.js` | Client-side user+token context |
-| Create | `frontend/src/hooks/useAuth.js` | Context wrapper hook |
-| Create | `frontend/src/hooks/useSubmissions.js` | Submissions data fetching hook |
-| Create | `frontend/src/hooks/useForms.js` | Forms data fetching hook |
-| Create | `frontend/src/app/login/page.js` | Login page (server component) |
-| Create | `frontend/src/app/login/login-form.js` | Login form (client, useActionState) |
-| Create | `frontend/src/app/dashboard/layout.js` | Dashboard layout (server, verifySession) |
-| Create | `frontend/src/app/dashboard/page.js` | Dashboard page (server shell) |
-| Create | `frontend/src/app/dashboard/dashboard-content.js` | Dashboard content (client) |
-| Create | `frontend/src/components/app-sidebar.js` | Collapsible sidebar nav |
-| Create | `frontend/src/components/sidebar-nav-item.js` | Sidebar nav item |
-| Create | `frontend/src/components/stat-card.js` | Stats card component |
-| Create | `frontend/src/components/submissions-table.js` | Data table with columns |
-| Create | `frontend/src/components/table-pagination.js` | Pagination controls |
-| Create | `frontend/src/components/status-badge.js` | Status badge (approved/on hold/rejected) |
-| Create | `frontend/src/components/filter-bar.js` | Region + date range filters |
-| Create | `frontend/src/components/dashboard-header.js` | Page header with title + add button |
-| Modify | `frontend/__tests__/page.test.js` | Update for new root page |
-| Create | `frontend/__tests__/login-form.test.js` | Login form tests |
-| Create | `frontend/__tests__/submissions-table.test.js` | Submissions table tests |
-| Modify | `frontend/package.json` | jose, server-only, shadcn deps |
+| Path | Purpose |
+|------|---------|
+| `frontend/components.json` | shadcn/ui config |
+| `frontend/jest.config.mjs` | Jest config with jose ESM transform |
+| `frontend/src/lib/utils.js` | `cn()` utility |
+| `frontend/src/lib/session.js` | jose encrypt/decrypt + cookie management |
+| `frontend/src/lib/dal.js` | `verifySession()` server-side DAL |
+| `frontend/src/lib/api.js` | Axios client with token + 401 interceptor |
+| `frontend/src/middleware.js` | Edge runtime route protection |
+| `frontend/src/context/AuthContext.js` | Client-side user+token context |
+| `frontend/src/hooks/useForms.js` | Context-based forms state with activeForm |
+| `frontend/src/hooks/useSubmissions.js` | Submissions data fetching + pagination |
+| `frontend/src/app/actions/auth.js` | login/logout Server Actions |
+| `frontend/src/app/layout.js` | Root layout with metadata |
+| `frontend/src/app/page.js` | Landing page with login button |
+| `frontend/src/app/globals.css` | Tailwind v4 theming |
+| `frontend/src/app/login/page.js` | Login page (server shell) |
+| `frontend/src/app/login/login-form.js` | Login form (client, useActionState) |
+| `frontend/src/app/dashboard/layout.js` | Dashboard layout (AuthProvider + FormsProvider) |
+| `frontend/src/app/dashboard/page.js` | Dashboard content (stats, filters, table) |
+| `frontend/src/app/dashboard/forms/page.js` | Forms management (register + sync) |
+| `frontend/src/app/dashboard/settings/page.js` | Profile + logout |
+| `frontend/src/app/dashboard/map/page.js` | Map placeholder |
+| `frontend/src/app/dashboard/support/page.js` | Support placeholder |
+| `frontend/src/components/app-sidebar.js` | Collapsible dark sidebar |
+| `frontend/src/components/logo.js` | Inline SVG logo (currentColor) |
+| `frontend/src/components/stat-card.js` | Stats card |
+| `frontend/src/components/status-badge.js` | Approved/on_hold/rejected badge |
+| `frontend/src/components/table-pagination.js` | Pagination controls |
+| `frontend/src/components/filter-bar.js` | Form dropdown + date range |
+| `frontend/src/components/dashboard-header.js` | Page header |
+| `frontend/src/components/submissions-table.js` | Data table |
+| `frontend/src/components/ui/*.jsx` | 14 shadcn/ui components |
+| `frontend/public/logo.svg` | Logo asset (currentColor) |
+| `frontend/__tests__/page.test.js` | Landing page tests (3) |
+| `frontend/__tests__/login-form.test.js` | Login form tests (4) |
+| `frontend/__tests__/filter-bar.test.js` | Filter bar tests (3) |
+| `backend/api/v1/v1_odk/serializers.py` | Added region/woreda to submissions |
 
 ---
 
-## Verification Plan
+## Commit History
 
-### Manual testing
-1. `docker-compose up` → visit `http://localhost:3000`
-2. Redirected to `/login` (unauthenticated)
-3. Enter invalid credentials → see error message
-4. Enter valid KoboToolbox credentials → redirected to `/dashboard`
-5. Dashboard shows sidebar, stats cards, table with data
-6. Click sidebar toggle → collapses/expands
-7. Change page in table → data updates
-8. Click status tabs → table filters
-9. Resize browser → responsive layout changes
-10. Navigate directly to `/dashboard` without token → redirected to `/login`
+| Commit | Message |
+|--------|---------|
+| `318c9a2` | docs: Add technical execution plan |
+| `b743ba6` | feat: Initialize shadcn/ui with Tailwind CSS v4 theming |
+| `d0c2405` | feat: Add auth infrastructure with jose sessions, server actions, and middleware |
+| `2418637` | feat: Add login page with KoboToolbox credentials form |
+| `4bd34de` | feat: Add dashboard layout with collapsible dark sidebar |
+| `c54e17a` | feat: Add dashboard content with stats, filters, submissions table, and settings |
+| `12d7811` | fix: Resolve auth redirect loop by merging session crypto and fixing token race condition |
+| `e483663` | feat: Add forms management page with sync, context-based form state, and sidebar nav update |
+| `7ccc562` | feat: Add landing page with login button, update layout metadata, and add tests |
+| `a5e1f10` | chore: Add button cursor states, lint shadcn components, and expose submission region/woreda |
+
+---
+
+## Verification
 
 ### Automated tests
 ```bash
 cd frontend
-yarn test         # Jest + Testing Library
-yarn lint         # ESLint
-yarn build        # Verify production build succeeds
+yarn test    # 3 suites, 10 tests — all passing
+yarn lint    # ESLint
+yarn build   # Production build succeeds
 ```
 
-### Accessibility audit
-- Run Lighthouse accessibility audit in Chrome DevTools
-- Tab through login form and dashboard — verify focus visibility
-- Test with screen reader (VoiceOver / NVDA)
-
----
-
-## Implementation Order
-
-1. **Phase 1** — shadcn/ui init, theming, logo asset
-2. **Phase 2** — Session lib, Server Actions, DAL, middleware, API client, context, hooks
-3. **Phase 3** — Login page with form
-4. **Phase 4** — Dashboard layout with sidebar
-5. **Phase 5** — Dashboard content: stats, filters, table
-6. **Phase 6** — Root routing updates, tests
+### Manual testing checklist
+1. Visit `http://localhost:3000` → Landing page with "Sign in to Dashboard" button
+2. Click sign in → `/login` page
+3. Enter invalid credentials → error message displayed
+4. Enter valid KoboToolbox credentials → redirected to `/dashboard`
+5. Dashboard shows sidebar, stats cards, filter bar, submissions table
+6. Form dropdown in filter bar → changes active form, table updates
+7. Sidebar toggle → collapses/expands
+8. Navigate to `/dashboard/forms` → register form + forms table with sync
+9. Click sync → submissions fetched from KoboToolbox
+10. Navigate to `/dashboard/settings` → profile info + logout
+11. Resize browser → responsive: mobile Sheet drawer, table horizontal scroll
+12. Navigate directly to `/dashboard` without session → redirected to `/login`

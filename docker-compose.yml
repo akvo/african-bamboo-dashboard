@@ -38,6 +38,9 @@ services:
     volumes:
       - ./frontend:/app:delegated
     working_dir: /app
+    environment:
+      - WEBDOMAIN=${WEBDOMAIN}
+      - SESSION_SECRET=${SESSION_SECRET}
     depends_on:
       - backend
 volumes:

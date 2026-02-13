@@ -39,7 +39,10 @@ PgAdmin credentials: `dev@akvo.org` / `password`
 │   └── src/app/       # App Router pages and layouts
 ├── backend/           # Django project
 │   ├── african_bamboo_dashboard/   # Project settings and root URLs
-│   └── api/v1/v1_init/             # API v1 app (views, models, urls)
+│   └── api/v1/
+│       ├── v1_init/               # Health-check / init endpoints
+│       ├── v1_users/              # Auth & user management (JWT, Kobo login)
+│       └── v1_odk/                # ODK data (forms, submissions, plots)
 ├── database/
 │   ├── docker-entrypoint-initdb.d/ # DB initialization SQL
 │   └── script/                     # Utility scripts (e.g., dump-db.sh)

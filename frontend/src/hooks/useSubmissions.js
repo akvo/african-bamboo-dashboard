@@ -21,6 +21,7 @@ export function useSubmissions({ assetUid, limit = 10 } = {}) {
       setOffset(0);
     }
     if (!assetUid || !isLoading) {
+      setIsLoading(false);
       return;
     }
     setError(null);

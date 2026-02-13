@@ -1,15 +1,23 @@
 "use client";
 
-import { createContext, useContext, useEffect } from "react";
+import { createContext, useContext, useEffect, useRef } from "react";
 import { setApiToken } from "@/lib/api";
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ user, token, children }) {
-  useEffect(() => {
+  const prevToken = useRef(null);
+
+  // Set token synchronously during render so it's available
+  // before any child useEffect (e.g. useForms) fires API calls
+  if (prevToken.current !== token) {
     setApiToken(token);
+    prevToken.current = token;
+  }
+
+  useEffect(() => {
     return () => setApiToken(null);
-  }, [token]);
+  }, []);
 
   return (
     <AuthContext.Provider value={{ user, token }}>

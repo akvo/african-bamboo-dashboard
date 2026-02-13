@@ -1,6 +1,3 @@
-import { Button } from "@/components/ui/button";
-import { Plus } from "lucide-react";
-
 export function DashboardHeader() {
   return (
     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -12,10 +9,6 @@ export function DashboardHeader() {
           Digital MRV Data Monitoring & Verification
         </p>
       </div>
-      <Button>
-        <Plus className="size-4" />
-        Add data
-      </Button>
     </div>
   );
 }

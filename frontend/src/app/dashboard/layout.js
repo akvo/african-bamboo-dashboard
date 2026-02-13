@@ -1,5 +1,6 @@
 import { verifySession } from "@/lib/dal";
 import { AuthProvider } from "@/context/AuthContext";
+import { FormsProvider } from "@/hooks/useForms";
 import { AppSidebar } from "@/components/app-sidebar";
 
 export const metadata = {
@@ -12,12 +13,14 @@ export default async function DashboardLayout({ children }) {
 
   return (
     <AuthProvider user={user} token={token}>
-      <div className="flex h-screen">
-        <AppSidebar />
-        <main className="flex-1 overflow-auto bg-background p-6">
-          {children}
-        </main>
-      </div>
+      <FormsProvider>
+        <div className="flex h-screen">
+          <AppSidebar />
+          <main className="flex-1 overflow-auto bg-background p-6">
+            {children}
+          </main>
+        </div>
+      </FormsProvider>
     </AuthProvider>
   );
 }

@@ -1,40 +1,89 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+} from "react";
 import api from "@/lib/api";
 
-export function useForms() {
+const FormsContext = createContext(null);
+
+export function FormsProvider({ children }) {
   const [forms, setForms] = useState([]);
+  const [activeForm, setActiveForm] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function fetchForms() {
-      setIsLoading(true);
-      setError(null);
-      try {
-        const res = await api.get("/v1/odk/forms/");
-        if (!cancelled) {
-          setForms(res.data.results);
+  const fetchForms = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const res = await api.get("/v1/odk/forms/");
+      const list = res.data.results || [];
+      setForms(list);
+      setActiveForm((prev) => {
+        if (prev && list.some((f) => f.asset_uid === prev.asset_uid)) {
+          return prev;
         }
-      } catch (err) {
-        if (!cancelled) {
-          setError(err.response?.data?.message || "Failed to fetch forms");
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
-      }
+        return list[0] || null;
+      });
+    } catch (err) {
+      setError(err.response?.data?.message || "Failed to fetch forms");
+    } finally {
+      setIsLoading(false);
     }
-
-    fetchForms();
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
-  return { forms, isLoading, error };
+  useEffect(() => {
+    fetchForms();
+  }, [fetchForms]);
+
+  const registerForm = useCallback(
+    async ({ assetUid, name }) => {
+      const res = await api.post("/v1/odk/forms/", {
+        asset_uid: assetUid,
+        name,
+      });
+      await fetchForms();
+      return res.data;
+    },
+    [fetchForms],
+  );
+
+  const syncForm = useCallback(
+    async (formId) => {
+      const res = await api.post(`/v1/odk/forms/${formId}/sync/`);
+      await fetchForms();
+      return res.data;
+    },
+    [fetchForms],
+  );
+
+  return (
+    <FormsContext.Provider
+      value={{
+        forms,
+        activeForm,
+        setActiveForm,
+        isLoading,
+        error,
+        registerForm,
+        syncForm,
+        refetch: fetchForms,
+      }}
+    >
+      {children}
+    </FormsContext.Provider>
+  );
+}
+
+export function useForms() {
+  const context = useContext(FormsContext);
+  if (!context) {
+    throw new Error("useForms must be used within a FormsProvider");
+  }
+  return context;
 }

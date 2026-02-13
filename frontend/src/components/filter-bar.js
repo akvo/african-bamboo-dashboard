@@ -9,18 +9,33 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useForms } from "@/hooks/useForms";
 
 export function FilterBar() {
+  const { forms, activeForm, setActiveForm } = useForms();
+
+  function handleFormChange(assetUid) {
+    const form = forms.find((f) => f.asset_uid === assetUid);
+    if (form) {
+      setActiveForm(form);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <Select>
-        <SelectTrigger className="w-[180px]">
-          <SelectValue placeholder="Region" />
+      <Select
+        value={activeForm?.asset_uid || ""}
+        onValueChange={handleFormChange}
+      >
+        <SelectTrigger>
+          <SelectValue placeholder="Form" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="all">All Regions</SelectItem>
-          <SelectItem value="sidama">Sidama</SelectItem>
-          <SelectItem value="oromia">Oromia</SelectItem>
+          {forms.map((form) => (
+            <SelectItem key={form.asset_uid} value={form.asset_uid}>
+              {form.name}
+            </SelectItem>
+          ))}
         </SelectContent>
       </Select>
 

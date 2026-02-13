@@ -45,7 +45,9 @@ export default function SettingsPage() {
           </div>
           <Separator />
           <div className="space-y-1">
-            <Label className="text-muted-foreground">KoboToolbox Username</Label>
+            <Label className="text-muted-foreground">
+              KoboToolbox Username
+            </Label>
             <p className="text-sm font-medium">{user?.kobo_username || "-"}</p>
           </div>
           <Separator />

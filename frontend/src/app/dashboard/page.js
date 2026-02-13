@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Download, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,43 +15,42 @@ import { useForms } from "@/hooks/useForms";
 import { useSubmissions } from "@/hooks/useSubmissions";
 
 const stats = [
-  { title: "Target capacity", value: "20,420", subtitle: "Hectares over 10 years" },
+  {
+    title: "Target capacity",
+    value: "20,420",
+    subtitle: "Hectares over 10 years",
+  },
   { title: "Current progress", value: "210", subtitle: "Hectars mapped" },
   { title: "2026 Target", value: "1,000", subtitle: "Hectares to map" },
   { title: "Carbon potential", value: "1,000", subtitle: "vs last month" },
 ];
 
-export function DashboardPage() {
-  const { forms } = useForms();
-  const activeForm = forms?.[0];
+const DashboardPage = () => {
+  const { activeForm } = useForms();
 
-  const {
-    data,
-    count,
-    isLoading,
-    page,
-    totalPages,
-    setPage,
-  } = useSubmissions({
+  const { data, count, isLoading, page, totalPages, setPage } = useSubmissions({
     assetUid: activeForm?.asset_uid,
   });
 
   const [activeTab, setActiveTab] = useState("all");
   const [search, setSearch] = useState("");
 
-  const filteredData = data.filter((row) => {
-    if (activeTab !== "all" && row.status !== activeTab) return false;
-    if (search) {
-      const name = (row.instance_name || "").toLowerCase();
-      return name.includes(search.toLowerCase());
-    }
-    return true;
-  });
+  const filteredData = useMemo(() => {
+    return data.filter((row) => {
+      if (activeTab !== "all" && row.status !== activeTab) {
+      }
+      if (search) {
+        return row?.instance_name
+          ?.toLowerCase()
+          ?.includes(search.toLowerCase());
+      }
+      return true;
+    });
+  }, [data, activeTab, search]);
 
   return (
     <div className="space-y-6">
       <DashboardHeader />
-
       {/* Stats Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {stats.map((stat) => (
@@ -112,4 +111,6 @@ export function DashboardPage() {
       )}
     </div>
   );
-}
+};
+
+export default DashboardPage;

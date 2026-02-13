@@ -13,6 +13,7 @@ import {
   PanelLeftClose,
   PanelLeft,
   Menu,
+  FileText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/logo";
@@ -43,9 +44,9 @@ const navItems = [
     icon: Map,
   },
   {
-    label: "Farmers and Enumerators",
-    href: "/dashboard/farmers",
-    icon: Users,
+    label: "Forms",
+    href: "/dashboard/forms",
+    icon: FileText,
   },
 ];
 
@@ -61,8 +62,7 @@ function NavItem({ item, isCollapsed, isActive }) {
               href={item.href}
               className={cn(
                 "flex flex-col items-center justify-center gap-1 rounded-md p-2 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-                isActive &&
-                  "bg-sidebar-accent text-sidebar-accent-foreground"
+                isActive && "bg-sidebar-accent text-sidebar-accent-foreground",
               )}
             >
               <Icon className="size-5" />
@@ -84,7 +84,7 @@ function NavItem({ item, isCollapsed, isActive }) {
       href={item.href}
       className={cn(
         "flex items-center gap-3 rounded-md px-3 py-2 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-        isActive && "bg-sidebar-accent text-sidebar-accent-foreground"
+        isActive && "bg-sidebar-accent text-sidebar-accent-foreground",
       )}
     >
       <Icon className="size-5 shrink-0" />
@@ -231,7 +231,7 @@ export function AppSidebar() {
       <aside
         className={cn(
           "hidden md:flex flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-all duration-300 relative",
-          isCollapsed ? "w-16" : "w-60"
+          isCollapsed ? "w-16" : "w-60",
         )}
       >
         <SidebarContent

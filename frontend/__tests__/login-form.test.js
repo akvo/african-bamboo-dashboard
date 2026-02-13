@@ -26,7 +26,7 @@ describe("LoginForm", () => {
   it("pre-fills the server URL", () => {
     render(<LoginForm />);
     const serverInput = screen.getByLabelText(/kobotoolbox server/i);
-    expect(serverInput).toHaveValue("https://kf.kobotoolbox.org");
+    expect(serverInput).toHaveValue("https://eu.kobotoolbox.org");
   });
 
   it("renders password toggle button", () => {

@@ -2,6 +2,7 @@
 
 const nextConfig = {
   skipTrailingSlashRedirect: true,
+  devIndicators: false,
   async rewrites() {
     return [
       {

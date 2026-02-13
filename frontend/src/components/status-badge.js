@@ -24,7 +24,7 @@ export function StatusBadge({ status }) {
     <span
       className={cn(
         "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium",
-        config.className
+        config.className,
       )}
     >
       {config.label}

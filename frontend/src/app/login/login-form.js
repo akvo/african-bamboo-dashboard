@@ -34,8 +34,8 @@ export function LoginForm() {
               id="kobo_url"
               name="kobo_url"
               type="url"
-              placeholder="https://kf.kobotoolbox.org"
-              defaultValue="https://kf.kobotoolbox.org"
+              placeholder="https://eu.kobotoolbox.org"
+              defaultValue="https://eu.kobotoolbox.org"
               required
             />
           </div>

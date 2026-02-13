@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -10,14 +9,15 @@ import {
   Users,
   LifeBuoy,
   Settings,
-  Search,
+  // Search,
   PanelLeftClose,
   PanelLeft,
   Menu,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+// import { Input } from "@/components/ui/input";
 import {
   Sheet,
   SheetContent,
@@ -30,7 +30,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Separator } from "@/components/ui/separator";
 
 const navItems = [
   {
@@ -102,16 +101,7 @@ function SidebarContent({ isCollapsed, onToggle }) {
       {/* Header */}
       <div className="flex items-center justify-between border-b border-sidebar-border p-4">
         <div className="flex items-center gap-2">
-          <Image
-            src="/logo.svg"
-            alt="African Bamboo"
-            width={isCollapsed ? 24 : 32}
-            height={isCollapsed ? 24 : 32}
-            className="shrink-0"
-          />
-          {!isCollapsed && (
-            <span className="font-semibold text-lg">African Bamboo</span>
-          )}
+          <Logo size={isCollapsed ? 24 : 32} />
         </div>
         {!isCollapsed && (
           <Button
@@ -136,7 +126,7 @@ function SidebarContent({ isCollapsed, onToggle }) {
       </div>
 
       {/* Search */}
-      {!isCollapsed && (
+      {/* {!isCollapsed && (
         <div className="px-3 py-2">
           <div className="relative">
             <Search className="absolute left-2 top-1/2 size-4 -translate-y-1/2 text-sidebar-foreground/60" />
@@ -147,7 +137,7 @@ function SidebarContent({ isCollapsed, onToggle }) {
             />
           </div>
         </div>
-      )}
+      )} */}
 
       {/* Navigation */}
       <nav className="flex-1 space-y-1 px-2 py-2">
@@ -214,12 +204,7 @@ export function AppSidebar() {
       {/* Mobile Header */}
       <div className="flex items-center justify-between border-b bg-background p-4 md:hidden">
         <div className="flex items-center gap-2">
-          <Image
-            src="/logo.svg"
-            alt="African Bamboo"
-            width={28}
-            height={28}
-          />
+          <Logo size={28} />
           <span className="font-semibold text-lg">African Bamboo</span>
         </div>
         <Sheet open={isMobileOpen} onOpenChange={setIsMobileOpen}>

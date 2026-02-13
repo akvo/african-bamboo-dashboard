@@ -1,4 +1,4 @@
-import Image from "next/image";
+import { Logo } from "@/components/logo";
 import { LoginForm } from "./login-form";
 
 export const metadata = {
@@ -11,13 +11,7 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-muted p-4">
       <div className="w-full max-w-md">
         <div className="mb-8 flex justify-center text-foreground">
-          <Image
-            src="/logo.svg"
-            alt="African Bamboo"
-            width={80}
-            height={58}
-            priority
-          />
+          <Logo size={80} />
         </div>
         <LoginForm />
       </div>

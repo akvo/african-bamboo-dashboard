@@ -4,7 +4,11 @@ from django.db import models
 
 
 class FormMetadata(models.Model):
-    asset_uid = models.CharField(max_length=255, primary_key=True)
+    asset_uid = models.CharField(
+        max_length=255,
+        unique=True,
+        db_index=True,
+    )
     name = models.CharField(
         max_length=500,
         default="",
@@ -24,11 +28,14 @@ class FormMetadata(models.Model):
 
 
 class Submission(models.Model):
-    uuid = models.CharField(max_length=255, primary_key=True)
+    uuid = models.CharField(
+        max_length=255,
+        unique=True,
+        db_index=True,
+    )
     form = models.ForeignKey(
         FormMetadata,
         on_delete=models.CASCADE,
-        db_column="asset_uid",
         related_name="submissions",
     )
     kobo_id = models.CharField(max_length=255)
@@ -36,7 +43,9 @@ class Submission(models.Model):
         db_index=True,
         help_text="Epoch ms",
     )
-    submitted_by = models.CharField(max_length=255, null=True, blank=True)
+    submitted_by = models.CharField(
+        max_length=255, null=True, blank=True
+    )
     instance_name = models.CharField(
         max_length=255,
         null=True,
@@ -63,14 +72,17 @@ class Submission(models.Model):
 class Plot(models.Model):
     uuid = models.CharField(
         max_length=255,
-        primary_key=True,
+        unique=True,
+        db_index=True,
         default=uuid.uuid4,
     )
     plot_name = models.CharField(
         max_length=500,
         help_text="Farmer full name",
     )
-    instance_name = models.CharField(max_length=255, db_index=True)
+    instance_name = models.CharField(
+        max_length=255, db_index=True
+    )
     polygon_wkt = models.TextField(
         help_text="Polygon in WKT format",
     )
@@ -79,7 +91,11 @@ class Plot(models.Model):
     min_lon = models.FloatField(db_index=True)
     max_lon = models.FloatField(db_index=True)
     is_draft = models.BooleanField(default=True)
-    form_id = models.CharField(max_length=255)
+    form = models.ForeignKey(
+        FormMetadata,
+        on_delete=models.CASCADE,
+        related_name="plots",
+    )
     region = models.CharField(max_length=255)
     sub_region = models.CharField(max_length=255)
     created_at = models.BigIntegerField(
@@ -90,7 +106,6 @@ class Plot(models.Model):
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        db_column="submission_uuid",
         related_name="plot",
     )
 

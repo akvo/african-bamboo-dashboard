@@ -7,10 +7,13 @@ export function parseWktPolygon(wkt) {
   if (!wkt) return [];
   const match = wkt.match(/POLYGON\s*\(\((.+)\)\)/i);
   if (!match) return [];
-  return match[1].split(",").map((pair) => {
+  return match[1].split(",").reduce((acc, pair) => {
     const [lon, lat] = pair.trim().split(/\s+/).map(Number);
-    return [lat, lon];
-  });
+    if (Number.isFinite(lat) && Number.isFinite(lon)) {
+      acc.push([lat, lon]);
+    }
+    return acc;
+  }, []);
 }
 
 export function toWktPolygon(coords) {

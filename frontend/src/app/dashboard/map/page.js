@@ -29,14 +29,19 @@ export default function MapPage() {
   const handleApprove = useCallback(
     async (notes) => {
       if (!mapState.selectedPlot?.submission_uuid) return;
-      await api.patch(
-        `/v1/odk/submissions/${mapState.selectedPlot.submission_uuid}/`,
-        { approval_status: 1, reviewer_notes: notes || "" },
-      );
-      mapState.setApprovalDialogOpen(false);
-      mapState.handleBackToList();
-      await refetch();
-      mapState.setToastMessage("Plot approved successfully");
+      try {
+        await api.patch(
+          `/v1/odk/submissions/${mapState.selectedPlot.submission_uuid}/`,
+          { approval_status: 1, reviewer_notes: notes || "" },
+        );
+        mapState.setApprovalDialogOpen(false);
+        mapState.handleBackToList();
+        await refetch();
+        mapState.setToastMessage("Plot approved successfully");
+      } catch {
+        mapState.setApprovalDialogOpen(false);
+        mapState.setToastMessage("Failed to approve plot. Please try again.");
+      }
     },
     [mapState, refetch],
   );
@@ -44,14 +49,19 @@ export default function MapPage() {
   const handleReject = useCallback(
     async (reason) => {
       if (!mapState.selectedPlot?.submission_uuid) return;
-      await api.patch(
-        `/v1/odk/submissions/${mapState.selectedPlot.submission_uuid}/`,
-        { approval_status: 2, reviewer_notes: reason },
-      );
-      mapState.setRejectionDialogOpen(false);
-      mapState.handleBackToList();
-      await refetch();
-      mapState.setToastMessage("Plot rejected");
+      try {
+        await api.patch(
+          `/v1/odk/submissions/${mapState.selectedPlot.submission_uuid}/`,
+          { approval_status: 2, reviewer_notes: reason },
+        );
+        mapState.setRejectionDialogOpen(false);
+        mapState.handleBackToList();
+        await refetch();
+        mapState.setToastMessage("Plot rejected");
+      } catch {
+        mapState.setRejectionDialogOpen(false);
+        mapState.setToastMessage("Failed to reject plot. Please try again.");
+      }
     },
     [mapState, refetch],
   );
@@ -60,14 +70,18 @@ export default function MapPage() {
     if (!editedGeo || !mapState.editingPlotId) return;
     const wkt = toWktPolygon(editedGeo);
     const bbox = calculateBbox(editedGeo);
-    await api.patch(`/v1/odk/plots/${mapState.editingPlotId}/`, {
-      polygon_wkt: wkt,
-      ...bbox,
-    });
-    setEditedGeo(null);
-    mapState.handleCancelEditing();
-    await refetch();
-    mapState.setToastMessage("Geometry saved successfully");
+    try {
+      await api.patch(`/v1/odk/plots/${mapState.editingPlotId}/`, {
+        polygon_wkt: wkt,
+        ...bbox,
+      });
+      setEditedGeo(null);
+      mapState.handleCancelEditing();
+      await refetch();
+      mapState.setToastMessage("Geometry saved successfully");
+    } catch {
+      mapState.setToastMessage("Failed to save geometry. Please try again.");
+    }
   }, [editedGeo, mapState, refetch]);
 
   const handleCancelEdit = useCallback(() => {

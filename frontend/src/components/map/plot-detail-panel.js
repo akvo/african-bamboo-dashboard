@@ -57,8 +57,17 @@ export default function PlotDetailPanel({
 
   const status = getPlotStatus(plot);
   const raw = submission?.raw_data || {};
-  const centerLat = ((plot.min_lat + plot.max_lat) / 2).toFixed(6);
-  const centerLon = ((plot.min_lon + plot.max_lon) / 2).toFixed(6);
+  const hasGeometry =
+    plot.min_lat != null &&
+    plot.max_lat != null &&
+    plot.min_lon != null &&
+    plot.max_lon != null;
+  const centerLat = hasGeometry
+    ? ((plot.min_lat + plot.max_lat) / 2).toFixed(6)
+    : null;
+  const centerLon = hasGeometry
+    ? ((plot.min_lon + plot.max_lon) / 2).toFixed(6)
+    : null;
 
   return (
     <div className="flex h-full flex-col">
@@ -111,18 +120,28 @@ export default function PlotDetailPanel({
           )}
 
           {/* Coordinates */}
-          <div className="flex items-center gap-2 rounded-md bg-muted px-3 py-2">
-            <MapPin className="size-4 text-muted-foreground" />
-            <span className="text-sm">
-              {centerLat}, {centerLon}
-            </span>
-          </div>
+          {hasGeometry ? (
+            <div className="flex items-center gap-2 rounded-md bg-muted px-3 py-2">
+              <MapPin className="size-4 text-muted-foreground" />
+              <span className="text-sm">
+                {centerLat}, {centerLon}
+              </span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 rounded-md bg-muted px-3 py-2">
+              <MapPin className="size-4 text-muted-foreground" />
+              <span className="text-sm text-muted-foreground">
+                No geometry data
+              </span>
+            </div>
+          )}
 
           {/* Edit geometry button */}
           <Button
             variant="outline"
             size="sm"
             className="w-full"
+            disabled={!hasGeometry}
             onClick={onStartEditing}
           >
             <Edit3 className="mr-2 size-4" />
@@ -131,10 +150,7 @@ export default function PlotDetailPanel({
 
           {/* Notes */}
           <div className="space-y-2">
-            <label
-              htmlFor="plot-notes"
-              className="text-sm font-medium"
-            >
+            <label htmlFor="plot-notes" className="text-sm font-medium">
               Notes
             </label>
             <Textarea

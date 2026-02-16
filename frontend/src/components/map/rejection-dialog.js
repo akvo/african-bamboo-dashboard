@@ -35,9 +35,7 @@ export default function RejectionDialog({ open, onOpenChange, onConfirm }) {
           <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-status-rejected/15">
             <XCircle className="h-6 w-6 text-status-rejected" />
           </div>
-          <DialogTitle className="text-center">
-            Reject Plot
-          </DialogTitle>
+          <DialogTitle className="text-center">Reject Plot</DialogTitle>
           <DialogDescription className="text-center">
             Provide a reason for rejecting this plot boundary.
           </DialogDescription>

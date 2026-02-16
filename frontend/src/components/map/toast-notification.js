@@ -4,7 +4,11 @@ import { useEffect } from "react";
 import { CheckCircle2, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export default function ToastNotification({ message, type = "success", onDismiss }) {
+export default function ToastNotification({
+  message,
+  type = "success",
+  onDismiss,
+}) {
   useEffect(() => {
     if (!message) return;
     const timer = setTimeout(() => {

@@ -12,9 +12,7 @@ export default function MapEditToolbar({
     <div className="absolute left-1/2 top-2 z-[1000] flex -translate-x-1/2 items-center gap-3 rounded-lg border border-border bg-card px-4 py-2 shadow-lg">
       <div className="flex items-center gap-2">
         <span className="h-2 w-2 rounded-full bg-orange-500" />
-        <span className="text-sm font-medium">
-          Editing: {plotName}
-        </span>
+        <span className="text-sm font-medium">Editing: {plotName}</span>
       </div>
       <div className="flex gap-2">
         <Button size="sm" onClick={onSave} disabled={!hasChanges}>

@@ -6,10 +6,10 @@ const statusConfig = {
     className:
       "bg-status-approved/15 text-status-approved border-status-approved/30",
   },
-  on_hold: {
-    label: "On hold",
+  pending: {
+    label: "Pending",
     className:
-      "bg-status-on-hold/15 text-status-on-hold border-status-on-hold/30",
+      "bg-status-pending/15 text-status-pending border-status-pending/30",
   },
   rejected: {
     label: "Rejected",
@@ -19,7 +19,7 @@ const statusConfig = {
 };
 
 export function StatusBadge({ status }) {
-  const config = statusConfig[status] || statusConfig.on_hold;
+  const config = statusConfig[status] || statusConfig.pending;
   return (
     <span
       className={cn(

@@ -38,8 +38,8 @@ export default function PlotListPanel({
     filtered.sort((a, b) => {
       if (sortBy === "name") return a.plot_name.localeCompare(b.plot_name);
       if (sortBy === "date") return b.created_at - a.created_at;
-      // priority: on_hold first, then approved
-      const order = { on_hold: 0, rejected: 1, approved: 2 };
+      // priority: pending first, then rejected, then approved
+      const order = { pending: 0, rejected: 1, approved: 2 };
       return (order[a._status] ?? 1) - (order[b._status] ?? 1);
     });
 
@@ -50,9 +50,7 @@ export default function PlotListPanel({
     <div className="flex h-full flex-col">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
-        <h2 className="text-sm font-semibold">
-          {count} plots detected
-        </h2>
+        <h2 className="text-sm font-semibold">{count} plots detected</h2>
         <Button variant="ghost" size="icon-sm">
           <MoreVertical className="size-4" />
         </Button>
@@ -77,7 +75,7 @@ export default function PlotListPanel({
         <TabsList className="mx-4 mt-2 w-auto">
           <TabsTrigger value="all">View all</TabsTrigger>
           <TabsTrigger value="approved">Approved</TabsTrigger>
-          <TabsTrigger value="on_hold">On hold</TabsTrigger>
+          <TabsTrigger value="pending">Pending</TabsTrigger>
           <TabsTrigger value="rejected">Rejected</TabsTrigger>
         </TabsList>
       </Tabs>

@@ -11,6 +11,12 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/status-badge";
 
+function getApprovalLabel(approvalStatus) {
+  if (approvalStatus === 1) return "approved";
+  if (approvalStatus === 2) return "rejected";
+  return "pending";
+}
+
 export function SubmissionsTable({ data, isLoading }) {
   if (isLoading) {
     return (
@@ -53,7 +59,7 @@ export function SubmissionsTable({ data, isLoading }) {
                 </div>
               </TableCell>
               <TableCell>
-                <StatusBadge status={row.status || "on_hold"} />
+                <StatusBadge status={getApprovalLabel(row.approval_status)} />
               </TableCell>
               <TableCell className="text-muted-foreground">
                 {row.submission_time

@@ -28,20 +28,20 @@ L.Icon.Default.mergeOptions({
 });
 
 const POLYGON_STYLES = {
-  on_hold: { color: "#EAB308", weight: 2, fillOpacity: 0.2 },
+  pending: { color: "#EAB308", weight: 2, fillOpacity: 0.2 },
   approved: { color: "#16A34A", weight: 2, fillOpacity: 0.2 },
   rejected: { color: "#DC2626", weight: 2, fillOpacity: 0.2 },
   selected: { color: "#22D3EE", weight: 3, fillOpacity: 0.3 },
   editing: { color: "#F97316", weight: 3, fillOpacity: 0.25 },
 };
 
-const ESRI_TILE_URL =
-  "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
-const ESRI_ATTRIBUTION =
-  "Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community";
+const SATELLITE_TILE_URL = "https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}";
+const SATELLITE_SUBDOMAINS = ["mt0", "mt1", "mt2", "mt3"];
+const SATELLITE_ATTRIBUTION = "Map data &copy; Google";
 
 const DEFAULT_CENTER = [7.05, 38.47];
 const DEFAULT_ZOOM = 6;
+const MAX_ZOOM = 20;
 
 export default function MapView({
   plots,
@@ -72,7 +72,12 @@ export default function MapView({
         zoomControl={false}
       >
         <ZoomControl position="bottomright" />
-        <TileLayer url={ESRI_TILE_URL} attribution={ESRI_ATTRIBUTION} />
+        <TileLayer
+          url={SATELLITE_TILE_URL}
+          subdomains={SATELLITE_SUBDOMAINS}
+          attribution={SATELLITE_ATTRIBUTION}
+          maxZoom={MAX_ZOOM}
+        />
 
         <MapController selectedPlot={selectedPlot} allPlots={plots} />
 
@@ -83,7 +88,7 @@ export default function MapView({
           const isSelected = selectedPlot?.uuid === plot.uuid;
           const style = isSelected
             ? POLYGON_STYLES.selected
-            : POLYGON_STYLES[plot.status] || POLYGON_STYLES.on_hold;
+            : POLYGON_STYLES[plot.status] || POLYGON_STYLES.pending;
 
           return (
             <Polygon

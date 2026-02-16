@@ -34,9 +34,7 @@ export default function ApprovalDialog({ open, onOpenChange, onConfirm }) {
           <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-status-approved/15">
             <CheckCircle2 className="h-6 w-6 text-status-approved" />
           </div>
-          <DialogTitle className="text-center">
-            Confirm Approval
-          </DialogTitle>
+          <DialogTitle className="text-center">Confirm Approval</DialogTitle>
           <DialogDescription className="text-center">
             Approve this plot to confirm the boundary mapping is valid.
           </DialogDescription>

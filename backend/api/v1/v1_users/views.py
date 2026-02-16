@@ -12,12 +12,9 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from api.v1.v1_users.models import SystemUser
-from api.v1.v1_users.serializers import (
-    LoginResponseSerializer,
-    LoginSerializer,
-    UpdateUserSerializer,
-    UserSerializer,
-)
+from api.v1.v1_users.serializers import (LoginResponseSerializer,
+                                         LoginSerializer, UpdateUserSerializer,
+                                         UserSerializer)
 from utils.custom_serializer_fields import validate_serializers_message
 from utils.default_serializers import DefaultResponseSerializer
 from utils.encryption import encrypt

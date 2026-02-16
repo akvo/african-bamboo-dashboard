@@ -62,6 +62,20 @@ export function FormsProvider({ children }) {
     [fetchForms],
   );
 
+  const updateForm = useCallback(
+    async (assetUid, data) => {
+      const res = await api.patch(`/v1/odk/forms/${assetUid}/`, data);
+      await fetchForms();
+      return res.data;
+    },
+    [fetchForms],
+  );
+
+  const fetchFormFields = useCallback(async (assetUid) => {
+    const res = await api.get(`/v1/odk/forms/${assetUid}/form_fields/`);
+    return res.data.fields;
+  }, []);
+
   return (
     <FormsContext.Provider
       value={{
@@ -72,6 +86,8 @@ export function FormsProvider({ children }) {
         error,
         registerForm,
         syncForm,
+        updateForm,
+        fetchFormFields,
         refetch: fetchForms,
       }}
     >

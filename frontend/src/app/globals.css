@@ -46,7 +46,7 @@
   --radius-3xl: calc(var(--radius) + 12px);
   --radius-4xl: calc(var(--radius) + 16px);
   --color-status-approved: var(--status-approved);
-  --color-status-on-hold: var(--status-on-hold);
+  --color-status-pending: var(--status-pending);
   --color-status-rejected: var(--status-rejected);
 }
 
@@ -85,7 +85,7 @@
   --sidebar-ring: oklch(0.795 0.175 86.047);
   /* Status badge colors */
   --status-approved: oklch(0.627 0.194 149.214);
-  --status-on-hold: oklch(0.795 0.175 86.047);
+  --status-pending: oklch(0.795 0.175 86.047);
   --status-rejected: oklch(0.577 0.245 27.325);
 }
 

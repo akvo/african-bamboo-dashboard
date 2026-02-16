@@ -39,6 +39,7 @@ PgAdmin credentials: `dev@akvo.org` / `password`
 │   └── src/app/       # App Router pages and layouts
 ├── backend/           # Django project
 │   ├── african_bamboo_dashboard/   # Project settings and root URLs
+│   ├── utils/                      # Shared utilities (kobo_client, polygon, encryption)
 │   └── api/v1/
 │       ├── v1_init/               # Health-check / init endpoints
 │       ├── v1_users/              # Auth & user management (JWT, Kobo login)
@@ -80,6 +81,12 @@ isort .        # Sort imports
 flake8         # Lint (max line length: 80)
 ```
 
+Run tests:
+
+```bash
+docker compose exec backend ./test.sh   # Full test suite with coverage
+```
+
 ### Database
 
 Dump the database:
@@ -110,61 +117,54 @@ curl -X POST http://localhost:8000/api/v1/auth/login \
   }'
 ```
 
-Response:
-
-```json
-{
-  "user": { "id": 1, "name": "your_username", "email": "...", ... },
-  "token": "eyJhbGciOiJIUzI1NiIs...",
-  "expiration_time": "2026-02-13T04:07:00Z"
-}
-```
-
-Use the `token` value as a Bearer token for all subsequent requests:
+Use the returned `token` as a Bearer token:
 
 ```
 Authorization: Bearer <token>
 ```
 
-### ODK API — Syncing KoboToolbox Data
+### ODK API — Forms & Sync
 
-The ODK API acts as a local proxy/cache for KoboToolbox. The workflow is:
+The ODK API acts as a local proxy/cache for KoboToolbox:
 
 1. **Register a form** by its KoboToolbox `asset_uid`
-2. **Trigger sync** to fetch submissions from KoboToolbox into the local database
-3. **Query locally** — list, filter, and retrieve submissions without hitting KoboToolbox again
+2. **Configure field mappings** to map form fields to plot attributes
+3. **Trigger sync** to fetch submissions and auto-generate plots
+4. **Query locally** — list, filter, and approve/reject submissions
 
-#### Step 1: Register a Form
-
-Register a KoboToolbox form using its `asset_uid` (found in the KoboToolbox URL or form settings):
+#### Register a Form
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/odk/forms/ \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
+  -d '{ "asset_uid": "aYRqYXmmPLFfbcwC2KAULa", "name": "Bamboo Plot Survey" }'
+```
+
+#### Configure Field Mappings
+
+Fetch available fields from KoboToolbox:
+
+```bash
+curl http://localhost:8000/api/v1/odk/forms/aYRqYXmmPLFfbcwC2KAULa/form_fields/ \
+  -H "Authorization: Bearer <token>"
+```
+
+Save mappings (comma-separated for multi-value fields):
+
+```bash
+curl -X PATCH http://localhost:8000/api/v1/odk/forms/aYRqYXmmPLFfbcwC2KAULa/ \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
   -d '{
-    "asset_uid": "aYRqYXmmPLFfbcwC2KAULa",
-    "name": "Bamboo Plot Survey"
+    "polygon_field": "consent_group/consented/boundary_mapping/Open_Area_GeoMapping",
+    "region_field": "region",
+    "sub_region_field": "woreda",
+    "plot_name_field": "consent_group/consented/First_Name,consent_group/consented/Father_s_Name"
   }'
 ```
 
-List all registered forms:
-
-```bash
-curl http://localhost:8000/api/v1/odk/forms/ \
-  -H "Authorization: Bearer <token>"
-```
-
-Get a single form (includes `submission_count`):
-
-```bash
-curl http://localhost:8000/api/v1/odk/forms/aYRqYXmmPLFfbcwC2KAULa/ \
-  -H "Authorization: Bearer <token>"
-```
-
-#### Step 2: Sync Submissions from KoboToolbox
-
-Trigger a sync to pull submissions from KoboToolbox into the local database. The sync uses your stored Kobo credentials and supports incremental sync (only fetches new data since the last sync):
+#### Sync Submissions
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/odk/forms/aYRqYXmmPLFfbcwC2KAULa/sync/ \
@@ -176,67 +176,44 @@ Response:
 ```json
 {
   "synced": 42,
-  "created": 42
+  "created": 42,
+  "plots_created": 42,
+  "plots_updated": 0
 }
 ```
 
-- `synced` — total submissions fetched from KoboToolbox
-- `created` — new submissions inserted (existing ones are updated)
+Sync automatically creates/updates a Plot for each Submission using the configured field mappings.
 
-On subsequent syncs, only submissions newer than the last sync timestamp are fetched.
+### ODK API — Submissions & Approval
 
-#### Step 3: Query Submissions Locally
-
-List submissions (paginated, excludes `raw_data` for performance):
-
-```bash
-curl http://localhost:8000/api/v1/odk/submissions/ \
-  -H "Authorization: Bearer <token>"
-```
-
-Filter by form:
+List submissions:
 
 ```bash
 curl "http://localhost:8000/api/v1/odk/submissions/?asset_uid=aYRqYXmmPLFfbcwC2KAULa" \
   -H "Authorization: Bearer <token>"
 ```
 
-Get full submission detail (includes `raw_data` and `system_data`):
+Approve or reject a submission:
 
 ```bash
-curl http://localhost:8000/api/v1/odk/submissions/<uuid>/ \
-  -H "Authorization: Bearer <token>"
+# Approve (approval_status: 1)
+curl -X PATCH http://localhost:8000/api/v1/odk/submissions/<uuid>/ \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{ "approval_status": 1, "reviewer_notes": "Boundary verified" }'
+
+# Reject (approval_status: 2)
+curl -X PATCH http://localhost:8000/api/v1/odk/submissions/<uuid>/ \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{ "approval_status": 2, "reviewer_notes": "Polygon too small" }'
 ```
 
-Get the latest sync timestamp for a form:
-
-```bash
-curl "http://localhost:8000/api/v1/odk/submissions/latest_sync_time/?asset_uid=aYRqYXmmPLFfbcwC2KAULa" \
-  -H "Authorization: Bearer <token>"
-```
+Approval status: `null` = Pending, `1` = Approved, `2` = Rejected.
 
 ### ODK API — Plots
 
-Plots represent spatial bamboo plot boundaries derived from submissions.
-
-Create a plot:
-
-```bash
-curl -X POST http://localhost:8000/api/v1/odk/plots/ \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "plot_name": "Farmer A",
-    "instance_name": "inst-1",
-    "polygon_wkt": "POLYGON((38.7 9.0, 38.8 9.0, 38.8 9.1, 38.7 9.1, 38.7 9.0))",
-    "min_lat": 9.0, "max_lat": 9.1,
-    "min_lon": 38.7, "max_lon": 38.8,
-    "form_id": "aYRqYXmmPLFfbcwC2KAULa",
-    "region": "Oromia",
-    "sub_region": "West Shewa",
-    "created_at": 1700000000000
-  }'
-```
+Plots are auto-generated during sync. They cannot be created manually (POST returns 405).
 
 List plots with filters:
 
@@ -245,9 +222,21 @@ List plots with filters:
 curl "http://localhost:8000/api/v1/odk/plots/?form_id=aYRqYXmmPLFfbcwC2KAULa" \
   -H "Authorization: Bearer <token>"
 
-# By draft status
-curl "http://localhost:8000/api/v1/odk/plots/?is_draft=true" \
+# By approval status
+curl "http://localhost:8000/api/v1/odk/plots/?status=pending" \
   -H "Authorization: Bearer <token>"
+```
+
+Update plot geometry:
+
+```bash
+curl -X PATCH http://localhost:8000/api/v1/odk/plots/<uuid>/ \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "polygon_wkt": "POLYGON((38.7 9.0, 38.8 9.0, 38.8 9.1, 38.7 9.1, 38.7 9.0))",
+    "min_lat": 9.0, "max_lat": 9.1, "min_lon": 38.7, "max_lon": 38.8
+  }'
 ```
 
 Find overlapping plots by bounding box:
@@ -256,10 +245,7 @@ Find overlapping plots by bounding box:
 curl -X POST http://localhost:8000/api/v1/odk/plots/overlap_candidates/ \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
-  -d '{
-    "min_lat": 9.0, "max_lat": 9.1,
-    "min_lon": 38.7, "max_lon": 38.8
-  }'
+  -d '{ "min_lat": 9.0, "max_lat": 9.1, "min_lon": 38.7, "max_lon": 38.8 }'
 ```
 
 ### API Endpoint Summary
@@ -270,14 +256,16 @@ curl -X POST http://localhost:8000/api/v1/odk/plots/overlap_candidates/ \
 | GET | `/api/v1/odk/forms/` | List registered forms |
 | POST | `/api/v1/odk/forms/` | Register a new form |
 | GET | `/api/v1/odk/forms/{asset_uid}/` | Get form detail |
+| PATCH | `/api/v1/odk/forms/{asset_uid}/` | Update form (field mappings) |
 | DELETE | `/api/v1/odk/forms/{asset_uid}/` | Remove a form |
+| GET | `/api/v1/odk/forms/{asset_uid}/form_fields/` | List available KoboToolbox fields |
 | POST | `/api/v1/odk/forms/{asset_uid}/sync/` | Sync submissions from KoboToolbox |
 | GET | `/api/v1/odk/submissions/` | List submissions (`?asset_uid=` filter) |
 | GET | `/api/v1/odk/submissions/{uuid}/` | Get submission detail |
+| PATCH | `/api/v1/odk/submissions/{uuid}/` | Update approval status and notes |
 | GET | `/api/v1/odk/submissions/latest_sync_time/` | Latest sync time (`?asset_uid=` required) |
-| GET | `/api/v1/odk/plots/` | List plots (`?form_id=`, `?is_draft=` filters) |
-| POST | `/api/v1/odk/plots/` | Create a plot |
+| GET | `/api/v1/odk/plots/` | List plots (`?form_id=`, `?status=` filters) |
 | GET | `/api/v1/odk/plots/{uuid}/` | Get plot detail |
-| PUT | `/api/v1/odk/plots/{uuid}/` | Update a plot |
+| PATCH | `/api/v1/odk/plots/{uuid}/` | Update plot (geometry) |
 | DELETE | `/api/v1/odk/plots/{uuid}/` | Delete a plot |
 | POST | `/api/v1/odk/plots/overlap_candidates/` | Find overlapping plots |

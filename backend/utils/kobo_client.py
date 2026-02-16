@@ -18,12 +18,8 @@ class KoboClient:
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout or self.DEFAULT_TIMEOUT
         self.session = requests.Session()
-        credentials = (
-            b64encode(f"{username}:{password}".encode()).decode()
-        )
-        self.session.headers["Authorization"] = (
-            f"Basic {credentials}"
-        )
+        credentials = b64encode(f"{username}:{password}".encode()).decode()
+        self.session.headers["Authorization"] = f"Basic {credentials}"
 
     def verify_credentials(self) -> bool:
         """Validate credentials with a lightweight
@@ -76,6 +72,20 @@ class KoboClient:
         )
         resp.raise_for_status()
         return resp.json()
+
+    def get_asset_detail(self, asset_uid: str):
+        """Fetch asset content (survey fields, choices)."""
+        url = (
+            f"{self.base_url}"
+            f"/api/v2/assets/{asset_uid}/"
+        )
+        resp = self.session.get(
+            url,
+            params={"format": "json"},
+            timeout=self.timeout,
+        )
+        resp.raise_for_status()
+        return resp.json()["content"]
 
     def fetch_all_submissions(
         self,

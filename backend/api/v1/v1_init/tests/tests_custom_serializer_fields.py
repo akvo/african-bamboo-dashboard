@@ -2,11 +2,8 @@ from unittest.mock import patch
 
 from django.test import TestCase
 
-from utils.custom_serializer_fields import (
-    UnvalidatedField,
-    key_map,
-    validate_serializers_message,
-)
+from utils.custom_serializer_fields import (UnvalidatedField, key_map,
+                                            validate_serializers_message)
 
 
 class UnvalidatedFieldTestCase(TestCase):
@@ -19,9 +16,7 @@ class UnvalidatedFieldTestCase(TestCase):
         field = UnvalidatedField()
         self.assertEqual(field.to_internal_value("hello"), "hello")
         self.assertEqual(field.to_internal_value(123), 123)
-        self.assertEqual(
-            field.to_internal_value({"a": 1}), {"a": 1}
-        )
+        self.assertEqual(field.to_internal_value({"a": 1}), {"a": 1})
 
     def test_to_representation_passes_through(self):
         field = UnvalidatedField()
@@ -99,11 +94,7 @@ class ValidateSerializersMessageTestCase(TestCase):
 
     def test_list_serializer_item_errors(self):
         # ListSerializer: items are dicts with field errors
-        errors = {
-            "items": [
-                {"name": ["field_title is required."]}
-            ]
-        }
+        errors = {"items": [{"name": ["field_title is required."]}]}
         result = validate_serializers_message(errors)
         self.assertEqual(result, "name is required.")
 
@@ -137,9 +128,7 @@ class ValidateSerializersMessageTestCase(TestCase):
         self.assertEqual(result, "key msg")
 
     def test_top_level_list_with_nested_dict_value(self):
-        errors = [
-            {"profile": {"age": ["field_title is required."]}}
-        ]
+        errors = [{"profile": {"age": ["field_title is required."]}}]
         result = validate_serializers_message(errors)
         self.assertEqual(result, "age is required.")
 
@@ -153,9 +142,7 @@ class ValidateSerializersMessageTestCase(TestCase):
 
     @patch.dict(key_map, {"street": "Street Name"})
     def test_key_map_in_nested_serializer(self):
-        errors = {
-            "address": {"street": ["field_title is required."]}
-        }
+        errors = {"address": {"street": ["field_title is required."]}}
         result = validate_serializers_message(errors)
         self.assertEqual(result, "Street Name is required.")
 

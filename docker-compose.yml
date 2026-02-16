@@ -41,6 +41,7 @@ services:
     environment:
       - WEBDOMAIN=${WEBDOMAIN}
       - SESSION_SECRET=${SESSION_SECRET}
+      - NEXT_PUBLIC_MAPBOX_TOKEN=${NEXT_PUBLIC_MAPBOX_TOKEN}
     depends_on:
       - backend
 volumes:

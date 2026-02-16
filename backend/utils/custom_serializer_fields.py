@@ -245,15 +245,11 @@ def _collect_errors(data, messages, field_name=None):
             _collect_errors(value, messages, field_name=key)
     elif isinstance(data, list):
         for item in data:
-            _collect_errors(
-                item, messages, field_name=field_name
-            )
+            _collect_errors(item, messages, field_name=field_name)
     elif isinstance(data, str):
         name = str(field_name) if field_name is not None else ""
         label = key_map.get(name, name)
-        messages.append(
-            data.replace("field_title", label)
-        )
+        messages.append(data.replace("field_title", label))
 
 
 def validate_serializers_message(errors):

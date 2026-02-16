@@ -1,6 +1,7 @@
 export function getPlotStatus(plot) {
-  if (plot.status) return plot.status;
-  return plot.is_draft ? "on_hold" : "approved";
+  if (plot.approval_status === 1) return "approved";
+  if (plot.approval_status === 2) return "rejected";
+  return "pending";
 }
 
 export function calculateBbox(coords) {

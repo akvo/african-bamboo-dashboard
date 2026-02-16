@@ -33,6 +33,7 @@ export default function PlotDetailPanel({
   useEffect(() => {
     if (!plot?.submission_uuid) {
       setSubmission(null);
+      setNotes("");
       return;
     }
     let cancelled = false;
@@ -40,10 +41,16 @@ export default function PlotDetailPanel({
     api
       .get(`/v1/odk/submissions/${plot.submission_uuid}/`)
       .then((res) => {
-        if (!cancelled) setSubmission(res.data);
+        if (!cancelled) {
+          setSubmission(res.data);
+          setNotes(res.data.reviewer_notes || "");
+        }
       })
       .catch(() => {
-        if (!cancelled) setSubmission(null);
+        if (!cancelled) {
+          setSubmission(null);
+          setNotes("");
+        }
       })
       .finally(() => {
         if (!cancelled) setIsLoadingSub(false);

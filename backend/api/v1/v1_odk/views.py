@@ -270,18 +270,27 @@ class PlotViewSet(
     permission_classes = [IsAuthenticated]
     lookup_field = "uuid"
 
+    STATUS_MAP = {
+        "approved": 1,
+        "rejected": 2,
+    }
+
     def get_queryset(self):
         qs = super().get_queryset()
         form_id = self.request.query_params.get("form_id")
-        approval_status = self.request.query_params.get("status")
+        status_param = self.request.query_params.get("status")
         if form_id:
             qs = qs.filter(form__asset_uid=form_id)
-        if approval_status is not None:
-            if approval_status == "pending":
-                qs = qs.filter(submission__approval_status__isnull=True)  # noqa: E501
-            else:
+        if status_param is not None:
+            if status_param == "pending":
                 qs = qs.filter(
-                    submission__approval_status=approval_status  # noqa: E501
+                    submission__approval_status__isnull=True
+                )
+            elif status_param in self.STATUS_MAP:
+                qs = qs.filter(
+                    submission__approval_status=(
+                        self.STATUS_MAP[status_param]
+                    )
                 )
         return qs
 

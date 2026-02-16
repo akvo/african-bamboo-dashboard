@@ -1,14 +1,23 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 import { Polygon, FeatureGroup } from "react-leaflet";
 import { parseWktPolygon } from "@/lib/wkt-parser";
 
 const EDIT_STYLE = { color: "#F97316", weight: 3, fillOpacity: 0.25 };
 
 export default function MapEditLayer({ plot, editedGeo, setEditedGeo }) {
+  const prevRef = useRef(null);
+
   const polygonRef = useCallback(
     (polygon) => {
+      // Cleanup previous instance
+      if (prevRef.current) {
+        prevRef.current.editing?.disable();
+        prevRef.current.off("edit");
+        prevRef.current = null;
+      }
+
       if (!polygon) return;
       polygon.editing?.enable();
 
@@ -19,6 +28,7 @@ export default function MapEditLayer({ plot, editedGeo, setEditedGeo }) {
       };
 
       polygon.on("edit", handleEdit);
+      prevRef.current = polygon;
     },
     [setEditedGeo],
   );

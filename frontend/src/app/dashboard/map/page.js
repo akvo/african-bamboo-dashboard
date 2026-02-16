@@ -27,11 +27,12 @@ export default function MapPage() {
   const [editedGeo, setEditedGeo] = useState(null);
 
   const handleApprove = useCallback(
-    async () => {
-      if (!mapState.selectedPlot) return;
-      await api.patch(`/v1/odk/plots/${mapState.selectedPlot.uuid}/`, {
-        is_draft: false,
-      });
+    async (notes) => {
+      if (!mapState.selectedPlot?.submission_uuid) return;
+      await api.patch(
+        `/v1/odk/submissions/${mapState.selectedPlot.submission_uuid}/`,
+        { approval_status: 1, reviewer_notes: notes || "" },
+      );
       mapState.setApprovalDialogOpen(false);
       mapState.handleBackToList();
       await refetch();
@@ -41,9 +42,12 @@ export default function MapPage() {
   );
 
   const handleReject = useCallback(
-    async () => {
-      if (!mapState.selectedPlot) return;
-      // Currently no rejected status in backend, just log the intent
+    async (reason) => {
+      if (!mapState.selectedPlot?.submission_uuid) return;
+      await api.patch(
+        `/v1/odk/submissions/${mapState.selectedPlot.submission_uuid}/`,
+        { approval_status: 2, reviewer_notes: reason },
+      );
       mapState.setRejectionDialogOpen(false);
       mapState.handleBackToList();
       await refetch();

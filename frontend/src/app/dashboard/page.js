@@ -81,7 +81,7 @@ const DashboardPage = () => {
           <TabsList>
             <TabsTrigger value="all">View all</TabsTrigger>
             <TabsTrigger value="approved">Approved</TabsTrigger>
-            <TabsTrigger value="on_hold">On hold</TabsTrigger>
+            <TabsTrigger value="pending">Pending</TabsTrigger>
             <TabsTrigger value="rejected">Rejected</TabsTrigger>
           </TabsList>
         </Tabs>

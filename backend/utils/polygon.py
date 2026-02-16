@@ -119,7 +119,7 @@ def validate_polygon(coords):
     if not _is_valid_geometry(coords):
         return (
             False,
-            "Polygon lines intersect or cross " "each other.",
+            "Polygon lines intersect or cross  each other.",
         )
 
     area = _calculate_area_sq_meters(coords)
@@ -155,10 +155,10 @@ def _extract_first_nonempty(raw_data, fields):
 def _build_plot_name(raw_data, plot_name_field):
     """Build plot name from comma-separated field
     names. Values are joined with spaces.
-    Returns 'Unknown' if all fields are empty."""
+    Returns "Unknown" if no valid fields found."""
     fields = _split_csv_fields(plot_name_field)
     if not fields:
-        return ""
+        return "Unknown"
     parts = []
     for field in fields:
         val = raw_data.get(field)

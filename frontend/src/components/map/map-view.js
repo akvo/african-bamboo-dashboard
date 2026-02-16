@@ -35,13 +35,16 @@ const POLYGON_STYLES = {
   editing: { color: "#F97316", weight: 3, fillOpacity: 0.25 },
 };
 
-const SATELLITE_TILE_URL = "https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}";
-const SATELLITE_SUBDOMAINS = ["mt0", "mt1", "mt2", "mt3"];
-const SATELLITE_ATTRIBUTION = "Map data &copy; Google";
+const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
+const SATELLITE_TILE_URL =
+  "https://api.mapbox.com/styles/v1/mapbox/satellite-v9/tiles/{z}/{x}/{y}" +
+  `?access_token=${MAPBOX_TOKEN}`;
+const SATELLITE_ATTRIBUTION =
+  '&copy; <a href="https://www.mapbox.com/">Mapbox</a> &copy; Maxar';
 
 const DEFAULT_CENTER = [7.05, 38.47];
 const DEFAULT_ZOOM = 6;
-const MAX_ZOOM = 20;
+const MAX_ZOOM = 22;
 
 export default function MapView({
   plots,
@@ -74,8 +77,9 @@ export default function MapView({
         <ZoomControl position="bottomright" />
         <TileLayer
           url={SATELLITE_TILE_URL}
-          subdomains={SATELLITE_SUBDOMAINS}
           attribution={SATELLITE_ATTRIBUTION}
+          tileSize={512}
+          zoomOffset={-1}
           maxZoom={MAX_ZOOM}
         />
 

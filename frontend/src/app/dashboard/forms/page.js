@@ -21,15 +21,58 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, Loader2, RefreshCw } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Plus, Loader2, RefreshCw, Settings, ChevronDown } from "lucide-react";
 
 export default function FormsPage() {
-  const { forms, isLoading, registerForm, syncForm } = useForms();
+  const {
+    forms,
+    isLoading,
+    registerForm,
+    syncForm,
+    updateForm,
+    fetchFormFields,
+  } = useForms();
   const [assetUid, setAssetUid] = useState("");
   const [formName, setFormName] = useState("");
   const [isRegistering, setIsRegistering] = useState(false);
   const [syncingId, setSyncingId] = useState(null);
   const [status, setStatus] = useState(null);
+
+  // Field mapping dialog state
+  const [configDialogOpen, setConfigDialogOpen] = useState(false);
+  const [configForm, setConfigForm] = useState(null);
+  const [formFields, setFormFields] = useState([]);
+  const [isLoadingFields, setIsLoadingFields] = useState(false);
+  const [isSavingMapping, setIsSavingMapping] = useState(false);
+  const [mappingStatus, setMappingStatus] = useState(null);
+
+  // Field mapping values
+  const [polygonFields, setPolygonFields] = useState([]);
+  const [regionField, setRegionField] = useState("");
+  const [subRegionField, setSubRegionField] = useState("");
+  const [plotNameFields, setPlotNameFields] = useState([]);
 
   async function handleRegister(e) {
     e.preventDefault();
@@ -60,9 +103,21 @@ export default function FormsPage() {
     setStatus(null);
     try {
       const result = await syncForm(form.asset_uid);
+      const parts = [];
+      parts.push(
+        `Synced ${result.synced} submission(s), ${result.created} new`,
+      );
+      if (
+        result.plots_created !== undefined ||
+        result.plots_updated !== undefined
+      ) {
+        const plotsCreated = result.plots_created || 0;
+        const plotsUpdated = result.plots_updated || 0;
+        parts.push(`${plotsCreated} plot(s) created, ${plotsUpdated} updated`);
+      }
       setStatus({
         type: "success",
-        message: `Synced ${result.synced} submission(s), ${result.created} new.`,
+        message: parts.join(". ") + ".",
       });
     } catch (err) {
       setStatus({
@@ -76,6 +131,101 @@ export default function FormsPage() {
       setSyncingId(null);
     }
   }
+
+  async function handleConfigureClick(form) {
+    setConfigForm(form);
+    setConfigDialogOpen(true);
+    setMappingStatus(null);
+
+    // Pre-populate existing values
+    setPolygonFields(
+      form.polygon_field
+        ? form.polygon_field
+            .split(",")
+            .map((f) => f.trim())
+            .filter(Boolean)
+        : [],
+    );
+    setRegionField(form.region_field || "");
+    setSubRegionField(form.sub_region_field || "");
+    setPlotNameFields(
+      form.plot_name_field
+        ? form.plot_name_field
+            .split(",")
+            .map((f) => f.trim())
+            .filter(Boolean)
+        : [],
+    );
+
+    // Fetch form fields
+    setIsLoadingFields(true);
+    try {
+      const fields = await fetchFormFields(form.asset_uid);
+      setFormFields(fields || []);
+    } catch (err) {
+      setMappingStatus({
+        type: "error",
+        message: err.response?.data?.detail || "Failed to fetch form fields.",
+      });
+      setFormFields([]);
+    } finally {
+      setIsLoadingFields(false);
+    }
+  }
+
+  async function handleSaveMapping() {
+    if (!configForm) return;
+
+    setIsSavingMapping(true);
+    setMappingStatus(null);
+    try {
+      await updateForm(configForm.asset_uid, {
+        polygon_field: polygonFields.join(","),
+        region_field: regionField || null,
+        sub_region_field: subRegionField || null,
+        plot_name_field: plotNameFields.join(","),
+      });
+      setMappingStatus({
+        type: "success",
+        message: "Field mappings saved successfully.",
+      });
+      setTimeout(() => {
+        setConfigDialogOpen(false);
+      }, 1500);
+    } catch (err) {
+      setMappingStatus({
+        type: "error",
+        message: err.response?.data?.detail || "Failed to save field mappings.",
+      });
+    } finally {
+      setIsSavingMapping(false);
+    }
+  }
+
+  function togglePolygonField(fullPath) {
+    setPolygonFields((prev) =>
+      prev.includes(fullPath)
+        ? prev.filter((f) => f !== fullPath)
+        : [...prev, fullPath],
+    );
+  }
+
+  function togglePlotNameField(fullPath) {
+    setPlotNameFields((prev) =>
+      prev.includes(fullPath)
+        ? prev.filter((f) => f !== fullPath)
+        : [...prev, fullPath],
+    );
+  }
+
+  // Sort fields: geoshape/geotrace first for polygon selector
+  const sortedFieldsForPolygon = [...formFields].sort((a, b) => {
+    const aIsGeo = a.type === "geoshape" || a.type === "geotrace";
+    const bIsGeo = b.type === "geoshape" || b.type === "geotrace";
+    if (aIsGeo && !bIsGeo) return -1;
+    if (!aIsGeo && bIsGeo) return 1;
+    return 0;
+  });
 
   return (
     <div className="space-y-6">
@@ -196,19 +346,29 @@ export default function FormsPage() {
                           : "Never"}
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          disabled={syncingId === form.asset_uid}
-                          onClick={() => handleSync(form)}
-                        >
-                          {syncingId === form.asset_uid ? (
-                            <Loader2 className="size-4 animate-spin" />
-                          ) : (
-                            <RefreshCw className="size-4" />
-                          )}
-                          Sync
-                        </Button>
+                        <div className="flex items-center justify-end gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleConfigureClick(form)}
+                          >
+                            <Settings className="size-4" />
+                            Configure
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={syncingId === form.asset_uid}
+                            onClick={() => handleSync(form)}
+                          >
+                            {syncingId === form.asset_uid ? (
+                              <Loader2 className="size-4 animate-spin" />
+                            ) : (
+                              <RefreshCw className="size-4" />
+                            )}
+                            Sync
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -218,6 +378,224 @@ export default function FormsPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Field Mapping Configuration Dialog */}
+      <Dialog open={configDialogOpen} onOpenChange={setConfigDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              Configure Field Mappings — {configForm?.name}
+            </DialogTitle>
+            <DialogDescription>
+              Map form fields to plot attributes for automatic plot creation and
+              updates
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-6 py-4">
+            {isLoadingFields ? (
+              <div className="space-y-4">
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-full" />
+              </div>
+            ) : formFields.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-6">
+                No fields found for this form.
+              </p>
+            ) : (
+              <>
+                {/* Polygon field(s) - Multi-select */}
+                <div className="space-y-2">
+                  <Label>Polygon field(s)</Label>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="w-full justify-between h-auto min-h-[2.25rem] px-3 py-2"
+                      >
+                        <div className="flex flex-wrap gap-1">
+                          {polygonFields.length === 0 ? (
+                            <span className="text-muted-foreground">
+                              Select polygon fields...
+                            </span>
+                          ) : (
+                            polygonFields.map((fullPath) => {
+                              const field = formFields.find(
+                                (f) => f.full_path === fullPath,
+                              );
+                              return (
+                                <Badge key={fullPath} variant="secondary">
+                                  {field?.label || fullPath}
+                                </Badge>
+                              );
+                            })
+                          )}
+                        </div>
+                        <ChevronDown className="size-4 opacity-50 shrink-0" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
+                      {sortedFieldsForPolygon.map((field) => (
+                        <DropdownMenuCheckboxItem
+                          key={field.full_path}
+                          checked={polygonFields.includes(field.full_path)}
+                          onCheckedChange={() =>
+                            togglePolygonField(field.full_path)
+                          }
+                        >
+                          {field.label} ({field.type})
+                        </DropdownMenuCheckboxItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  <p className="text-xs text-muted-foreground">
+                    Geo fields (geoshape/geotrace) are shown first
+                  </p>
+                </div>
+
+                {/* Region field - Single select */}
+                <div className="space-y-2">
+                  <Label>Region field</Label>
+                  <Select
+                    value={regionField || "__clear__"}
+                    onValueChange={(v) =>
+                      setRegionField(v === "__clear__" ? "" : v)
+                    }
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select region field..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__clear__">Clear selection</SelectItem>
+                      {formFields.map((field) => (
+                        <SelectItem
+                          key={field.full_path}
+                          value={field.full_path}
+                        >
+                          {field.label} ({field.type})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Sub-region field - Single select */}
+                <div className="space-y-2">
+                  <Label>Sub-region field</Label>
+                  <Select
+                    value={subRegionField || "__clear__"}
+                    onValueChange={(v) =>
+                      setSubRegionField(v === "__clear__" ? "" : v)
+                    }
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select sub-region field..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__clear__">Clear selection</SelectItem>
+                      {formFields.map((field) => (
+                        <SelectItem
+                          key={field.full_path}
+                          value={field.full_path}
+                        >
+                          {field.label} ({field.type})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Plot name field(s) - Multi-select */}
+                <div className="space-y-2">
+                  <Label>Plot name field(s)</Label>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="w-full justify-between h-auto min-h-[2.25rem] px-3 py-2"
+                      >
+                        <div className="flex flex-wrap gap-1">
+                          {plotNameFields.length === 0 ? (
+                            <span className="text-muted-foreground">
+                              Select plot name fields...
+                            </span>
+                          ) : (
+                            plotNameFields.map((fullPath) => {
+                              const field = formFields.find(
+                                (f) => f.full_path === fullPath,
+                              );
+                              return (
+                                <Badge key={fullPath} variant="secondary">
+                                  {field?.label || fullPath}
+                                </Badge>
+                              );
+                            })
+                          )}
+                        </div>
+                        <ChevronDown className="size-4 opacity-50 shrink-0" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
+                      {formFields.map((field) => (
+                        <DropdownMenuCheckboxItem
+                          key={field.full_path}
+                          checked={plotNameFields.includes(field.full_path)}
+                          onCheckedChange={() =>
+                            togglePlotNameField(field.full_path)
+                          }
+                        >
+                          {field.label} ({field.type})
+                        </DropdownMenuCheckboxItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  <p className="text-xs text-muted-foreground">
+                    Multiple fields will be joined with spaces
+                  </p>
+                </div>
+              </>
+            )}
+
+            {mappingStatus && (
+              <div
+                role="alert"
+                className={`rounded-md p-3 text-sm ${
+                  mappingStatus.type === "success"
+                    ? "bg-status-approved/10 text-status-approved"
+                    : "bg-destructive/10 text-destructive"
+                }`}
+              >
+                {mappingStatus.message}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setConfigDialogOpen(false)}
+              disabled={isSavingMapping}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSaveMapping}
+              disabled={isSavingMapping || isLoadingFields}
+            >
+              {isSavingMapping ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                "Save Mappings"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

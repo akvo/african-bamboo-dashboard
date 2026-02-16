@@ -24,17 +24,12 @@ class OdkTestHelperMixin:
     def get_auth_header(self):
         """Login via Kobo mock and return auth header
         dict."""
-        with patch(
-            "api.v1.v1_users.views.KoboClient"
-        ) as mock_cls:
-            mock_cls.return_value.verify_credentials\
-                .return_value = True
+        with patch("api.v1.v1_users.views.KoboClient") as mock_cls:
+            mock_cls.return_value.verify_credentials.return_value = True
             resp = self.client.post(
                 "/api/v1/auth/login",
                 {
-                    "kobo_url": (
-                        "https://kf.kobotoolbox.org"
-                    ),
+                    "kobo_url": ("https://kf.kobotoolbox.org"),
                     "kobo_username": "kobouser",
                     "kobo_password": "kobopass",
                 },
@@ -42,7 +37,5 @@ class OdkTestHelperMixin:
             )
             token = resp.json()["token"]
             return {
-                "HTTP_AUTHORIZATION": (
-                    f"Bearer {token}"
-                ),
+                "HTTP_AUTHORIZATION": (f"Bearer {token}"),
             }

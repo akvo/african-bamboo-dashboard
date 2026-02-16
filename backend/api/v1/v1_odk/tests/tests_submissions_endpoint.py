@@ -1,7 +1,7 @@
 from django.test import TestCase
 from django.test.utils import override_settings
 
-from api.v1.v1_odk.models import FormMetadata, Submission
+from api.v1.v1_odk.models import ApprovalStatus, FormMetadata, Submission
 from api.v1.v1_odk.tests.mixins import OdkTestHelperMixin
 
 
@@ -35,13 +35,19 @@ class SubmissionViewTest(TestCase, OdkTestHelperMixin):
         self.assertEqual(resp.status_code, 200)
         results = resp.json()["results"]
         self.assertEqual(len(results), 1)
-        # List should NOT include raw_data
         self.assertNotIn("raw_data", results[0])
 
-    def test_filter_by_asset_uid(self):
-        form_y = FormMetadata.objects.create(
-            asset_uid="formY", name="Form Y"
+    def test_list_includes_approval_status(self):
+        resp = self.client.get(
+            "/api/v1/odk/submissions/",
+            **self.auth,
         )
+        results = resp.json()["results"]
+        self.assertIn("approval_status", results[0])
+        self.assertIsNone(results[0]["approval_status"])
+
+    def test_filter_by_asset_uid(self):
+        form_y = FormMetadata.objects.create(asset_uid="formY", name="Form Y")
         Submission.objects.create(
             uuid="sub-002",
             form=form_y,
@@ -50,15 +56,12 @@ class SubmissionViewTest(TestCase, OdkTestHelperMixin):
             raw_data={},
         )
         resp = self.client.get(
-            "/api/v1/odk/submissions/"
-            "?asset_uid=formX",
+            "/api/v1/odk/submissions/" "?asset_uid=formX",
             **self.auth,
         )
         results = resp.json()["results"]
         self.assertEqual(len(results), 1)
-        self.assertEqual(
-            results[0]["uuid"], "sub-001"
-        )
+        self.assertEqual(results[0]["uuid"], "sub-001")
 
     def test_retrieve_submission_detail(self):
         resp = self.client.get(
@@ -69,11 +72,11 @@ class SubmissionViewTest(TestCase, OdkTestHelperMixin):
         data = resp.json()
         self.assertIn("raw_data", data)
         self.assertIn("system_data", data)
+        self.assertIn("approval_status", data)
 
     def test_latest_sync_time(self):
         resp = self.client.get(
-            "/api/v1/odk/submissions/"
-            "latest_sync_time/?asset_uid=formX",
+            "/api/v1/odk/submissions/" "latest_sync_time/?asset_uid=formX",
             **self.auth,
         )
         self.assertEqual(resp.status_code, 200)
@@ -82,10 +85,48 @@ class SubmissionViewTest(TestCase, OdkTestHelperMixin):
             1700000000000,
         )
 
-    def test_latest_sync_time_missing_param(self):
+    def test_latest_sync_time_missing_param(
+        self,
+    ):
         resp = self.client.get(
-            "/api/v1/odk/submissions/"
-            "latest_sync_time/",
+            "/api/v1/odk/submissions/" "latest_sync_time/",
             **self.auth,
         )
         self.assertEqual(resp.status_code, 400)
+
+    def test_approve_submission(self):
+        resp = self.client.patch(
+            "/api/v1/odk/submissions/sub-001/",
+            {
+                "approval_status": (ApprovalStatus.APPROVED),
+            },
+            content_type="application/json",
+            **self.auth,
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.sub.refresh_from_db()
+        self.assertEqual(
+            self.sub.approval_status,
+            ApprovalStatus.APPROVED,
+        )
+
+    def test_reject_submission_with_notes(self):
+        resp = self.client.patch(
+            "/api/v1/odk/submissions/sub-001/",
+            {
+                "approval_status": (ApprovalStatus.REJECTED),
+                "reviewer_notes": ("Boundary is unclear"),
+            },
+            content_type="application/json",
+            **self.auth,
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.sub.refresh_from_db()
+        self.assertEqual(
+            self.sub.approval_status,
+            ApprovalStatus.REJECTED,
+        )
+        self.assertEqual(
+            self.sub.reviewer_notes,
+            "Boundary is unclear",
+        )

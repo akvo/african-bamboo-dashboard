@@ -44,7 +44,7 @@ jobs:
       - name: Node Operations
         uses: ./composite-actions/.github/actions/node-operation
         with:
-          node-version: "18"
+          node-version: "20"
           node-command: "yarn install --no-progress --frozen-lock && yarn build"
 
       - name: Docker Build Nginx

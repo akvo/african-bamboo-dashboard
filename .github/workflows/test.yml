@@ -1,8 +1,6 @@
 name: Test
 on:
   push:
-    branches:
-      - main
     tags:
       - "[0-9]+.[0-9]+.[0-9]+"
   pull_request:
@@ -14,54 +12,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Set short git commit SHA
-        id: vars
-        run: |
-          shortSha=$(git rev-parse --short ${{ github.sha }})
-          echo "COMMIT_SHORT_SHA=$shortSha" >> $GITHUB_ENV
-
-      - name: Get changed files
-        id: changed-files
-        uses: tj-actions/changed-files@v45
-
-      - name: List all changed files
-        env:
-          ALL_CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
-        run: |
-          for file in ${ALL_CHANGED_FILES}; do
-            echo "$file was changed"
-          done
-
-      - name: Set CI variables
-        run: |
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            echo "CI_BRANCH=${{ github.head_ref }}" >> $GITHUB_ENV
-            echo "PULL_REQUEST_EVENT=true" >> $GITHUB_ENV
-          else
-            echo "CI_BRANCH=${{ github.ref_name }}" >> $GITHUB_ENV
-            echo "PULL_REQUEST_EVENT=false" >> $GITHUB_ENV
-          fi
-          echo "CI_TAG=${{ github.ref_type == 'tag' && github.ref_name || '' }}" >> $GITHUB_ENV
-
-      - name: Test
-        env:
-          CI_COMMIT: ${{ env.COMMIT_SHORT_SHA }}
-          CI_BRANCH: ${{ env.CI_BRANCH }}
-          CI_TAG: ${{ env.CI_TAG }}
-          CI_PULL_REQUEST: ${{ env.PULL_REQUEST_EVENT }}
-          COMPOSE_INTERACTIVE_NO_CLI: 1
-          ALL_CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
-          COVERALLS_REPO_TOKEN: ${{ secrets.COVERALLS_REPO_TOKEN }}
-          DBDOCS_TOKEN: ${{ secrets.DBDOCS_TOKEN }}
-          WEBDOMAIN: ${{ secrets.WEBDOMAIN }}
-          NEXT_AUTH_SECRET_KEY: ${{ secrets.NEXT_AUTH_SECRET_KEY }}
-        run: |
-          ./ci/test.sh
+  run-tests:
+    name: Run Tests
+    uses: ./.github/workflows/test-reusable.yml
+    secrets: inherit

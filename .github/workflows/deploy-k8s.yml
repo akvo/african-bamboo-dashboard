@@ -42,10 +42,14 @@ jobs:
         shell: bash
 
       - name: Node Operations
-        uses: ./composite-actions/.github/actions/node-operation
-        with:
-          node-version: "20"
-          node-command: "yarn install --no-progress --frozen-lock && yarn build"
+        working-directory: src
+        run: |
+          docker run --rm \
+            --volume "$(pwd)/frontend:/app" \
+            --workdir "/app" \
+            --entrypoint /bin/sh \
+            akvo/akvo-node-20-alpine:20250923.063900.7ce4b53 \
+            -c "yarn install --no-progress --frozen-lockfile && yarn build"
 
       - name: Docker Build Nginx
         uses: ./composite-actions/.github/actions/docker-build

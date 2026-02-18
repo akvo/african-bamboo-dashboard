@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useForms } from "@/hooks/useForms";
 import { usePlots } from "@/hooks/usePlots";
@@ -8,6 +9,7 @@ import { useMapState } from "@/hooks/useMapState";
 import { toWktPolygon } from "@/lib/wkt-parser";
 import { calculateBbox } from "@/lib/plot-utils";
 import api from "@/lib/api";
+import { DEFAULT_BASEMAP } from "@/lib/basemap-config";
 
 import MapContainerDynamic from "@/components/map/map-container-dynamic";
 import MapFilterBar from "@/components/map/map-filter-bar";
@@ -15,16 +17,25 @@ import PlotListPanel from "@/components/map/plot-list-panel";
 import PlotDetailPanel from "@/components/map/plot-detail-panel";
 import ApprovalDialog from "@/components/map/approval-dialog";
 import RejectionDialog from "@/components/map/rejection-dialog";
+import SaveEditDialog from "@/components/map/save-edit-dialog";
 import ToastNotification from "@/components/map/toast-notification";
 
 export default function MapPage() {
+  const searchParams = useSearchParams();
   const { activeForm } = useForms();
   const { plots, count, isLoading, refetch } = usePlots({
     formId: activeForm?.asset_uid,
   });
 
-  const mapState = useMapState({ plots });
+  const mapState = useMapState({
+    plots,
+    initialPlotId: searchParams.get("plot"),
+  });
+
   const [editedGeo, setEditedGeo] = useState(null);
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [basemap, setBasemap] = useState(DEFAULT_BASEMAP);
+  const [isResetting, setIsResetting] = useState(false);
 
   const handleApprove = useCallback(
     async (notes) => {
@@ -84,10 +95,29 @@ export default function MapPage() {
     }
   }, [editedGeo, mapState, refetch]);
 
+  const handleSaveClick = useCallback(() => {
+    setSaveDialogOpen(true);
+  }, []);
+
   const handleCancelEdit = useCallback(() => {
     setEditedGeo(null);
     mapState.handleCancelEditing();
   }, [mapState]);
+
+  const handleResetPolygon = useCallback(async () => {
+    if (!mapState.editingPlotId) return;
+    setIsResetting(true);
+    try {
+      await api.post(`/v1/odk/plots/${mapState.editingPlotId}/reset_polygon/`);
+      setEditedGeo(null);
+      await refetch();
+      mapState.setToastMessage("Polygon reset to original");
+    } catch {
+      mapState.setToastMessage("Failed to reset polygon. Please try again.");
+    } finally {
+      setIsResetting(false);
+    }
+  }, [mapState, refetch]);
 
   return (
     <div className="-m-6 flex h-[calc(100%+3rem)] overflow-hidden">
@@ -113,7 +143,15 @@ export default function MapPage() {
         ) : (
           <PlotDetailPanel
             plot={mapState.selectedPlot}
-            onBack={mapState.handleBackToList}
+            onBack={() => {
+              mapState.handleBackToList();
+              // redirect to base map URL without plot query param if exists
+              if (searchParams.get("plot")) {
+                const url = new URL(window.location.href);
+                url.searchParams.delete("plot");
+                window.history.replaceState({}, "", url);
+              }
+            }}
             onApprove={() => mapState.setApprovalDialogOpen(true)}
             onReject={() => mapState.setRejectionDialogOpen(true)}
             onStartEditing={mapState.handleStartEditing}
@@ -123,7 +161,7 @@ export default function MapPage() {
 
       {/* Map Area */}
       <div className="relative flex-1">
-        <MapFilterBar />
+        <MapFilterBar basemap={basemap} onBasemapChange={setBasemap} />
         <MapContainerDynamic
           plots={plots}
           selectedPlot={mapState.selectedPlot}
@@ -131,8 +169,11 @@ export default function MapPage() {
           editedGeo={editedGeo}
           setEditedGeo={setEditedGeo}
           onSelectPlot={mapState.handleSelectPlot}
-          onSaveEdit={handleSaveEdit}
+          onSaveEdit={handleSaveClick}
           onCancelEdit={handleCancelEdit}
+          onReset={handleResetPolygon}
+          isResetting={isResetting}
+          basemap={basemap}
         />
       </div>
 
@@ -146,6 +187,14 @@ export default function MapPage() {
         open={mapState.rejectionDialogOpen}
         onOpenChange={mapState.setRejectionDialogOpen}
         onConfirm={handleReject}
+      />
+      <SaveEditDialog
+        open={saveDialogOpen}
+        onOpenChange={setSaveDialogOpen}
+        onConfirm={async () => {
+          await handleSaveEdit();
+          setSaveDialogOpen(false);
+        }}
       />
 
       {/* Toast */}

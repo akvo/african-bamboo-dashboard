@@ -1,6 +1,5 @@
 "use client";
 
-import { useRef, useEffect } from "react";
 import {
   Select,
   SelectContent,
@@ -8,31 +7,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Button } from "@/components/ui/button";
 import { useForms } from "@/hooks/useForms";
+import basemaps, { DEFAULT_BASEMAP } from "@/lib/basemap-config";
 
-function stopLeafletPropagation(el) {
-  if (!el) return;
-  const stop = (e) => e.stopPropagation();
-  el.addEventListener("mousedown", stop);
-  el.addEventListener("dblclick", stop);
-  el.addEventListener("wheel", stop);
-  el.addEventListener("touchstart", stop);
-}
-
-export default function MapFilterBar() {
+export default function MapFilterBar({
+  basemap = DEFAULT_BASEMAP,
+  onBasemapChange,
+}) {
   const { forms, activeForm, setActiveForm } = useForms();
-  const ref = useRef(null);
-
-  useEffect(() => {
-    stopLeafletPropagation(ref.current);
-  }, []);
 
   return (
-    <div
-      ref={ref}
-      className="pointer-events-auto absolute left-3 right-3 top-3 z-[999] flex items-center gap-2 rounded-lg border border-border bg-card/90 px-3 py-2 shadow-md backdrop-blur-sm"
-    >
+    <div className="absolute left-3 right-3 top-3 z-[999] flex items-center gap-2 rounded-lg border border-border bg-card/90 px-3 py-2 shadow-md backdrop-blur-sm">
       <Select
         value={activeForm?.asset_uid || ""}
         onValueChange={(uid) => {
@@ -54,14 +39,18 @@ export default function MapFilterBar() {
 
       <div className="flex-1" />
 
-      <Button
-        variant="ghost"
-        size="sm"
-        className="h-8 text-xs"
-        onClick={() => {}}
-      >
-        Reset
-      </Button>
+      <Select value={basemap} onValueChange={onBasemapChange}>
+        <SelectTrigger size="sm" className="h-8 w-[120px] text-xs">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {basemaps.map((b) => (
+            <SelectItem key={b.id} value={b.id}>
+              {b.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </div>
   );
 }

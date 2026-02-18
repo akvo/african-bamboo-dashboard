@@ -4,6 +4,7 @@ import "leaflet/dist/leaflet.css";
 import "leaflet-draw/dist/leaflet.draw.css";
 
 import L from "leaflet";
+import "leaflet-draw";
 import {
   MapContainer,
   TileLayer,
@@ -14,6 +15,7 @@ import {
 import { useMemo } from "react";
 import { parseWktPolygon } from "@/lib/wkt-parser";
 import { getPlotStatus } from "@/lib/plot-utils";
+import basemaps, { DEFAULT_BASEMAP } from "@/lib/basemap-config";
 import MapController from "@/components/map/map-controller";
 import MapEditLayer from "@/components/map/map-edit-layer";
 import MapEditToolbar from "@/components/map/map-edit-toolbar";
@@ -35,13 +37,6 @@ const POLYGON_STYLES = {
   editing: { color: "#F97316", weight: 3, fillOpacity: 0.25 },
 };
 
-const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
-const SATELLITE_TILE_URL =
-  "https://api.mapbox.com/styles/v1/mapbox/satellite-v9/tiles/{z}/{x}/{y}" +
-  `?access_token=${MAPBOX_TOKEN}`;
-const SATELLITE_ATTRIBUTION =
-  '&copy; <a href="https://www.mapbox.com/">Mapbox</a> &copy; Maxar';
-
 const DEFAULT_CENTER = [7.05, 38.47];
 const DEFAULT_ZOOM = 6;
 const MAX_ZOOM = 22;
@@ -55,7 +50,15 @@ export default function MapView({
   onSelectPlot,
   onSaveEdit,
   onCancelEdit,
+  onReset,
+  isResetting,
+  basemap = DEFAULT_BASEMAP,
 }) {
+  const tile = useMemo(
+    () => basemaps.find((b) => b.id === basemap) || basemaps[0],
+    [basemap],
+  );
+
   const plotsWithCoords = useMemo(
     () =>
       plots.map((p) => ({
@@ -67,19 +70,22 @@ export default function MapView({
   );
 
   return (
-    <div className="relative h-full w-full">
+    <div className="relative h-full w-full isolate">
       <MapContainer
         center={DEFAULT_CENTER}
         zoom={DEFAULT_ZOOM}
+        maxZoom={MAX_ZOOM}
         className="h-full w-full"
         zoomControl={false}
       >
         <ZoomControl position="bottomright" />
         <TileLayer
-          url={SATELLITE_TILE_URL}
-          attribution={SATELLITE_ATTRIBUTION}
-          tileSize={512}
-          zoomOffset={-1}
+          key={tile.id}
+          url={tile.url}
+          attribution={tile.attribution}
+          tileSize={tile.tileSize}
+          zoomOffset={tile.zoomOffset}
+          maxNativeZoom={tile.maxNativeZoom}
           maxZoom={MAX_ZOOM}
         />
 
@@ -128,6 +134,8 @@ export default function MapView({
           }
           onSave={onSaveEdit}
           onCancel={onCancelEdit}
+          onReset={onReset}
+          isResetting={isResetting}
           hasChanges={editedGeo !== null}
         />
       )}

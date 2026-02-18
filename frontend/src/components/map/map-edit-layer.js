@@ -1,10 +1,46 @@
 "use client";
 
+import L from "leaflet";
 import { useCallback, useRef } from "react";
 import { Polygon, FeatureGroup } from "react-leaflet";
 import { parseWktPolygon } from "@/lib/wkt-parser";
 
 const EDIT_STYLE = { color: "#F97316", weight: 3, fillOpacity: 0.25 };
+const MIN_VERTICES = 3;
+
+function attachVertexDelete(polygon, setEditedGeo) {
+  const handlers = polygon.editing?._verticesHandlers;
+  if (!handlers?.length) return;
+
+  const markerGroup = handlers[0]._markerGroup;
+  if (!markerGroup) return;
+
+  markerGroup.eachLayer((marker) => {
+    // Only attach to real vertex markers, skip midpoint markers
+    if (marker.options.opacity === 0) return;
+
+    marker.on("contextmenu", (e) => {
+      L.DomEvent.preventDefault(e);
+      const latlngs = polygon.getLatLngs()[0];
+      if (latlngs.length <= MIN_VERTICES) return;
+
+      const markerLL = marker.getLatLng();
+      const idx = latlngs.findIndex(
+        (ll) => ll.lat === markerLL.lat && ll.lng === markerLL.lng,
+      );
+      if (idx === -1) return;
+
+      latlngs.splice(idx, 1);
+      polygon.setLatLngs([latlngs]);
+      polygon.editing.disable();
+      polygon.editing.enable();
+      setEditedGeo(latlngs.map((l) => [l.lat, l.lng]));
+
+      // Re-attach after editing handles are rebuilt
+      attachVertexDelete(polygon, setEditedGeo);
+    });
+  });
+}
 
 export default function MapEditLayer({ plot, editedGeo, setEditedGeo }) {
   const prevRef = useRef(null);
@@ -28,6 +64,7 @@ export default function MapEditLayer({ plot, editedGeo, setEditedGeo }) {
       };
 
       polygon.on("edit", handleEdit);
+      attachVertexDelete(polygon, setEditedGeo);
       prevRef.current = polygon;
     },
     [setEditedGeo],

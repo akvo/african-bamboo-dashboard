@@ -7,6 +7,15 @@ import { parseWktPolygon } from "@/lib/wkt-parser";
 
 const EDIT_STYLE = { color: "#F97316", weight: 3, fillOpacity: 0.25 };
 const MIN_VERTICES = 3;
+const EPSILON = 1e-9;
+
+function cleanupVertexHandlers(polygon) {
+  const handlers = polygon.editing?._verticesHandlers;
+  if (!handlers?.length) return;
+  const markerGroup = handlers[0]._markerGroup;
+  if (!markerGroup) return;
+  markerGroup.eachLayer((marker) => marker.off("contextmenu"));
+}
 
 function attachVertexDelete(polygon, setEditedGeo) {
   const handlers = polygon.editing?._verticesHandlers;
@@ -26,12 +35,15 @@ function attachVertexDelete(polygon, setEditedGeo) {
 
       const markerLL = marker.getLatLng();
       const idx = latlngs.findIndex(
-        (ll) => ll.lat === markerLL.lat && ll.lng === markerLL.lng,
+        (ll) =>
+          Math.abs(ll.lat - markerLL.lat) < EPSILON &&
+          Math.abs(ll.lng - markerLL.lng) < EPSILON,
       );
       if (idx === -1) return;
 
       latlngs.splice(idx, 1);
       polygon.setLatLngs([latlngs]);
+      cleanupVertexHandlers(polygon);
       polygon.editing.disable();
       polygon.editing.enable();
       setEditedGeo(latlngs.map((l) => [l.lat, l.lng]));
@@ -49,6 +61,7 @@ export default function MapEditLayer({ plot, editedGeo, setEditedGeo }) {
     (polygon) => {
       // Cleanup previous instance
       if (prevRef.current) {
+        cleanupVertexHandlers(prevRef.current);
         prevRef.current.editing?.disable();
         prevRef.current.off("edit");
         prevRef.current = null;

@@ -15,16 +15,7 @@ import { useForms } from "@/hooks/useForms";
 import { usePlots } from "@/hooks/usePlots";
 import { useSubmissions } from "@/hooks/useSubmissions";
 
-const stats = [
-  {
-    title: "Target capacity",
-    value: "20,420",
-    subtitle: "Hectares over 10 years",
-  },
-  { title: "Current progress", value: "210", subtitle: "Hectars mapped" },
-  { title: "2026 Target", value: "1,000", subtitle: "Hectares to map" },
-  { title: "Carbon potential", value: "1,000", subtitle: "vs last month" },
-];
+const stats = [];
 
 const DashboardPage = () => {
   const { activeForm } = useForms();
@@ -42,9 +33,8 @@ const DashboardPage = () => {
       if (activeTab !== "all" && row.status !== activeTab) {
       }
       if (search) {
-        return row?.instance_name
-          ?.toLowerCase()
-          ?.includes(search.toLowerCase());
+        const plotName = row?.plot_name || row?.instance_name || "";
+        return plotName?.toLowerCase()?.includes(search.toLowerCase());
       }
       return true;
     });

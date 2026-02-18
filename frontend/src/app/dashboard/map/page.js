@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useForms } from "@/hooks/useForms";
 import { usePlots } from "@/hooks/usePlots";
@@ -22,6 +22,7 @@ import ToastNotification from "@/components/map/toast-notification";
 
 export default function MapPage() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const { activeForm } = useForms();
   const { plots, count, isLoading, refetch } = usePlots({
     formId: activeForm?.asset_uid,
@@ -86,6 +87,7 @@ export default function MapPage() {
         polygon_wkt: wkt,
         ...bbox,
       });
+      setSaveDialogOpen(false);
       setEditedGeo(null);
       mapState.handleCancelEditing();
       await refetch();
@@ -145,11 +147,8 @@ export default function MapPage() {
             plot={mapState.selectedPlot}
             onBack={() => {
               mapState.handleBackToList();
-              // redirect to base map URL without plot query param if exists
               if (searchParams.get("plot")) {
-                const url = new URL(window.location.href);
-                url.searchParams.delete("plot");
-                window.history.replaceState({}, "", url);
+                router.replace("/dashboard/map", { scroll: false });
               }
             }}
             onApprove={() => mapState.setApprovalDialogOpen(true)}
@@ -191,10 +190,7 @@ export default function MapPage() {
       <SaveEditDialog
         open={saveDialogOpen}
         onOpenChange={setSaveDialogOpen}
-        onConfirm={async () => {
-          await handleSaveEdit();
-          setSaveDialogOpen(false);
-        }}
+        onConfirm={handleSaveEdit}
       />
 
       {/* Toast */}

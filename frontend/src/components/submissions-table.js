@@ -20,6 +20,9 @@ function getApprovalLabel(approvalStatus) {
 
 export function SubmissionsTable({ data, isLoading, plots = [] }) {
   const router = useRouter();
+  const plotBySubmission = new Map(
+    plots.map((p) => [p.submission_uuid, p.uuid]),
+  );
 
   if (isLoading) {
     return (
@@ -54,18 +57,20 @@ export function SubmissionsTable({ data, isLoading, plots = [] }) {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {data.map((row) => (
+          {data.map((row) => {
+            const plotUuid = plotBySubmission.get(row.uuid);
+            return (
             <TableRow
               key={row.uuid}
               onClick={() => {
-                const plot = plots.find((p) => p.submission_uuid === row.uuid);
-                if (plot) router.push(`/dashboard/map?plot=${plot.uuid}`);
+                if (plotUuid) router.push(`/dashboard/map?plot=${plotUuid}`);
               }}
-              className="cursor-pointer"
+              className={plotUuid ? "cursor-pointer" : "opacity-60"}
+              title={plotUuid ? "View on map" : "No plot geometry available"}
             >
               <TableCell>
                 <div className="font-medium">
-                  {row.instance_name || "Unnamed"}
+                  {row.plot_name || row.instance_name}
                 </div>
               </TableCell>
               <TableCell>
@@ -81,7 +86,8 @@ export function SubmissionsTable({ data, isLoading, plots = [] }) {
               <TableCell>{row.region || "-"}</TableCell>
               <TableCell>{row.woreda || "-"}</TableCell>
             </TableRow>
-          ))}
+            );
+          })}
         </TableBody>
       </Table>
     </div>

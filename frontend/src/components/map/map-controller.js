@@ -23,7 +23,7 @@ export default function MapController({ selectedPlot, allPlots }) {
       if (coords.length > 0) {
         fitWhenReady(map, L.latLngBounds(coords), {
           padding: [50, 50],
-          maxZoom: 23,
+          maxZoom: map.getMaxZoom(),
         });
       }
     } else if (!hasFittedInitial.current && allPlots.length > 0) {

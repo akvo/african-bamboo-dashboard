@@ -1,29 +1,30 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import api from "@/lib/api";
 
 export function useSubmissions({ assetUid, limit = 10 } = {}) {
   const [data, setData] = useState([]);
   const [count, setCount] = useState(0);
   const [offset, setOffset] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [currentForm, setCurrentForm] = useState(assetUid);
+  const prevAssetUid = useRef(assetUid);
 
   const totalPages = Math.ceil(count / limit);
   const page = Math.floor(offset / limit) + 1;
 
-  const fetchSubmissions = useCallback(async () => {
-    if (!isLoading && currentForm !== assetUid) {
-      setCurrentForm(assetUid);
-      setIsLoading(true);
+  // Reset offset when the form changes
+  useEffect(() => {
+    if (prevAssetUid.current !== assetUid) {
+      prevAssetUid.current = assetUid;
       setOffset(0);
     }
-    if (!assetUid || !isLoading) {
-      setIsLoading(false);
-      return;
-    }
+  }, [assetUid]);
+
+  const fetchSubmissions = useCallback(async () => {
+    if (!assetUid) return;
+    setIsLoading(true);
     setError(null);
     try {
       const params = { asset_uid: assetUid, limit, offset };
@@ -35,7 +36,7 @@ export function useSubmissions({ assetUid, limit = 10 } = {}) {
     } finally {
       setIsLoading(false);
     }
-  }, [assetUid, limit, isLoading, offset, currentForm]);
+  }, [assetUid, limit, offset]);
 
   useEffect(() => {
     fetchSubmissions();
@@ -43,7 +44,6 @@ export function useSubmissions({ assetUid, limit = 10 } = {}) {
 
   const setPage = useCallback(
     (newPage) => {
-      setIsLoading(true);
       setOffset((newPage - 1) * limit);
     },
     [limit],

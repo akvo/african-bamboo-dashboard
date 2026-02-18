@@ -12,6 +12,7 @@ import { FilterBar } from "@/components/filter-bar";
 import { SubmissionsTable } from "@/components/submissions-table";
 import { TablePagination } from "@/components/table-pagination";
 import { useForms } from "@/hooks/useForms";
+import { usePlots } from "@/hooks/usePlots";
 import { useSubmissions } from "@/hooks/useSubmissions";
 
 const stats = [
@@ -31,6 +32,7 @@ const DashboardPage = () => {
   const { data, count, isLoading, page, totalPages, setPage } = useSubmissions({
     assetUid: activeForm?.asset_uid,
   });
+  const { plots } = usePlots({ formId: activeForm?.asset_uid });
 
   const [activeTab, setActiveTab] = useState("all");
   const [search, setSearch] = useState("");
@@ -99,7 +101,11 @@ const DashboardPage = () => {
       </div>
 
       {/* Submissions Table */}
-      <SubmissionsTable data={filteredData} isLoading={isLoading} />
+      <SubmissionsTable
+        data={filteredData}
+        isLoading={isLoading}
+        plots={plots}
+      />
 
       {/* Pagination */}
       {totalPages > 1 && (

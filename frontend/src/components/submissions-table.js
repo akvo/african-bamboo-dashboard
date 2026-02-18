@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import {
   Table,
   TableBody,
@@ -17,7 +18,9 @@ function getApprovalLabel(approvalStatus) {
   return "pending";
 }
 
-export function SubmissionsTable({ data, isLoading }) {
+export function SubmissionsTable({ data, isLoading, plots = [] }) {
+  const router = useRouter();
+
   if (isLoading) {
     return (
       <div className="space-y-3">
@@ -52,7 +55,14 @@ export function SubmissionsTable({ data, isLoading }) {
         </TableHeader>
         <TableBody>
           {data.map((row) => (
-            <TableRow key={row.uuid}>
+            <TableRow
+              key={row.uuid}
+              onClick={() => {
+                const plot = plots.find((p) => p.submission_uuid === row.uuid);
+                if (plot) router.push(`/dashboard/map?plot=${plot.uuid}`);
+              }}
+              className="cursor-pointer"
+            >
               <TableCell>
                 <div className="font-medium">
                   {row.instance_name || "Unnamed"}

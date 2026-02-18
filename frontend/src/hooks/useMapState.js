@@ -2,9 +2,9 @@
 
 import { useState, useCallback, useMemo } from "react";
 
-export function useMapState({ plots }) {
-  const [selectedPlotId, setSelectedPlotId] = useState(null);
-  const [panelMode, setPanelMode] = useState("list");
+export function useMapState({ plots, initialPlotId = null }) {
+  const [selectedPlotId, setSelectedPlotId] = useState(initialPlotId);
+  const [panelMode, setPanelMode] = useState(initialPlotId ? "detail" : "list");
   const [editingPlotId, setEditingPlotId] = useState(null);
   const [approvalDialogOpen, setApprovalDialogOpen] = useState(false);
   const [rejectionDialogOpen, setRejectionDialogOpen] = useState(false);

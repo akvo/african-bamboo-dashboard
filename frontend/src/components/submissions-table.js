@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import {
   Table,
   TableBody,
@@ -17,7 +18,12 @@ function getApprovalLabel(approvalStatus) {
   return "pending";
 }
 
-export function SubmissionsTable({ data, isLoading }) {
+export function SubmissionsTable({ data, isLoading, plots = [] }) {
+  const router = useRouter();
+  const plotBySubmission = new Map(
+    plots.map((p) => [p.submission_uuid, p.uuid]),
+  );
+
   if (isLoading) {
     return (
       <div className="space-y-3">
@@ -51,11 +57,20 @@ export function SubmissionsTable({ data, isLoading }) {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {data.map((row) => (
-            <TableRow key={row.uuid}>
+          {data.map((row) => {
+            const plotUuid = plotBySubmission.get(row.uuid);
+            return (
+            <TableRow
+              key={row.uuid}
+              onClick={() => {
+                if (plotUuid) router.push(`/dashboard/map?plot=${plotUuid}`);
+              }}
+              className={plotUuid ? "cursor-pointer" : "opacity-60"}
+              title={plotUuid ? "View on map" : "No plot geometry available"}
+            >
               <TableCell>
                 <div className="font-medium">
-                  {row.instance_name || "Unnamed"}
+                  {row.plot_name || row.instance_name}
                 </div>
               </TableCell>
               <TableCell>
@@ -71,7 +86,8 @@ export function SubmissionsTable({ data, isLoading }) {
               <TableCell>{row.region || "-"}</TableCell>
               <TableCell>{row.woreda || "-"}</TableCell>
             </TableRow>
-          ))}
+            );
+          })}
         </TableBody>
       </Table>
     </div>

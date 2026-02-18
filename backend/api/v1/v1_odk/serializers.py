@@ -30,6 +30,9 @@ class SubmissionListSerializer(serializers.ModelSerializer):
     form = serializers.CharField(source="form.asset_uid", read_only=True)
     region = serializers.CharField(source="raw_data.region", read_only=True)
     woreda = serializers.CharField(source="raw_data.woreda", read_only=True)
+    plot_name = serializers.CharField(
+        source="plot.plot_name", read_only=True
+    )
 
     class Meta:
         model = Submission
@@ -43,6 +46,7 @@ class SubmissionListSerializer(serializers.ModelSerializer):
             "region",
             "woreda",
             "approval_status",
+            "plot_name",
         ]
 
 

@@ -317,3 +317,28 @@ class PlotViewSet(
             plots = plots.exclude(uuid=d["exclude_uuid"])
 
         return Response(PlotSerializer(plots, many=True).data)
+
+    @extend_schema(
+        tags=["ODK"],
+        summary="Reset polygon to original from Kobo",
+    )
+    @action(detail=True, methods=["post"])
+    def reset_polygon(self, request, uuid=None):
+        """Re-derive polygon geometry from the linked
+        submission's raw_data."""
+        plot = self.get_object()
+        if not plot.submission:
+            return Response(
+                {"message": "No linked submission"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        plot_data = extract_plot_data(
+            plot.submission.raw_data, plot.form
+        )
+        plot.polygon_wkt = plot_data["polygon_wkt"]
+        plot.min_lat = plot_data["min_lat"]
+        plot.max_lat = plot_data["max_lat"]
+        plot.min_lon = plot_data["min_lon"]
+        plot.max_lon = plot_data["max_lon"]
+        plot.save()
+        return Response(PlotSerializer(plot).data)

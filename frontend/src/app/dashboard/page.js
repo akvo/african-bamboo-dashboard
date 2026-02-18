@@ -12,18 +12,10 @@ import { FilterBar } from "@/components/filter-bar";
 import { SubmissionsTable } from "@/components/submissions-table";
 import { TablePagination } from "@/components/table-pagination";
 import { useForms } from "@/hooks/useForms";
+import { usePlots } from "@/hooks/usePlots";
 import { useSubmissions } from "@/hooks/useSubmissions";
 
-const stats = [
-  {
-    title: "Target capacity",
-    value: "20,420",
-    subtitle: "Hectares over 10 years",
-  },
-  { title: "Current progress", value: "210", subtitle: "Hectars mapped" },
-  { title: "2026 Target", value: "1,000", subtitle: "Hectares to map" },
-  { title: "Carbon potential", value: "1,000", subtitle: "vs last month" },
-];
+const stats = [];
 
 const DashboardPage = () => {
   const { activeForm } = useForms();
@@ -31,6 +23,7 @@ const DashboardPage = () => {
   const { data, count, isLoading, page, totalPages, setPage } = useSubmissions({
     assetUid: activeForm?.asset_uid,
   });
+  const { plots } = usePlots({ formId: activeForm?.asset_uid });
 
   const [activeTab, setActiveTab] = useState("all");
   const [search, setSearch] = useState("");
@@ -40,9 +33,8 @@ const DashboardPage = () => {
       if (activeTab !== "all" && row.status !== activeTab) {
       }
       if (search) {
-        return row?.instance_name
-          ?.toLowerCase()
-          ?.includes(search.toLowerCase());
+        const plotName = row?.plot_name || row?.instance_name || "";
+        return plotName?.toLowerCase()?.includes(search.toLowerCase());
       }
       return true;
     });
@@ -99,7 +91,11 @@ const DashboardPage = () => {
       </div>
 
       {/* Submissions Table */}
-      <SubmissionsTable data={filteredData} isLoading={isLoading} />
+      <SubmissionsTable
+        data={filteredData}
+        isLoading={isLoading}
+        plots={plots}
+      />
 
       {/* Pagination */}
       {totalPages > 1 && (

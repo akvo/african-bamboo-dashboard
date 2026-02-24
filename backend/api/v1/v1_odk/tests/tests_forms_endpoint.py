@@ -63,9 +63,7 @@ class FormMetadataViewTest(TestCase, OdkTestHelperMixin):
         )
         self.assertEqual(resp.status_code, 204)
         self.assertFalse(
-            FormMetadata.objects.filter(
-                asset_uid="formA"
-            ).exists()
+            FormMetadata.objects.filter(asset_uid="formA").exists()
         )
 
     def test_unauthenticated_returns_401(self):
@@ -151,11 +149,7 @@ class FormMetadataViewTest(TestCase, OdkTestHelperMixin):
                     "name": "First_Name",
                     "type": "text",
                     "label": ["First name"],
-                    "$xpath": (
-                        "consent_group/"
-                        "consented/"
-                        "First_Name"
-                    ),
+                    "$xpath": ("consent_group/" "consented/" "First_Name"),
                 },
                 {
                     "name": "boundary",
@@ -199,9 +193,7 @@ class FormMetadataViewTest(TestCase, OdkTestHelperMixin):
         region = fields[0]
         self.assertEqual(region["type"], "select_one")
         self.assertEqual(region["label"], "Region")
-        self.assertEqual(
-            region["full_path"], "region"
-        )
+        self.assertEqual(region["full_path"], "region")
         boundary = fields[2]
         self.assertIn(
             "boundary_mapping/boundary",
@@ -209,9 +201,7 @@ class FormMetadataViewTest(TestCase, OdkTestHelperMixin):
         )
 
     @patch("api.v1.v1_odk.views.KoboClient")
-    def test_form_fields_no_credentials(
-        self, mock_client_cls
-    ):
+    def test_form_fields_no_credentials(self, mock_client_cls):
         self.user.kobo_url = ""
         self.user.save()
         resp = self.client.get(
@@ -250,9 +240,7 @@ class FormMetadataViewTest(TestCase, OdkTestHelperMixin):
         # Plot always created
         self.assertEqual(data["plots_created"], 1)
         self.assertTrue(
-            Plot.objects.filter(
-                submission__uuid="uuid-s1"
-            ).exists()
+            Plot.objects.filter(submission__uuid="uuid-s1").exists()
         )
 
     @patch("api.v1.v1_odk.views.KoboClient")
@@ -366,3 +354,91 @@ class FormMetadataViewTest(TestCase, OdkTestHelperMixin):
         self.assertEqual(Plot.objects.count(), 1)
         plot = Plot.objects.first()
         self.assertEqual(plot.plot_name, "Updated")
+
+
+@override_settings(USE_TZ=False, TEST_ENV=True)
+class FormMappingRederiveTest(
+    TestCase, OdkTestHelperMixin
+):
+    """Updating field mappings re-derives
+    existing plots."""
+
+    def setUp(self):
+        self.user = self.create_kobo_user()
+        self.auth = self.get_auth_header()
+        self.form = FormMetadata.objects.create(
+            asset_uid="formRD",
+            name="Rederive Form",
+            region_field="region",
+            sub_region_field="woreda",
+            plot_name_field="first_name",
+        )
+        self.sub = Submission.objects.create(
+            uuid="uuid-rd1",
+            form=self.form,
+            kobo_id="500",
+            submission_time=1700000000000,
+            submitted_by="user1",
+            instance_name="inst-rd1",
+            raw_data={
+                "boundary": VALID_POLYGON,
+                "region": "Oromia",
+                "region_specify": "Zone 1",
+                "woreda": "Jimma",
+                "kebele": "K01",
+                "first_name": "Abebe",
+                "last_name": "Kebede",
+            },
+        )
+        self.plot = Plot.objects.create(
+            form=self.form,
+            submission=self.sub,
+            plot_name="Abebe",
+            instance_name="inst-rd1",
+            region="Oromia",
+            sub_region="Jimma",
+            created_at=1700000000000,
+        )
+
+    def test_update_mapping_rederives_plots(self):
+        resp = self.client.patch(
+            "/api/v1/odk/forms/formRD/",
+            {
+                "region_field": (
+                    "region,region_specify"
+                ),
+                "sub_region_field": "woreda,kebele",
+                "plot_name_field": (
+                    "first_name,last_name"
+                ),
+            },
+            content_type="application/json",
+            **self.auth,
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.plot.refresh_from_db()
+        self.assertEqual(
+            self.plot.region, "Oromia - Zone 1"
+        )
+        self.assertEqual(
+            self.plot.sub_region, "Jimma - K01"
+        )
+        self.assertEqual(
+            self.plot.plot_name, "Abebe Kebede"
+        )
+
+    def test_no_change_no_rederive(self):
+        """If mappings don't change, plots stay
+        the same."""
+        self.plot.region = "Custom"
+        self.plot.save()
+        resp = self.client.patch(
+            "/api/v1/odk/forms/formRD/",
+            {"name": "Updated Name"},
+            content_type="application/json",
+            **self.auth,
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.plot.refresh_from_db()
+        # Region was manually set, not rederived
+        self.assertEqual(self.plot.region, "Custom")

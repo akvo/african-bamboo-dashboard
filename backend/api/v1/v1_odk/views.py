@@ -1,3 +1,4 @@
+import logging
 import time
 from datetime import datetime
 from datetime import timezone as tz
@@ -5,23 +6,181 @@ from datetime import timezone as tz
 from drf_spectacular.utils import extend_schema
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
-from rest_framework.mixins import (DestroyModelMixin, ListModelMixin,
-                                   RetrieveModelMixin, UpdateModelMixin)
+from rest_framework.mixins import (
+    DestroyModelMixin,
+    ListModelMixin,
+    RetrieveModelMixin,
+    UpdateModelMixin,
+)
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
-from api.v1.v1_odk.models import FormMetadata, Plot, Submission
-from api.v1.v1_odk.serializers import (FormMetadataSerializer,
-                                       PlotOverlapQuerySerializer,
-                                       PlotSerializer,
-                                       SubmissionDetailSerializer,
-                                       SubmissionListSerializer,
-                                       SubmissionUpdateSerializer,
-                                       SyncTriggerSerializer)
+from api.v1.v1_odk.models import (
+    FormMetadata,
+    FormOption,
+    FormQuestion,
+    Plot,
+    Submission,
+)
+from api.v1.v1_odk.serializers import (
+    FormMetadataSerializer,
+    PlotOverlapQuerySerializer,
+    PlotSerializer,
+    SubmissionDetailSerializer,
+    SubmissionListSerializer,
+    SubmissionUpdateSerializer,
+    SyncTriggerSerializer,
+    build_option_lookup,
+)
 from utils.encryption import decrypt
 from utils.kobo_client import KoboClient
 from utils.polygon import extract_plot_data
+
+logger = logging.getLogger(__name__)
+
+SKIP_FIELD_TYPES = {
+    "start",
+    "end",
+    "calculate",
+    "note",
+    "begin_group",
+    "end_group",
+    "begin_repeat",
+    "end_repeat",
+}
+
+
+def _sync_form_questions(form, content):
+    """Sync survey questions and choices from
+    KoboToolbox asset content into FormQuestion
+    and FormOption records.
+
+    Deletes existing questions (cascades to options)
+    then bulk-creates from the asset content.
+    """
+    FormQuestion.objects.filter(form=form).delete()
+
+    survey = content.get("survey", [])
+    choices = content.get("choices", [])
+
+    # Build {list_name: [{name, label}, ...]}
+    choices_by_list = {}
+    for ch in choices:
+        ln = ch.get("list_name", "")
+        if not ln:
+            continue
+        label_list = ch.get("label", [])
+        label = label_list[0] if label_list else ch.get("name", "")
+        choices_by_list.setdefault(ln, []).append(
+            {"name": ch.get("name", ""), "label": label}
+        )
+
+    questions = []
+    # Map question object -> list_name for selects
+    select_list_map = []
+
+    for item in survey:
+        field_type = item.get("type", "")
+        if field_type in SKIP_FIELD_TYPES:
+            continue
+
+        name = item.get("$xpath", item.get("name", ""))
+        label_list = item.get("label", [])
+        label = label_list[0] if label_list else item.get("name", "")
+
+        # Determine select list_name
+        list_name = item.get("select_from_list_name", "")
+        q_type = field_type
+        if not list_name and field_type.startswith("select_"):
+            # Fallback: "select_one list_name" format
+            parts = field_type.split(" ", 1)
+            if len(parts) == 2:
+                q_type = parts[0]
+                list_name = parts[1]
+
+        q = FormQuestion(
+            form=form,
+            name=name,
+            label=label,
+            type=q_type,
+        )
+        questions.append(q)
+        if list_name:
+            select_list_map.append((len(questions) - 1, list_name))
+
+    created_qs = FormQuestion.objects.bulk_create(questions)
+
+    # Bulk-create options for select questions
+    options = []
+    for idx, list_name in select_list_map:
+        q = created_qs[idx]
+        for ch in choices_by_list.get(list_name, []):
+            options.append(
+                FormOption(
+                    question=q,
+                    name=ch["name"],
+                    label=ch["label"],
+                )
+            )
+
+    if options:
+        FormOption.objects.bulk_create(options)
+
+    return len(created_qs)
+
+
+MAPPING_FIELDS = {
+    "polygon_field",
+    "region_field",
+    "sub_region_field",
+    "plot_name_field",
+}
+
+
+def _rederive_plots(form):
+    """Re-derive plot fields from raw submission
+    data when field mappings change."""
+    plots = list(
+        Plot.objects.filter(form=form)
+        .select_related("submission")
+    )
+    updated = []
+    for plot in plots:
+        if not plot.submission:
+            continue
+        data = extract_plot_data(
+            plot.submission.raw_data, form
+        )
+        plot.plot_name = data["plot_name"]
+        plot.region = data["region"]
+        plot.sub_region = data["sub_region"]
+        plot.polygon_wkt = data["polygon_wkt"]
+        plot.min_lat = data["min_lat"]
+        plot.max_lat = data["max_lat"]
+        plot.min_lon = data["min_lon"]
+        plot.max_lon = data["max_lon"]
+        updated.append(plot)
+    if updated:
+        Plot.objects.bulk_update(
+            updated,
+            [
+                "plot_name",
+                "region",
+                "sub_region",
+                "polygon_wkt",
+                "min_lat",
+                "max_lat",
+                "min_lon",
+                "max_lon",
+            ],
+        )
+    logger.info(
+        "Re-derived %d plots for form %s",
+        len(updated),
+        form.asset_uid,
+    )
+    return len(updated)
 
 
 @extend_schema(tags=["Forms"])
@@ -30,17 +189,6 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
     serializer_class = FormMetadataSerializer
     permission_classes = [IsAuthenticated]
     lookup_field = "asset_uid"
-
-    SKIP_FIELD_TYPES = {
-        "start",
-        "end",
-        "calculate",
-        "note",
-        "begin_group",
-        "end_group",
-        "begin_repeat",
-        "end_repeat",
-    }
 
     def _make_kobo_client(self, user):
         if (
@@ -54,6 +202,20 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
             user.kobo_username,
             decrypt(user.kobo_password),
         )
+
+    def perform_update(self, serializer):
+        form = self.get_object()
+        old = {
+            f: getattr(form, f)
+            for f in MAPPING_FIELDS
+        }
+        instance = serializer.save()
+        changed = any(
+            getattr(instance, f) != old[f]
+            for f in MAPPING_FIELDS
+        )
+        if changed:
+            _rederive_plots(instance)
 
     @extend_schema(
         tags=["ODK"],
@@ -83,14 +245,10 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
         fields = []
         for item in survey:
             field_type = item.get("type", "")
-            if field_type in self.SKIP_FIELD_TYPES:
+            if field_type in SKIP_FIELD_TYPES:
                 continue
             label_list = item.get("label", [])
-            label = (
-                label_list[0]
-                if label_list
-                else item.get("name", "")
-            )
+            label = label_list[0] if label_list else item.get("name", "")
             fields.append(
                 {
                     "name": item.get("name", ""),
@@ -122,6 +280,14 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # Sync form questions and options
+        questions_synced = 0
+        try:
+            content = client.get_asset_detail(form.asset_uid)
+            questions_synced = _sync_form_questions(form, content)
+        except Exception:
+            pass  # Continue sync even if this fails
+
         since_iso = None
         if form.last_sync_timestamp > 0:
             since_iso = datetime.fromtimestamp(
@@ -129,9 +295,7 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
                 tz=tz.utc,
             ).strftime("%Y-%m-%dT%H:%M:%S")
 
-        results = client.fetch_all_submissions(
-            form.asset_uid, since_iso
-        )
+        results = client.fetch_all_submissions(form.asset_uid, since_iso)
 
         created = 0
         plots_created = 0
@@ -140,10 +304,7 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
         for item in results:
             sub_time_str = item.get("_submission_time", "")
             sub_time_ms = int(
-                datetime.fromisoformat(
-                    sub_time_str
-                ).timestamp()
-                * 1000
+                datetime.fromisoformat(sub_time_str).timestamp() * 1000
             )
             sub, is_new = Submission.objects.update_or_create(
                 uuid=item["_uuid"],
@@ -205,6 +366,7 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
                 "created": created,
                 "plots_created": plots_created,
                 "plots_updated": plots_updated,
+                "questions_synced": questions_synced,
             }
         )
 
@@ -230,11 +392,46 @@ class SubmissionViewSet(
             return SubmissionUpdateSerializer
         return SubmissionListSerializer
 
+    def get_serializer_context(self):
+        ctx = super().get_serializer_context()
+        if self.action == "list":
+            asset_uid = self.request.query_params.get("asset_uid")
+            if asset_uid:
+                try:
+                    form = FormMetadata.objects.get(asset_uid=asset_uid)
+                    om, tm = build_option_lookup(form)
+                    ctx["option_lookup"] = om
+                    ctx["type_map"] = tm
+                except FormMetadata.DoesNotExist:
+                    pass
+        return ctx
+
+    STATUS_MAP = {
+        "approved": 1,
+        "rejected": 2,
+    }
+
     def get_queryset(self):
         qs = super().get_queryset()
-        asset_uid = self.request.query_params.get("asset_uid")
+        asset_uid = self.request.query_params.get(
+            "asset_uid"
+        )
         if asset_uid:
             qs = qs.filter(form__asset_uid=asset_uid)
+        status_param = (
+            self.request.query_params.get("status")
+        )
+        if status_param is not None:
+            if status_param == "pending":
+                qs = qs.filter(
+                    approval_status__isnull=True
+                )
+            elif status_param in self.STATUS_MAP:
+                qs = qs.filter(
+                    approval_status=(
+                        self.STATUS_MAP[status_param]
+                    )
+                )
         return qs
 
     @extend_schema(tags=["ODK"])
@@ -283,14 +480,10 @@ class PlotViewSet(
             qs = qs.filter(form__asset_uid=form_id)
         if status_param is not None:
             if status_param == "pending":
-                qs = qs.filter(
-                    submission__approval_status__isnull=True
-                )
+                qs = qs.filter(submission__approval_status__isnull=True)
             elif status_param in self.STATUS_MAP:
                 qs = qs.filter(
-                    submission__approval_status=(
-                        self.STATUS_MAP[status_param]
-                    )
+                    submission__approval_status=(self.STATUS_MAP[status_param])
                 )
         return qs
 
@@ -332,9 +525,7 @@ class PlotViewSet(
                 {"message": "No linked submission"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        plot_data = extract_plot_data(
-            plot.submission.raw_data, plot.form
-        )
+        plot_data = extract_plot_data(plot.submission.raw_data, plot.form)
         plot.polygon_wkt = plot_data["polygon_wkt"]
         plot.min_lat = plot_data["min_lat"]
         plot.max_lat = plot_data["max_lat"]

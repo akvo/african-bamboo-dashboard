@@ -29,16 +29,24 @@ class FormMetadata(models.Model):
         ),
     )
     region_field = models.CharField(
-        max_length=125,
+        max_length=255,
         null=True,
         blank=True,
-        help_text="Name of the field in the form that captures region",
+        help_text=(
+            "Comma-separated field names for "
+            "region. Non-empty values joined "
+            "with ' - '."
+        ),
     )
     sub_region_field = models.CharField(
-        max_length=125,
+        max_length=255,
         null=True,
         blank=True,
-        help_text="Name of the field in the form that captures sub-region",
+        help_text=(
+            "Comma-separated field names for "
+            "sub-region. Non-empty values "
+            "joined with ' - '."
+        ),
     )
     plot_name_field = models.CharField(
         max_length=255,
@@ -159,3 +167,62 @@ class Plot(models.Model):
 
     def __str__(self):
         return self.plot_name
+
+
+class FormQuestion(models.Model):
+    form = models.ForeignKey(
+        FormMetadata,
+        on_delete=models.CASCADE,
+        related_name="questions",
+    )
+    name = models.CharField(
+        max_length=125,
+        help_text="Unique question name within the form",
+    )
+    label = models.CharField(
+        max_length=500,
+        help_text="Question label shown to users",
+    )
+    type = models.CharField(
+        max_length=125,
+        help_text="Question type, e.g. text, integer, select_one etc.",
+    )
+
+    class Meta:
+        db_table = "form_questions"
+        unique_together = ("form", "name")
+        verbose_name_plural = "form questions"
+
+    def __str__(self):
+        return f"{self.form.asset_uid} - {self.name}"
+
+
+# For select_one and select_multiple questions,
+# we store options in a separate table.
+# grouped by list_name in the form content.
+# This allows us to easily query option labels when processing submissions.
+# For other question types, there are no options and this table is not used.
+class FormOption(models.Model):
+    question = models.ForeignKey(
+        FormQuestion,
+        on_delete=models.CASCADE,
+        related_name="options",
+    )
+    name = models.CharField(
+        max_length=125,
+        help_text="Option value stored in submission",
+    )
+    label = models.CharField(
+        max_length=500,
+        help_text="Option label shown to users",
+    )
+
+    class Meta:
+        db_table = "form_options"
+        verbose_name_plural = "form options"
+
+    def __str__(self):
+        return (
+            f"{self.question.form.asset_uid} - "
+            f"{self.question.name} - {self.name}"
+        )

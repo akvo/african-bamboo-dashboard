@@ -31,13 +31,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
@@ -70,8 +63,8 @@ export default function FormsPage() {
 
   // Field mapping values
   const [polygonFields, setPolygonFields] = useState([]);
-  const [regionField, setRegionField] = useState("");
-  const [subRegionField, setSubRegionField] = useState("");
+  const [regionFields, setRegionFields] = useState([]);
+  const [subRegionFields, setSubRegionFields] = useState([]);
   const [plotNameFields, setPlotNameFields] = useState([]);
 
   async function handleRegister(e) {
@@ -146,8 +139,22 @@ export default function FormsPage() {
             .filter(Boolean)
         : [],
     );
-    setRegionField(form.region_field || "");
-    setSubRegionField(form.sub_region_field || "");
+    setRegionFields(
+      form.region_field
+        ? form.region_field
+            .split(",")
+            .map((f) => f.trim())
+            .filter(Boolean)
+        : [],
+    );
+    setSubRegionFields(
+      form.sub_region_field
+        ? form.sub_region_field
+            .split(",")
+            .map((f) => f.trim())
+            .filter(Boolean)
+        : [],
+    );
     setPlotNameFields(
       form.plot_name_field
         ? form.plot_name_field
@@ -181,8 +188,8 @@ export default function FormsPage() {
     try {
       await updateForm(configForm.asset_uid, {
         polygon_field: polygonFields.join(","),
-        region_field: regionField || null,
-        sub_region_field: subRegionField || null,
+        region_field: regionFields.join(",") || null,
+        sub_region_field: subRegionFields.join(",") || null,
         plot_name_field: plotNameFields.join(","),
       });
       setMappingStatus({
@@ -212,6 +219,22 @@ export default function FormsPage() {
 
   function togglePlotNameField(fullPath) {
     setPlotNameFields((prev) =>
+      prev.includes(fullPath)
+        ? prev.filter((f) => f !== fullPath)
+        : [...prev, fullPath],
+    );
+  }
+
+  function toggleRegionField(fullPath) {
+    setRegionFields((prev) =>
+      prev.includes(fullPath)
+        ? prev.filter((f) => f !== fullPath)
+        : [...prev, fullPath],
+    );
+  }
+
+  function toggleSubRegionField(fullPath) {
+    setSubRegionFields((prev) =>
       prev.includes(fullPath)
         ? prev.filter((f) => f !== fullPath)
         : [...prev, fullPath],
@@ -455,56 +478,102 @@ export default function FormsPage() {
                   </p>
                 </div>
 
-                {/* Region field - Single select */}
+                {/* Region field(s) - Multi-select */}
                 <div className="space-y-2">
-                  <Label>Region field</Label>
-                  <Select
-                    value={regionField || "__clear__"}
-                    onValueChange={(v) =>
-                      setRegionField(v === "__clear__" ? "" : v)
-                    }
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Select region field..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__clear__">Clear selection</SelectItem>
+                  <Label>Region field(s)</Label>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="w-full justify-between h-auto min-h-[2.25rem] px-3 py-2"
+                      >
+                        <div className="flex flex-wrap gap-1">
+                          {regionFields.length === 0 ? (
+                            <span className="text-muted-foreground">
+                              Select region fields...
+                            </span>
+                          ) : (
+                            regionFields.map((fullPath) => {
+                              const field = formFields.find(
+                                (f) => f.full_path === fullPath,
+                              );
+                              return (
+                                <Badge key={fullPath} variant="secondary">
+                                  {field?.label || fullPath}
+                                </Badge>
+                              );
+                            })
+                          )}
+                        </div>
+                        <ChevronDown className="size-4 opacity-50 shrink-0" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
                       {formFields.map((field) => (
-                        <SelectItem
+                        <DropdownMenuCheckboxItem
                           key={field.full_path}
-                          value={field.full_path}
+                          checked={regionFields.includes(field.full_path)}
+                          onCheckedChange={() =>
+                            toggleRegionField(field.full_path)
+                          }
                         >
                           {field.label} ({field.type})
-                        </SelectItem>
+                        </DropdownMenuCheckboxItem>
                       ))}
-                    </SelectContent>
-                  </Select>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  <p className="text-xs text-muted-foreground">
+                    Multiple fields will be joined with &quot; - &quot;
+                  </p>
                 </div>
 
-                {/* Sub-region field - Single select */}
+                {/* Sub-region field(s) - Multi-select */}
                 <div className="space-y-2">
-                  <Label>Sub-region field</Label>
-                  <Select
-                    value={subRegionField || "__clear__"}
-                    onValueChange={(v) =>
-                      setSubRegionField(v === "__clear__" ? "" : v)
-                    }
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Select sub-region field..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__clear__">Clear selection</SelectItem>
+                  <Label>Sub-region field(s)</Label>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="w-full justify-between h-auto min-h-[2.25rem] px-3 py-2"
+                      >
+                        <div className="flex flex-wrap gap-1">
+                          {subRegionFields.length === 0 ? (
+                            <span className="text-muted-foreground">
+                              Select sub-region fields...
+                            </span>
+                          ) : (
+                            subRegionFields.map((fullPath) => {
+                              const field = formFields.find(
+                                (f) => f.full_path === fullPath,
+                              );
+                              return (
+                                <Badge key={fullPath} variant="secondary">
+                                  {field?.label || fullPath}
+                                </Badge>
+                              );
+                            })
+                          )}
+                        </div>
+                        <ChevronDown className="size-4 opacity-50 shrink-0" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
                       {formFields.map((field) => (
-                        <SelectItem
+                        <DropdownMenuCheckboxItem
                           key={field.full_path}
-                          value={field.full_path}
+                          checked={subRegionFields.includes(field.full_path)}
+                          onCheckedChange={() =>
+                            toggleSubRegionField(field.full_path)
+                          }
                         >
                           {field.label} ({field.type})
-                        </SelectItem>
+                        </DropdownMenuCheckboxItem>
                       ))}
-                    </SelectContent>
-                  </Select>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  <p className="text-xs text-muted-foreground">
+                    Multiple fields will be joined with &quot; - &quot;
+                  </p>
                 </div>
 
                 {/* Plot name field(s) - Multi-select */}

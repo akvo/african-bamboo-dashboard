@@ -84,9 +84,8 @@ def _calculate_area_sq_meters(coords):
     centroid_lat = sum(lats) / len(lats)
 
     m_per_deg_lat = METERS_PER_DEGREE_AT_EQUATOR
-    m_per_deg_lon = (
-        METERS_PER_DEGREE_AT_EQUATOR
-        * math.cos(math.radians(centroid_lat))
+    m_per_deg_lon = METERS_PER_DEGREE_AT_EQUATOR * math.cos(
+        math.radians(centroid_lat)
     )
     return area_deg * m_per_deg_lat * m_per_deg_lon
 
@@ -152,6 +151,19 @@ def _extract_first_nonempty(raw_data, fields):
     return None
 
 
+def _build_joined_value(raw_data, field_spec):
+    """Build a value from comma-separated field
+    names. Non-empty values joined with ' - '.
+    Returns empty string if no valid fields."""
+    fields = _split_csv_fields(field_spec)
+    parts = []
+    for field in fields:
+        val = raw_data.get(field)
+        if val and str(val).strip():
+            parts.append(str(val).strip())
+    return " - ".join(parts) if parts else ""
+
+
 def _build_plot_name(raw_data, plot_name_field):
     """Build plot name from comma-separated field
     names. Values are joined with spaces.
@@ -180,16 +192,16 @@ def extract_plot_data(raw_data, form):
       paths, first non-empty match is used
     - plot_name_field: comma-separated field
       names, values joined with spaces
-    - region_field / sub_region_field: single
-      field name each
+    - region_field / sub_region_field:
+      comma-separated field names,
+      non-empty values joined with ' - '
     """
-    region = ""
-    if form.region_field:
-        region = raw_data.get(form.region_field, "")
-
-    sub_region = ""
-    if form.sub_region_field:
-        sub_region = raw_data.get(form.sub_region_field, "")
+    region = _build_joined_value(
+        raw_data, form.region_field
+    )
+    sub_region = _build_joined_value(
+        raw_data, form.sub_region_field
+    )
 
     plot_name = _build_plot_name(raw_data, form.plot_name_field)
 

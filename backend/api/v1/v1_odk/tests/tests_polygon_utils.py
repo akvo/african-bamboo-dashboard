@@ -1,7 +1,13 @@
 from django.test import TestCase
 
-from utils.polygon import (compute_bbox, coords_to_wkt, extract_plot_data,
-                           parse_odk_geoshape, validate_polygon)
+from utils.polygon import (
+    _build_joined_value,
+    compute_bbox,
+    coords_to_wkt,
+    extract_plot_data,
+    parse_odk_geoshape,
+    validate_polygon,
+)
 
 
 class ParseOdkGeoshapeTest(TestCase):
@@ -32,11 +38,7 @@ class ParseOdkGeoshapeTest(TestCase):
 
     def test_without_alt_acc(self):
         input_str = (
-            "0.0 0.0; "
-            "0.001 0.0; "
-            "0.001 0.001; "
-            "0.0 0.001; "
-            "0.0 0.0"
+            "0.0 0.0; " "0.001 0.0; " "0.001 0.001; " "0.0 0.001; " "0.0 0.0"
         )
         coords = parse_odk_geoshape(input_str)
         self.assertIsNotNone(coords)
@@ -183,9 +185,7 @@ class ExtractPlotDataTest(TestCase):
             region_field="region",
             sub_region_field="woreda",
             plot_name_field=(
-                "First_Name,"
-                "Father_s_Name,"
-                "Grandfather_s_Name"
+                "First_Name," "Father_s_Name," "Grandfather_s_Name"
             ),
         )
         raw = {
@@ -251,3 +251,54 @@ class ExtractPlotDataTest(TestCase):
         self.assertIn("polygon_wkt", result)
         self.assertIn("plot_name", result)
         self.assertIn("region", result)
+
+    def test_multi_region_field_joins(self):
+        form = self._mock_form(
+            region_field="region,region_specify",
+        )
+        raw = {
+            "region": "Oromia",
+            "region_specify": "Zone 1",
+        }
+        result = extract_plot_data(raw, form)
+        self.assertEqual(
+            result["region"], "Oromia - Zone 1"
+        )
+
+    def test_multi_sub_region_skips_empty(self):
+        form = self._mock_form(
+            sub_region_field=(
+                "woreda,woreda_specify,kebele"
+            ),
+        )
+        raw = {
+            "woreda": "Jimma",
+            "woreda_specify": "",
+            "kebele": "K01",
+        }
+        result = extract_plot_data(raw, form)
+        self.assertEqual(
+            result["sub_region"], "Jimma - K01"
+        )
+
+
+class BuildJoinedValueTest(TestCase):
+    def test_joins_non_empty(self):
+        raw = {"a": "X", "b": "Y", "c": "Z"}
+        result = _build_joined_value(raw, "a,b,c")
+        self.assertEqual(result, "X - Y - Z")
+
+    def test_skips_empty_and_missing(self):
+        raw = {"a": "X", "b": "", "c": None}
+        result = _build_joined_value(raw, "a,b,c,d")
+        self.assertEqual(result, "X")
+
+    def test_empty_spec_returns_empty(self):
+        result = _build_joined_value(
+            {"a": "X"}, None
+        )
+        self.assertEqual(result, "")
+
+    def test_all_empty_returns_empty(self):
+        result = _build_joined_value({}, "a,b")
+        self.assertEqual(result, "")

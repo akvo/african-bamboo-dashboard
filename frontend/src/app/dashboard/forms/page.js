@@ -79,13 +79,21 @@ export default function FormsPage() {
       setAssetUid("");
       setFormName("");
     } catch (err) {
-      setStatus({
-        type: "error",
-        message:
-          err.response?.data?.detail ||
-          err.response?.data?.message ||
-          "Failed to register form.",
-      });
+      const errData = err.response?.data;
+      let message = "Failed to register form.";
+      if (errData?.detail) {
+        message = errData.detail;
+      } else if (errData?.message) {
+        message = errData.message;
+      } else if (errData && typeof errData === "object") {
+        const fieldErrors = Object.values(errData).flat().join(" ");
+        if (fieldErrors) {
+          message = fieldErrors;
+          // capitalize first letter
+          message = message.charAt(0).toUpperCase() + message.slice(1);
+        }
+      }
+      setStatus({ type: "error", message });
     } finally {
       setIsRegistering(false);
     }

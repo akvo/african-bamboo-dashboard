@@ -1,10 +1,9 @@
 "use client";
 
 import "leaflet/dist/leaflet.css";
-import "leaflet-draw/dist/leaflet.draw.css";
 
 import L from "leaflet";
-import "leaflet-draw";
+import "leaflet-editable";
 import {
   MapContainer,
   TileLayer,
@@ -53,6 +52,7 @@ export default function MapView({
   onReset,
   isResetting,
   basemap = DEFAULT_BASEMAP,
+  onNotify,
 }) {
   const tile = useMemo(
     () => basemaps.find((b) => b.id === basemap) || basemaps[0],
@@ -77,6 +77,7 @@ export default function MapView({
         maxZoom={MAX_ZOOM}
         className="h-full w-full"
         zoomControl={false}
+        editable={true}
       >
         <ZoomControl position="bottomright" />
         <TileLayer
@@ -121,8 +122,8 @@ export default function MapView({
         {editingPlotId && (
           <MapEditLayer
             plot={plotsWithCoords.find((p) => p.uuid === editingPlotId)}
-            editedGeo={editedGeo}
             setEditedGeo={setEditedGeo}
+            onNotify={onNotify}
           />
         )}
       </MapContainer>

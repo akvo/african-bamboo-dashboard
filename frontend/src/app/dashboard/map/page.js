@@ -52,7 +52,10 @@ export default function MapPage() {
         mapState.setToastMessage("Plot approved successfully");
       } catch {
         mapState.setApprovalDialogOpen(false);
-        mapState.setToastMessage("Failed to approve plot. Please try again.");
+        mapState.setToastMessage({
+          message: "Failed to approve plot. Please try again.",
+          type: "error",
+        });
       }
     },
     [mapState, refetch],
@@ -72,7 +75,10 @@ export default function MapPage() {
         mapState.setToastMessage("Plot rejected");
       } catch {
         mapState.setRejectionDialogOpen(false);
-        mapState.setToastMessage("Failed to reject plot. Please try again.");
+        mapState.setToastMessage({
+          message: "Failed to reject plot. Please try again.",
+          type: "error",
+        });
       }
     },
     [mapState, refetch],
@@ -93,7 +99,10 @@ export default function MapPage() {
       await refetch();
       mapState.setToastMessage("Geometry saved successfully");
     } catch {
-      mapState.setToastMessage("Failed to save geometry. Please try again.");
+      mapState.setToastMessage({
+        message: "Failed to save geometry. Please try again.",
+        type: "error",
+      });
     }
   }, [editedGeo, mapState, refetch]);
 
@@ -115,7 +124,10 @@ export default function MapPage() {
       await refetch();
       mapState.setToastMessage("Polygon reset to original");
     } catch {
-      mapState.setToastMessage("Failed to reset polygon. Please try again.");
+      mapState.setToastMessage({
+        message: "Failed to reset polygon. Please try again.",
+        type: "error",
+      });
     } finally {
       setIsResetting(false);
     }
@@ -173,6 +185,7 @@ export default function MapPage() {
           onReset={handleResetPolygon}
           isResetting={isResetting}
           basemap={basemap}
+          onNotify={mapState.setToastMessage}
         />
       </div>
 
@@ -195,7 +208,8 @@ export default function MapPage() {
 
       {/* Toast */}
       <ToastNotification
-        message={mapState.toastMessage}
+        message={mapState.toast?.message}
+        type={mapState.toast?.type}
         onDismiss={() => mapState.setToastMessage(null)}
       />
     </div>

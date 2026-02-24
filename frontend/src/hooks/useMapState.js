@@ -11,7 +11,17 @@ export function useMapState({ plots, initialPlotId = null }) {
   const [activeTab, setActiveTab] = useState("all");
   const [sortBy, setSortBy] = useState("priority");
   const [search, setSearch] = useState("");
-  const [toastMessage, setToastMessage] = useState(null);
+  const [toast, setToast] = useState(null);
+
+  const setToastMessage = useCallback((msgOrObj) => {
+    if (msgOrObj === null) {
+      setToast(null);
+    } else if (typeof msgOrObj === "string") {
+      setToast({ message: msgOrObj, type: "success" });
+    } else {
+      setToast({ message: msgOrObj.message, type: msgOrObj.type || "success" });
+    }
+  }, []);
 
   const selectedPlot = useMemo(
     () => plots.find((p) => p.uuid === selectedPlotId) || null,
@@ -51,7 +61,7 @@ export function useMapState({ plots, initialPlotId = null }) {
     activeTab,
     sortBy,
     search,
-    toastMessage,
+    toast,
     setActiveTab,
     setSortBy,
     setSearch,

@@ -1,8 +1,23 @@
 "use client";
 
 import { useEffect } from "react";
-import { CheckCircle2, XCircle } from "lucide-react";
+import { CheckCircle2, AlertTriangle, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+const TOAST_STYLES = {
+  success: {
+    icon: CheckCircle2,
+    className: "bg-status-approved text-white",
+  },
+  warning: {
+    icon: AlertTriangle,
+    className: "bg-amber-500 text-white",
+  },
+  error: {
+    icon: XCircle,
+    className: "bg-status-rejected text-white",
+  },
+};
 
 export default function ToastNotification({
   message,
@@ -19,15 +34,14 @@ export default function ToastNotification({
 
   if (!message) return null;
 
-  const Icon = type === "success" ? CheckCircle2 : XCircle;
+  const style = TOAST_STYLES[type] || TOAST_STYLES.success;
+  const Icon = style.icon;
 
   return (
     <div
       className={cn(
         "fixed right-5 top-5 z-[99999] flex items-center rounded-lg py-3 px-5 shadow-lg",
-        type === "success"
-          ? "bg-status-approved text-white"
-          : "bg-status-rejected text-white",
+        style.className,
       )}
       role="alert"
       aria-live="assertive"

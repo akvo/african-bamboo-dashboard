@@ -39,6 +39,7 @@ jobs:
           echo 'WEBDOMAIN=${{ secrets.WEBDOMAIN }}' >> src/frontend/.env
           echo 'SESSION_SECRET=${{ secrets.SESSION_SECRET }}' >> src/frontend/.env
           echo 'NEXT_PUBLIC_MAPBOX_TOKEN=${{ secrets.NEXT_PUBLIC_MAPBOX_TOKEN }}' >> src/frontend/.env
+          echo 'NEXT_PUBLIC_SUPPORT_EMAIL=${{ secrets.NEXT_PUBLIC_SUPPORT_EMAIL }}' >> src/frontend/.env
         shell: bash
 
       - name: Node Operations

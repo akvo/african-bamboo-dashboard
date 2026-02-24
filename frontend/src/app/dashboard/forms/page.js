@@ -281,6 +281,17 @@ export default function FormsPage() {
                 onChange={(e) => setAssetUid(e.target.value)}
                 required
               />
+              <p className="text-xs text-muted-foreground">
+                Find this in your KoboToolbox project URL or API settings.{" "}
+                <a
+                  href="https://support.kobotoolbox.org/api.html#retrieving-your-project-asset-uid"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline hover:text-foreground"
+                >
+                  Learn how to get your Asset UID
+                </a>
+              </p>
             </div>
             <div className="flex-1 space-y-2">
               <Label htmlFor="form_name">Form Name</Label>
@@ -291,6 +302,9 @@ export default function FormsPage() {
                 onChange={(e) => setFormName(e.target.value)}
                 required
               />
+              <p className="text-xs text-muted-foreground">
+                A display name to identify this form in the dashboard
+              </p>
             </div>
             <Button type="submit" disabled={isRegistering} className="shrink-0">
               {isRegistering ? (

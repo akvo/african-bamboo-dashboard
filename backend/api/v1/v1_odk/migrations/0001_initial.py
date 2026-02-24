@@ -27,12 +27,16 @@ class Migration(migrations.Migration):
                 ),
                 (
                     "asset_uid",
-                    models.CharField(db_index=True, max_length=255, unique=True),
+                    models.CharField(
+                        db_index=True, max_length=255, unique=True
+                    ),
                 ),
                 (
                     "name",
                     models.CharField(
-                        default="", help_text="Form display name", max_length=500
+                        default="",
+                        help_text="Form display name",
+                        max_length=500,
                     ),
                 ),
                 (
@@ -95,7 +99,12 @@ class Migration(migrations.Migration):
                         verbose_name="ID",
                     ),
                 ),
-                ("uuid", models.CharField(db_index=True, max_length=255, unique=True)),
+                (
+                    "uuid",
+                    models.CharField(
+                        db_index=True, max_length=255, unique=True
+                    ),
+                ),
                 ("kobo_id", models.CharField(max_length=255)),
                 (
                     "submission_time",
@@ -111,11 +120,16 @@ class Migration(migrations.Migration):
                         blank=True, db_index=True, max_length=255, null=True
                     ),
                 ),
-                ("raw_data", models.JSONField(help_text="Full dynamic form JSON")),
+                (
+                    "raw_data",
+                    models.JSONField(help_text="Full dynamic form JSON"),
+                ),
                 (
                     "system_data",
                     models.JSONField(
-                        blank=True, help_text="_geolocation, _tags, etc.", null=True
+                        blank=True,
+                        help_text="_geolocation, _tags, etc.",
+                        null=True,
                     ),
                 ),
                 (
@@ -165,24 +179,44 @@ class Migration(migrations.Migration):
                 (
                     "uuid",
                     models.CharField(
-                        db_index=True, default=uuid.uuid4, max_length=255, unique=True
+                        db_index=True,
+                        default=uuid.uuid4,
+                        max_length=255,
+                        unique=True,
                     ),
                 ),
                 (
                     "plot_name",
-                    models.CharField(help_text="Farmer full name", max_length=500),
+                    models.CharField(
+                        help_text="Farmer full name", max_length=500
+                    ),
                 ),
-                ("instance_name", models.CharField(db_index=True, max_length=255)),
+                (
+                    "instance_name",
+                    models.CharField(db_index=True, max_length=255),
+                ),
                 (
                     "polygon_wkt",
                     models.TextField(
                         blank=True, help_text="Polygon in WKT format", null=True
                     ),
                 ),
-                ("min_lat", models.FloatField(blank=True, db_index=True, null=True)),
-                ("max_lat", models.FloatField(blank=True, db_index=True, null=True)),
-                ("min_lon", models.FloatField(blank=True, db_index=True, null=True)),
-                ("max_lon", models.FloatField(blank=True, db_index=True, null=True)),
+                (
+                    "min_lat",
+                    models.FloatField(blank=True, db_index=True, null=True),
+                ),
+                (
+                    "max_lat",
+                    models.FloatField(blank=True, db_index=True, null=True),
+                ),
+                (
+                    "min_lon",
+                    models.FloatField(blank=True, db_index=True, null=True),
+                ),
+                (
+                    "max_lon",
+                    models.FloatField(blank=True, db_index=True, null=True),
+                ),
                 ("region", models.CharField(max_length=255)),
                 ("sub_region", models.CharField(max_length=255)),
                 ("created_at", models.BigIntegerField(help_text="Epoch ms")),

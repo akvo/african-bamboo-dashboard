@@ -63,7 +63,7 @@ export default function PlotDetailPanel({
   if (!plot) return null;
 
   const status = getPlotStatus(plot);
-  const raw = submission?.raw_data || {};
+  const resolved = submission?.resolved_data || {};
   const hasGeometry =
     plot.min_lat != null &&
     plot.max_lat != null &&
@@ -114,15 +114,15 @@ export default function PlotDetailPanel({
             <div className="grid grid-cols-2 gap-3">
               <MetadataRow label="Region" value={plot.region} />
               <MetadataRow label="Sub-region" value={plot.sub_region} />
-              <MetadataRow label="Enumerator" value={raw.enumerator_id} />
+              <MetadataRow label="Enumerator" value={resolved.enumerator_id} />
               <MetadataRow
                 label="Boundary method"
-                value={raw["boundary_mapping/boundary_method"]}
+                value={resolved["boundary_mapping/boundary_method"]}
               />
-              <MetadataRow label="Farmer" value={raw.full_name} />
-              <MetadataRow label="Age" value={raw.age_of_farmer} />
-              <MetadataRow label="Phone" value={raw.Phone_Number} />
-              <MetadataRow label="Points" value={raw.numpoints} />
+              <MetadataRow label="Farmer" value={resolved.full_name} />
+              <MetadataRow label="Age" value={resolved.age_of_farmer} />
+              <MetadataRow label="Phone" value={resolved.Phone_Number} />
+              <MetadataRow label="Points" value={resolved.numpoints} />
             </div>
           )}
 

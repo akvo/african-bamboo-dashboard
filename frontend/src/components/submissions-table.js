@@ -60,32 +60,37 @@ export function SubmissionsTable({ data, isLoading, plots = [] }) {
           {data.map((row) => {
             const plotUuid = plotBySubmission.get(row.uuid);
             return (
-            <TableRow
-              key={row.uuid}
-              onClick={() => {
-                if (plotUuid) router.push(`/dashboard/map?plot=${plotUuid}`);
-              }}
-              className={plotUuid ? "cursor-pointer" : "opacity-60"}
-              title={plotUuid ? "View on map" : "No plot geometry available"}
-            >
-              <TableCell>
-                <div className="font-medium">
-                  {row.plot_name || row.instance_name}
-                </div>
-              </TableCell>
-              <TableCell>
-                <StatusBadge status={getApprovalLabel(row.approval_status)} />
-              </TableCell>
-              <TableCell className="text-muted-foreground">
-                {row.submission_time
-                  ? new Date(row.submission_time).toLocaleDateString()
-                  : "-"}
-              </TableCell>
-              <TableCell className="text-muted-foreground">-</TableCell>
-              <TableCell>{row.submitted_by || "-"}</TableCell>
-              <TableCell>{row.region || "-"}</TableCell>
-              <TableCell>{row.woreda || "-"}</TableCell>
-            </TableRow>
+              <TableRow
+                key={row.uuid}
+                onClick={() => {
+                  if (plotUuid) router.push(`/dashboard/map?plot=${plotUuid}`);
+                }}
+                className={plotUuid ? "cursor-pointer" : "opacity-60"}
+                title={plotUuid ? "View on map" : "No plot geometry available"}
+              >
+                <TableCell>
+                  <p className="truncate text-sm font-medium text-foreground">
+                    {row.plot_name}
+                  </p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {row.instance_name}
+                  </p>
+                </TableCell>
+                <TableCell>
+                  <StatusBadge status={getApprovalLabel(row.approval_status)} />
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {row.submission_time
+                    ? new Date(row.submission_time).toLocaleDateString()
+                    : "-"}
+                </TableCell>
+                <TableCell className="text-muted-foreground">-</TableCell>
+                <TableCell>
+                  {row.enumerator || row.submitted_by || "-"}
+                </TableCell>
+                <TableCell>{row.region || "-"}</TableCell>
+                <TableCell>{row.woreda || "-"}</TableCell>
+              </TableRow>
             );
           })}
         </TableBody>

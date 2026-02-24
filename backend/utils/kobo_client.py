@@ -75,10 +75,7 @@ class KoboClient:
 
     def get_asset_detail(self, asset_uid: str):
         """Fetch asset content (survey fields, choices)."""
-        url = (
-            f"{self.base_url}"
-            f"/api/v2/assets/{asset_uid}/"
-        )
+        url = f"{self.base_url}" f"/api/v2/assets/{asset_uid}/"
         resp = self.session.get(
             url,
             params={"format": "json"},

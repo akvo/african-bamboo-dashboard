@@ -62,8 +62,7 @@ class PlotResetPolygonTest(TestCase, OdkTestHelperMixin):
         )
 
         resp = self.client.post(
-            f"/api/v1/odk/plots/{plot.uuid}"
-            "/reset_polygon/",
+            f"/api/v1/odk/plots/{plot.uuid}" "/reset_polygon/",
             **self.auth,
         )
         self.assertEqual(resp.status_code, 200)
@@ -91,15 +90,12 @@ class PlotResetPolygonTest(TestCase, OdkTestHelperMixin):
             created_at=1700000000000,
         )
         resp = self.client.post(
-            f"/api/v1/odk/plots/{plot.uuid}"
-            "/reset_polygon/",
+            f"/api/v1/odk/plots/{plot.uuid}" "/reset_polygon/",
             **self.auth,
         )
         self.assertEqual(resp.status_code, 400)
         data = resp.json()
-        self.assertEqual(
-            data["message"], "No linked submission"
-        )
+        self.assertEqual(data["message"], "No linked submission")
 
     def test_reset_submission_no_polygon_data(self):
         sub = Submission.objects.create(
@@ -124,8 +120,7 @@ class PlotResetPolygonTest(TestCase, OdkTestHelperMixin):
             created_at=1700000000000,
         )
         resp = self.client.post(
-            f"/api/v1/odk/plots/{plot.uuid}"
-            "/reset_polygon/",
+            f"/api/v1/odk/plots/{plot.uuid}" "/reset_polygon/",
             **self.auth,
         )
         self.assertEqual(resp.status_code, 200)
@@ -137,7 +132,6 @@ class PlotResetPolygonTest(TestCase, OdkTestHelperMixin):
     def test_reset_requires_authentication(self):
         plot = self._create_plot_with_edited_geo()
         resp = self.client.post(
-            f"/api/v1/odk/plots/{plot.uuid}"
-            "/reset_polygon/",
+            f"/api/v1/odk/plots/{plot.uuid}" "/reset_polygon/",
         )
         self.assertEqual(resp.status_code, 401)

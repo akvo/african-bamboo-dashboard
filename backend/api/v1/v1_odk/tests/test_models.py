@@ -2,7 +2,8 @@ from django.db import IntegrityError
 from django.test import TestCase
 from django.test.utils import override_settings
 
-from api.v1.v1_odk.models import ApprovalStatus, FormMetadata, Plot, Submission
+from api.v1.v1_odk.models import (ApprovalStatus, FormMetadata, FormOption,
+                                  FormQuestion, Plot, Submission)
 
 
 @override_settings(USE_TZ=False, TEST_ENV=True)
@@ -226,3 +227,107 @@ class PlotModelTest(TestCase):
                 created_at=1700000000000,
                 submission=self.submission,
             )
+
+
+@override_settings(USE_TZ=False, TEST_ENV=True)
+class FormQuestionModelTest(TestCase):
+    def setUp(self):
+        self.form = FormMetadata.objects.create(
+            asset_uid="form1",
+            name="Test Form",
+        )
+
+    def test_create_question(self):
+        q = FormQuestion.objects.create(
+            form=self.form,
+            name="region",
+            label="Region",
+            type="select_one",
+        )
+        self.assertEqual(q.name, "region")
+        self.assertEqual(q.label, "Region")
+        self.assertEqual(q.type, "select_one")
+
+    def test_str(self):
+        q = FormQuestion(
+            form=self.form,
+            name="region",
+            label="Region",
+            type="select_one",
+        )
+        self.assertEqual(str(q), "form1 - region")
+
+    def test_unique_together(self):
+        FormQuestion.objects.create(
+            form=self.form,
+            name="region",
+            label="Region",
+            type="select_one",
+        )
+        with self.assertRaises(IntegrityError):
+            FormQuestion.objects.create(
+                form=self.form,
+                name="region",
+                label="Other",
+                type="text",
+            )
+
+    def test_cascade_delete(self):
+        FormQuestion.objects.create(
+            form=self.form,
+            name="region",
+            label="Region",
+            type="select_one",
+        )
+        self.form.delete()
+        self.assertFalse(FormQuestion.objects.filter(name="region").exists())
+
+
+@override_settings(USE_TZ=False, TEST_ENV=True)
+class FormOptionModelTest(TestCase):
+    def setUp(self):
+        self.form = FormMetadata.objects.create(
+            asset_uid="form1",
+            name="Test Form",
+        )
+        self.question = FormQuestion.objects.create(
+            form=self.form,
+            name="region",
+            label="Region",
+            type="select_one",
+        )
+
+    def test_create_option(self):
+        opt = FormOption.objects.create(
+            question=self.question,
+            name="ET04",
+            label="Oromia",
+        )
+        self.assertEqual(opt.name, "ET04")
+        self.assertEqual(opt.label, "Oromia")
+
+    def test_str(self):
+        opt = FormOption(
+            question=self.question,
+            name="ET04",
+            label="Oromia",
+        )
+        self.assertEqual(str(opt), "form1 - region - ET04")
+
+    def test_cascade_delete_question(self):
+        FormOption.objects.create(
+            question=self.question,
+            name="ET04",
+            label="Oromia",
+        )
+        self.question.delete()
+        self.assertFalse(FormOption.objects.filter(name="ET04").exists())
+
+    def test_cascade_delete_form(self):
+        FormOption.objects.create(
+            question=self.question,
+            name="ET04",
+            label="Oromia",
+        )
+        self.form.delete()
+        self.assertFalse(FormOption.objects.filter(name="ET04").exists())

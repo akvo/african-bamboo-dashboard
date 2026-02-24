@@ -100,17 +100,7 @@ class ValidateSerializersMessageTestCase(TestCase):
 
     def test_list_serializer_deeply_nested(self):
         errors = {
-            "items": [
-                {
-                    "details": [
-                        {
-                            "color": [
-                                "field_title is required."
-                            ]
-                        }
-                    ]
-                }
-            ]
+            "items": [{"details": [{"color": ["field_title is required."]}]}]
         }
         result = validate_serializers_message(errors)
         self.assertEqual(result, "color is required.")

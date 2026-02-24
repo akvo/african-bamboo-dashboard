@@ -20,25 +20,22 @@ const stats = [];
 const DashboardPage = () => {
   const { activeForm } = useForms();
 
-  const { data, count, isLoading, page, totalPages, setPage } = useSubmissions({
-    assetUid: activeForm?.asset_uid,
-  });
-  const { plots } = usePlots({ formId: activeForm?.asset_uid });
-
   const [activeTab, setActiveTab] = useState("all");
   const [search, setSearch] = useState("");
 
+  const { data, count, isLoading, page, totalPages, setPage } = useSubmissions({
+    assetUid: activeForm?.asset_uid,
+    status: activeTab,
+  });
+  const { plots } = usePlots({ formId: activeForm?.asset_uid });
+
   const filteredData = useMemo(() => {
+    if (!search) return data;
     return data.filter((row) => {
-      if (activeTab !== "all" && row.status !== activeTab) {
-      }
-      if (search) {
-        const plotName = row?.plot_name || row?.instance_name || "";
-        return plotName?.toLowerCase()?.includes(search.toLowerCase());
-      }
-      return true;
+      const plotName = row?.plot_name || row?.instance_name || "";
+      return plotName?.toLowerCase()?.includes(search.toLowerCase());
     });
-  }, [data, activeTab, search]);
+  }, [data, search]);
 
   return (
     <div className="space-y-6">

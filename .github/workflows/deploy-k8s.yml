@@ -76,6 +76,14 @@ jobs:
           dockerfile-location: "backend"
           cluster-name: "test"
 
+      - name: Docker Build Worker
+        uses: ./composite-actions/.github/actions/docker-build
+        with:
+          app-name: "african-bamboo-dashboard"
+          service-name: "worker"
+          dockerfile-location: "worker"
+          cluster-name: "test"
+
       - name: Docker Push Nginx
         uses: ./composite-actions/.github/actions/docker-push
         with:
@@ -97,6 +105,14 @@ jobs:
         with:
           app-name: "african-bamboo-dashboard"
           service-name: "backend"
+          gcloud-sa:  ${{ secrets.GCLOUD_SERVICE_ACCOUNT_REGISTRY }}
+          cluster-name: "test"
+
+      - name: Docker Push Worker
+        uses: ./composite-actions/.github/actions/docker-push
+        with:
+          app-name: "african-bamboo-dashboard"
+          service-name: "worker"
           gcloud-sa:  ${{ secrets.GCLOUD_SERVICE_ACCOUNT_REGISTRY }}
           cluster-name: "test"
 

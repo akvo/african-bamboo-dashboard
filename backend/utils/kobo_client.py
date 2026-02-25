@@ -84,6 +84,35 @@ class KoboClient:
         resp.raise_for_status()
         return resp.json()["content"]
 
+    def update_validation_statuses(
+        self,
+        asset_uid: str,
+        submission_ids: list,
+        validation_status_uid: str,
+    ):
+        """Bulk-update validation statuses for
+        submissions on KoboToolbox."""
+        url = (
+            f"{self.base_url}"
+            f"/api/v2/assets/{asset_uid}"
+            "/data/validation_statuses/"
+        )
+        payload = {
+            "payload": {
+                "submission_ids": submission_ids,
+                "validation_status.uid": (
+                    validation_status_uid
+                ),
+            }
+        }
+        resp = self.session.patch(
+            url,
+            json=payload,
+            timeout=self.timeout,
+        )
+        resp.raise_for_status()
+        return resp.json()
+
     def fetch_all_submissions(
         self,
         asset_uid: str,

@@ -177,3 +177,67 @@ class PlotViewTest(TestCase, OdkTestHelperMixin):
         )
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(len(resp.json()), 0)
+
+    def test_list_includes_flagged_fields(self):
+        self._create_plot(
+            flagged_for_review=True,
+            flagged_reason="No polygon data.",
+        )
+        resp = self.client.get(
+            "/api/v1/odk/plots/",
+            **self.auth,
+        )
+        result = resp.json()["results"][0]
+        self.assertIn(
+            "flagged_for_review", result
+        )
+        self.assertIn("flagged_reason", result)
+        self.assertTrue(
+            result["flagged_for_review"]
+        )
+        self.assertEqual(
+            result["flagged_reason"],
+            "No polygon data.",
+        )
+
+    def test_filter_by_status_flagged(self):
+        sub1 = self._create_submission()
+        self._create_plot(
+            submission=sub1,
+            flagged_for_review=True,
+            flagged_reason="Missing data.",
+        )
+        sub2 = self._create_submission(
+            uuid="sub-002", kobo_id="101"
+        )
+        self._create_plot(
+            submission=sub2,
+            plot_name="Farmer B",
+            instance_name="inst-2",
+            flagged_for_review=False,
+        )
+        resp = self.client.get(
+            "/api/v1/odk/plots/"
+            "?status=flagged",
+            **self.auth,
+        )
+        results = resp.json()["results"]
+        self.assertEqual(len(results), 1)
+        self.assertTrue(
+            results[0]["flagged_for_review"]
+        )
+
+    def test_unflagged_excluded_from_flagged(
+        self,
+    ):
+        self._create_plot(
+            flagged_for_review=False,
+        )
+        resp = self.client.get(
+            "/api/v1/odk/plots/"
+            "?status=flagged",
+            **self.auth,
+        )
+        self.assertEqual(
+            len(resp.json()["results"]), 0
+        )

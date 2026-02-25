@@ -35,7 +35,13 @@ from api.v1.v1_odk.serializers import (
 )
 from utils.encryption import decrypt
 from utils.kobo_client import KoboClient
-from utils.polygon import extract_plot_data
+from utils.polygon import (
+    append_overlap_reason,
+    build_overlap_reason,
+    compute_bbox,
+    extract_plot_data,
+    find_overlapping_plots,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -160,6 +166,10 @@ def _rederive_plots(form):
         plot.max_lat = data["max_lat"]
         plot.min_lon = data["min_lon"]
         plot.max_lon = data["max_lon"]
+        plot.flagged_for_review = data[
+            "flagged_for_review"
+        ]
+        plot.flagged_reason = data["flagged_reason"]
         updated.append(plot)
     if updated:
         Plot.objects.bulk_update(
@@ -173,6 +183,8 @@ def _rederive_plots(form):
                 "max_lat",
                 "min_lon",
                 "max_lon",
+                "flagged_for_review",
+                "flagged_reason",
             ],
         )
     logger.info(
@@ -300,26 +312,44 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
         created = 0
         plots_created = 0
         plots_updated = 0
+        plots_flagged = 0
 
         for item in results:
-            sub_time_str = item.get("_submission_time", "")
-            sub_time_ms = int(
-                datetime.fromisoformat(sub_time_str).timestamp() * 1000
+            sub_time_str = item.get(
+                "_submission_time", ""
             )
-            sub, is_new = Submission.objects.update_or_create(
-                uuid=item["_uuid"],
-                defaults={
-                    "form": form,
-                    "kobo_id": str(item["_id"]),
-                    "submission_time": (sub_time_ms),
-                    "submitted_by": item.get("_submitted_by"),
-                    "instance_name": item.get("meta/instanceName"),
-                    "raw_data": item,
-                    "system_data": {
-                        "_geolocation": (item.get("_geolocation")),
-                        "_tags": item.get("_tags", []),
+            sub_time_ms = int(
+                datetime.fromisoformat(
+                    sub_time_str
+                ).timestamp()
+                * 1000
+            )
+            sub, is_new = (
+                Submission.objects.update_or_create(
+                    uuid=item["_uuid"],
+                    defaults={
+                        "form": form,
+                        "kobo_id": str(item["_id"]),
+                        "submission_time": sub_time_ms,
+                        "submitted_by": item.get(
+                            "_submitted_by"
+                        ),
+                        "instance_name": item.get(
+                            "meta/instanceName"
+                        ),
+                        "raw_data": item,
+                        "system_data": {
+                            "_geolocation": (
+                                item.get(
+                                    "_geolocation"
+                                )
+                            ),
+                            "_tags": item.get(
+                                "_tags", []
+                            ),
+                        },
                     },
-                },
+                )
             )
             if is_new:
                 created += 1
@@ -327,31 +357,140 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
             # Auto-generate plot
             plot_data = extract_plot_data(item, form)
             now_ms = int(time.time() * 1000)
-            _, plot_is_new = Plot.objects.update_or_create(
-                submission=sub,
-                defaults={
-                    "form": form,
-                    "plot_name": (plot_data["plot_name"]),
-                    "instance_name": (
-                        item.get(
-                            "meta/instanceName",
-                            "",
-                        )
-                    ),
-                    "polygon_wkt": (plot_data["polygon_wkt"]),
-                    "min_lat": (plot_data["min_lat"]),
-                    "max_lat": (plot_data["max_lat"]),
-                    "min_lon": (plot_data["min_lon"]),
-                    "max_lon": (plot_data["max_lon"]),
-                    "region": (plot_data["region"]),
-                    "sub_region": (plot_data["sub_region"]),
-                    "created_at": now_ms,
-                },
+            plot, plot_is_new = (
+                Plot.objects.update_or_create(
+                    submission=sub,
+                    defaults={
+                        "form": form,
+                        "plot_name": (
+                            plot_data["plot_name"]
+                        ),
+                        "instance_name": (
+                            item.get(
+                                "meta/instanceName",
+                                "",
+                            )
+                        ),
+                        "polygon_wkt": (
+                            plot_data["polygon_wkt"]
+                        ),
+                        "min_lat": (
+                            plot_data["min_lat"]
+                        ),
+                        "max_lat": (
+                            plot_data["max_lat"]
+                        ),
+                        "min_lon": (
+                            plot_data["min_lon"]
+                        ),
+                        "max_lon": (
+                            plot_data["max_lon"]
+                        ),
+                        "region": (
+                            plot_data["region"]
+                        ),
+                        "sub_region": (
+                            plot_data["sub_region"]
+                        ),
+                        "flagged_for_review": (
+                            plot_data[
+                                "flagged_for_review"
+                            ]
+                        ),
+                        "flagged_reason": (
+                            plot_data[
+                                "flagged_reason"
+                            ]
+                        ),
+                        "created_at": now_ms,
+                    },
+                )
             )
             if plot_is_new:
                 plots_created += 1
             else:
                 plots_updated += 1
+
+            # Overlap detection (None only)
+            if (
+                plot_data["polygon_wkt"]
+                and plot_data[
+                    "flagged_for_review"
+                ]
+                is None
+            ):
+                bbox = compute_bbox(
+                    [
+                        (
+                            plot_data["min_lon"],
+                            plot_data["min_lat"],
+                        ),
+                        (
+                            plot_data["max_lon"],
+                            plot_data["max_lat"],
+                        ),
+                    ]
+                )
+                overlaps = (
+                    find_overlapping_plots(
+                        plot_data["polygon_wkt"],
+                        bbox,
+                        form.pk,
+                        exclude_pk=plot.pk,
+                    )
+                )
+                if overlaps:
+                    reason = (
+                        build_overlap_reason(
+                            overlaps
+                        )
+                    )
+                    plot.flagged_for_review = True
+                    plot.flagged_reason = reason
+                    plot.save(
+                        update_fields=[
+                            "flagged_for_review",
+                            "flagged_reason",
+                        ]
+                    )
+                    # Flag existing plots
+                    to_update = []
+                    for op in overlaps:
+                        op.flagged_for_review = (
+                            True
+                        )
+                        op.flagged_reason = (
+                            append_overlap_reason(
+                                op.flagged_reason,
+                                plot_data[
+                                    "plot_name"
+                                ],
+                                item.get(
+                                    "meta/"
+                                    "instanceName",
+                                    "",
+                                ),
+                            )
+                        )
+                        to_update.append(op)
+                    Plot.objects.bulk_update(
+                        to_update,
+                        [
+                            "flagged_for_review",
+                            "flagged_reason",
+                        ],
+                    )
+                else:
+                    # Checked, no overlaps
+                    plot.flagged_for_review = False
+                    plot.save(
+                        update_fields=[
+                            "flagged_for_review",
+                        ]
+                    )
+
+            if plot.flagged_for_review:
+                plots_flagged += 1
 
         if results:
             latest = max(r["_submission_time"] for r in results)
@@ -366,7 +505,10 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
                 "created": created,
                 "plots_created": plots_created,
                 "plots_updated": plots_updated,
-                "questions_synced": questions_synced,
+                "plots_flagged": plots_flagged,
+                "questions_synced": (
+                    questions_synced
+                ),
             }
         )
 
@@ -474,16 +616,30 @@ class PlotViewSet(
 
     def get_queryset(self):
         qs = super().get_queryset()
-        form_id = self.request.query_params.get("form_id")
-        status_param = self.request.query_params.get("status")
+        form_id = self.request.query_params.get(
+            "form_id"
+        )
+        status_param = (
+            self.request.query_params.get("status")
+        )
         if form_id:
-            qs = qs.filter(form__asset_uid=form_id)
+            qs = qs.filter(
+                form__asset_uid=form_id
+            )
         if status_param is not None:
-            if status_param == "pending":
-                qs = qs.filter(submission__approval_status__isnull=True)
+            if status_param == "flagged":
+                qs = qs.filter(
+                    flagged_for_review=True
+                )
+            elif status_param == "pending":
+                qs = qs.filter(
+                    submission__approval_status__isnull=True,  # noqa: E501
+                )
             elif status_param in self.STATUS_MAP:
                 qs = qs.filter(
-                    submission__approval_status=(self.STATUS_MAP[status_param])
+                    submission__approval_status=(
+                        self.STATUS_MAP[status_param]
+                    )
                 )
         return qs
 
@@ -525,11 +681,19 @@ class PlotViewSet(
                 {"message": "No linked submission"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        plot_data = extract_plot_data(plot.submission.raw_data, plot.form)
+        plot_data = extract_plot_data(
+            plot.submission.raw_data, plot.form
+        )
         plot.polygon_wkt = plot_data["polygon_wkt"]
         plot.min_lat = plot_data["min_lat"]
         plot.max_lat = plot_data["max_lat"]
         plot.min_lon = plot_data["min_lon"]
         plot.max_lon = plot_data["max_lon"]
+        plot.flagged_for_review = plot_data[
+            "flagged_for_review"
+        ]
+        plot.flagged_reason = plot_data[
+            "flagged_reason"
+        ]
         plot.save()
         return Response(PlotSerializer(plot).data)

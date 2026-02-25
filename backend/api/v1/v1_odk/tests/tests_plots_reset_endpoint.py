@@ -129,9 +129,82 @@ class PlotResetPolygonTest(TestCase, OdkTestHelperMixin):
         self.assertIsNone(plot.polygon_wkt)
         self.assertIsNone(plot.min_lat)
 
+    def test_reset_clears_flag_on_valid_polygon(
+        self,
+    ):
+        sub = self._create_submission_with_geo()
+        plot = Plot.objects.create(
+            submission=sub,
+            form=self.form,
+            plot_name="Farmer B",
+            instance_name="inst-flag",
+            polygon_wkt=(
+                "POLYGON((0 0,1 0,1 1,0 0))"
+            ),
+            min_lat=0.0,
+            max_lat=1.0,
+            min_lon=0.0,
+            max_lon=1.0,
+            region="",
+            sub_region="",
+            created_at=1700000000000,
+            flagged_for_review=True,
+            flagged_reason="Old reason",
+        )
+        resp = self.client.post(
+            f"/api/v1/odk/plots/{plot.uuid}"
+            "/reset_polygon/",
+            **self.auth,
+        )
+        self.assertEqual(resp.status_code, 200)
+        plot.refresh_from_db()
+        self.assertIsNone(plot.flagged_for_review)
+        self.assertIsNone(plot.flagged_reason)
+
+    def test_reset_sets_flag_on_missing_polygon(
+        self,
+    ):
+        sub = Submission.objects.create(
+            uuid="sub-reset-noflag",
+            form=self.form,
+            kobo_id="202",
+            submission_time=1700000000000,
+            raw_data={"farmer_name": "No Geo"},
+        )
+        plot = Plot.objects.create(
+            submission=sub,
+            form=self.form,
+            plot_name="No Geo",
+            instance_name="inst-noflag",
+            polygon_wkt=(
+                "POLYGON((0 0,1 0,1 1,0 0))"
+            ),
+            min_lat=0.0,
+            max_lat=1.0,
+            min_lon=0.0,
+            max_lon=1.0,
+            region="",
+            sub_region="",
+            created_at=1700000000000,
+            flagged_for_review=False,
+        )
+        resp = self.client.post(
+            f"/api/v1/odk/plots/{plot.uuid}"
+            "/reset_polygon/",
+            **self.auth,
+        )
+        self.assertEqual(resp.status_code, 200)
+        plot.refresh_from_db()
+        self.assertTrue(plot.flagged_for_review)
+        self.assertEqual(
+            plot.flagged_reason,
+            "No polygon data found in submission.",
+        )
+
     def test_reset_requires_authentication(self):
         plot = self._create_plot_with_edited_geo()
         resp = self.client.post(
-            f"/api/v1/odk/plots/{plot.uuid}" "/reset_polygon/",
+            f"/api/v1/odk/plots/{plot.uuid}"
+            "/reset_polygon/",
         )
         self.assertEqual(resp.status_code, 401)

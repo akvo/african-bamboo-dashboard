@@ -196,6 +196,7 @@ class PlotSerializer(serializers.ModelSerializer):
     plot_name = serializers.SerializerMethodField()
     region = serializers.SerializerMethodField()
     sub_region = serializers.SerializerMethodField()
+    enumerator = serializers.SerializerMethodField()
 
     def get_plot_name(self, obj):
         if obj.plot_name == "Unknown":
@@ -250,6 +251,11 @@ class PlotSerializer(serializers.ModelSerializer):
             obj, field_spec
         )
 
+    def get_enumerator(self, obj):
+        return self._resolve_plot_fields(
+            obj, "enumerator_id"
+        )
+
     class Meta:
         model = Plot
         fields = [
@@ -264,9 +270,12 @@ class PlotSerializer(serializers.ModelSerializer):
             "form_id",
             "region",
             "sub_region",
+            "enumerator",
             "created_at",
             "submission_uuid",
             "approval_status",
+            "flagged_for_review",
+            "flagged_reason",
         ]
 
 

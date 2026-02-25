@@ -265,7 +265,13 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
             if field_type in SKIP_FIELD_TYPES:
                 continue
             label_list = item.get("label", [])
-            label = label_list[0] if label_list else item.get("name", "")
+            label = (
+                " ".join(
+                    lbl
+                    for lbl in label_list if lbl
+                )
+                if label_list else item.get("name", "")
+            )
             fields.append(
                 {
                     "name": item.get("name", ""),

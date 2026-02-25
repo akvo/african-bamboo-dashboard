@@ -1,6 +1,7 @@
 import uuid
 
 from django.db import models
+from api.v1.v1_odk.constants import ApprovalStatusTypes
 
 
 class FormMetadata(models.Model):
@@ -67,8 +68,8 @@ class FormMetadata(models.Model):
 
 
 class ApprovalStatus(models.IntegerChoices):
-    APPROVED = 1, "Approved"
-    REJECTED = 2, "Not approved"
+    APPROVED = ApprovalStatusTypes.APPROVED, "Approved"
+    REJECTED = ApprovalStatusTypes.REJECTED, "Not approved"
 
 
 class Submission(models.Model):
@@ -160,6 +161,21 @@ class Plot(models.Model):
         null=True,
         blank=True,
         related_name="plot",
+    )
+    flagged_for_review = models.BooleanField(
+        null=True,
+        default=None,
+        help_text=(
+            "NULL = not yet checked, "
+            "False = checked and clean, "
+            "True = flagged for review."
+        ),
+    )
+    flagged_reason = models.CharField(
+        max_length=500,
+        null=True,
+        blank=True,
+        help_text="Reason for flagging the plot for review",
     )
 
     class Meta:

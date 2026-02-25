@@ -251,6 +251,8 @@ class ExtractPlotDataTest(TestCase):
         self.assertIn("polygon_wkt", result)
         self.assertIn("plot_name", result)
         self.assertIn("region", result)
+        self.assertIn("flagged_for_review", result)
+        self.assertIn("flagged_reason", result)
 
     def test_multi_region_field_joins(self):
         form = self._mock_form(
@@ -280,6 +282,85 @@ class ExtractPlotDataTest(TestCase):
         self.assertEqual(
             result["sub_region"], "Jimma - K01"
         )
+
+    def test_no_polygon_field_not_flagged(self):
+        """When no polygon_field is configured,
+        plot should NOT be flagged."""
+        form = self._mock_form()
+        result = extract_plot_data({}, form)
+        self.assertIsNone(result["flagged_for_review"])
+        self.assertIsNone(result["flagged_reason"])
+
+    def test_missing_polygon_data_flagged(self):
+        """When polygon_field is configured but
+        data is missing, plot should be flagged."""
+        form = self._mock_form(
+            polygon_field="boundary"
+        )
+        result = extract_plot_data(
+            {"other": "value"}, form
+        )
+        self.assertTrue(result["flagged_for_review"])
+        self.assertEqual(
+            result["flagged_reason"],
+            "No polygon data found in submission.",
+        )
+
+    def test_unparseable_polygon_flagged(self):
+        """When polygon data cannot be parsed,
+        plot should be flagged."""
+        form = self._mock_form(
+            polygon_field="boundary"
+        )
+        result = extract_plot_data(
+            {"boundary": "not valid geo"}, form
+        )
+        self.assertTrue(result["flagged_for_review"])
+        self.assertEqual(
+            result["flagged_reason"],
+            "Failed to parse polygon geometry.",
+        )
+
+    def test_invalid_validation_flagged(self):
+        """When polygon fails validation,
+        plot should be flagged with the
+        validation error message."""
+        form = self._mock_form(
+            polygon_field="boundary"
+        )
+        # Only 2 distinct points + closing = too few
+        raw = {
+            "boundary": (
+                "0.0 0.0 0 0; "
+                "1.0 0.0 0 0; "
+                "0.0 0.0 0 0"
+            ),
+        }
+        result = extract_plot_data(raw, form)
+        self.assertTrue(result["flagged_for_review"])
+        self.assertIn(
+            "vertices", result["flagged_reason"]
+        )
+
+    def test_valid_polygon_not_flagged(self):
+        """When polygon is valid,
+        plot should NOT be flagged."""
+        form = self._mock_form(
+            polygon_field="boundary"
+        )
+        raw = {
+            "boundary": (
+                "0.0 0.0 0 0; "
+                "0.001 0.0 0 0; "
+                "0.001 0.001 0 0; "
+                "0.0 0.001 0 0; "
+                "0.0 0.0 0 0"
+            ),
+        }
+        result = extract_plot_data(raw, form)
+        self.assertIsNone(result["flagged_for_review"])
+        self.assertIsNone(result["flagged_reason"])
+        self.assertIsNotNone(result["polygon_wkt"])
 
 
 class BuildJoinedValueTest(TestCase):

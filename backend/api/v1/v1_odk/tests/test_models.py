@@ -195,6 +195,38 @@ class PlotModelTest(TestCase):
         plot.refresh_from_db()
         self.assertIsNone(plot.submission)
 
+    def test_default_flag_values(self):
+        plot = Plot.objects.create(
+            plot_name="Farmer Flag",
+            instance_name="inst-flag",
+            form=self.form,
+            region="R",
+            sub_region="SR",
+            created_at=1700000000000,
+        )
+        self.assertIsNone(plot.flagged_for_review)
+        self.assertIsNone(plot.flagged_reason)
+
+    def test_explicitly_flagged_plot(self):
+        plot = Plot.objects.create(
+            plot_name="Farmer Flagged",
+            instance_name="inst-flagged",
+            form=self.form,
+            region="R",
+            sub_region="SR",
+            created_at=1700000000000,
+            flagged_for_review=True,
+            flagged_reason=(
+                "No polygon data found "
+                "in submission."
+            ),
+        )
+        self.assertTrue(plot.flagged_for_review)
+        self.assertEqual(
+            plot.flagged_reason,
+            "No polygon data found in submission.",
+        )
+
     def test_one_to_one_constraint(self):
         Plot.objects.create(
             uuid="plot-1",

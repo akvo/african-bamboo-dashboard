@@ -32,6 +32,24 @@ services:
       - WEBDOMAIN=$WEBDOMAIN
     depends_on:
       - db
+  worker:
+    image: python:3.12
+    working_dir: /app
+    command: ["./run_worker.sh"]
+    volumes:
+      - ./backend:/app:delegated
+    environment:
+      - DB_SCHEMA=african_bamboo_dashboard
+      - DB_USER=akvo
+      - DB_PASSWORD=password
+      - DB_HOST=db
+      - DEBUG=True
+      - SECRET_KEY=${SECRET_KEY}
+      - MAILJET_APIKEY=$MAILJET_APIKEY
+      - MAILJET_SECRET=$MAILJET_SECRET
+      - WEBDOMAIN=$WEBDOMAIN
+    depends_on:
+      - backend
   frontend:
     image: akvo/akvo-node-20-alpine:20250923.063900.7ce4b53
     command: ["./start.sh"]

@@ -30,3 +30,4 @@ djangorestframework_simplejwt==5.5.1
 cryptography==44.0.2
 requests==2.32.3
 Shapely>=2.0.0
+django-q2>=1.7.0

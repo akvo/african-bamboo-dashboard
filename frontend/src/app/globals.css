@@ -48,6 +48,7 @@
   --color-status-approved: var(--status-approved);
   --color-status-pending: var(--status-pending);
   --color-status-rejected: var(--status-rejected);
+  --color-status-flagged: var(--status-flagged);
 }
 
 :root {
@@ -87,6 +88,7 @@
   --status-approved: oklch(0.627 0.194 149.214);
   --status-pending: oklch(0.795 0.175 86.047);
   --status-rejected: oklch(0.577 0.245 27.325);
+  --status-flagged: oklch(0.705 0.213 47.604);
 }
 
 .dark {

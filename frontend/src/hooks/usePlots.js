@@ -10,7 +10,10 @@ export function usePlots({ formId, limit = 200 } = {}) {
   const [error, setError] = useState(null);
 
   const fetchPlots = useCallback(async () => {
-    if (!formId) return;
+    if (!formId) {
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     setError(null);
     try {

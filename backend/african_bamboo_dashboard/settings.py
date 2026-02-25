@@ -55,6 +55,7 @@ EXTERNAL_APPS = [
     "rest_framework_simplejwt",
     "drf_spectacular",
     "django_dbml",
+    "django_q",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + API_APPS + EXTERNAL_APPS
@@ -200,3 +201,12 @@ TEST_ENV = environ.get("TEST_ENV") or False
 
 # Override the default user model
 AUTH_USER_MODEL = "v1_users.SystemUser"
+
+# Django Q2 — async task queue backed by PostgreSQL ORM
+Q_CLUSTER = {
+    "name": "african_bamboo",
+    "workers": 2,
+    "timeout": 60,
+    "retry": 120,
+    "orm": "default",
+}

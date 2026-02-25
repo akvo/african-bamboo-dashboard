@@ -1,6 +1,7 @@
 export function getPlotStatus(plot) {
   if (plot.approval_status === 1) return "approved";
   if (plot.approval_status === 2) return "rejected";
+  if (plot.flagged_for_review) return "flagged";
   return "pending";
 }
 

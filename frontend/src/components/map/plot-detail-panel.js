@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ArrowLeft, MapPin, Edit3 } from "lucide-react";
+import { ArrowLeft, MapPin, Edit3, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -103,6 +103,16 @@ export default function PlotDetailPanel({
             </p>
           </div>
 
+          {/* Flagged reason banner */}
+          {plot.flagged_for_review && plot.flagged_reason && (
+            <div className="flex items-start gap-2 rounded-md border border-status-flagged/30 bg-status-flagged/10 px-3 py-2">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-status-flagged" />
+              <p className="text-sm text-status-flagged">
+                {plot.flagged_reason}
+              </p>
+            </div>
+          )}
+
           {/* Metadata grid */}
           {isLoadingSub ? (
             <div className="grid grid-cols-2 gap-3">
@@ -172,21 +182,23 @@ export default function PlotDetailPanel({
       </ScrollArea>
 
       {/* Action buttons */}
-      <div className="flex gap-2 border-t border-border p-4">
-        <Button
-          className="flex-1 bg-status-approved text-white hover:bg-status-approved/90"
-          onClick={() => onApprove(notes)}
-        >
-          Approve
-        </Button>
-        <Button
-          variant="destructive"
-          className="flex-1"
-          onClick={() => onReject(notes)}
-        >
-          Reject
-        </Button>
-      </div>
+      {["pending", "flagged"].includes(status) && (
+        <div className="flex gap-2 border-t border-border p-4">
+          <Button
+            className="flex-1 bg-status-approved text-white hover:bg-status-approved/90"
+            onClick={() => onApprove(notes)}
+          >
+            Approve
+          </Button>
+          <Button
+            variant="destructive"
+            className="flex-1"
+            onClick={() => onReject(notes)}
+          >
+            Reject
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

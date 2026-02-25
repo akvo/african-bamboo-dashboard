@@ -1,6 +1,10 @@
 import logging
 import math
 import re
+from shapely.geometry import (
+    Polygon as ShapelyPolygon,
+)
+from shapely import wkt as shapely_wkt
 
 logger = logging.getLogger(__name__)
 
@@ -179,6 +183,111 @@ def _build_plot_name(raw_data, plot_name_field):
     return " ".join(parts) if parts else "Unknown"
 
 
+def _polygons_overlap(wkt_a, wkt_b):
+    """Check if two WKT polygons truly overlap.
+
+    Returns True if they share area (not just
+    an edge or corner). Returns False on error.
+    """
+    try:
+        poly_a = shapely_wkt.loads(wkt_a)
+        poly_b = shapely_wkt.loads(wkt_b)
+        if not isinstance(
+            poly_a, ShapelyPolygon
+        ) or not isinstance(
+            poly_b, ShapelyPolygon
+        ):
+            return False
+        if not poly_a.is_valid or not poly_b.is_valid:
+            return False
+        if not poly_a.intersects(poly_b):
+            return False
+        # Touching edges/corners only -> no overlap
+        return not poly_a.touches(poly_b)
+    except Exception:
+        return False
+
+
+def find_overlapping_plots(
+    plot_wkt, bbox, form_id, exclude_pk=None
+):
+    """Find plots that overlap with the given
+    polygon within the same form.
+
+    Phase 1: Fast DB bounding-box query.
+    Phase 2: Shapely confirmation.
+    Returns list of overlapping Plot objects.
+    """
+    from api.v1.v1_odk.models import Plot
+
+    candidates = Plot.objects.filter(
+        form_id=form_id,
+        min_lon__lte=bbox["max_lon"],
+        max_lon__gte=bbox["min_lon"],
+        min_lat__lte=bbox["max_lat"],
+        max_lat__gte=bbox["min_lat"],
+    ).exclude(polygon_wkt__isnull=True)
+
+    if exclude_pk is not None:
+        candidates = candidates.exclude(
+            pk=exclude_pk
+        )
+
+    overlapping = []
+    for candidate in candidates:
+        if _polygons_overlap(
+            plot_wkt, candidate.polygon_wkt
+        ):
+            overlapping.append(candidate)
+    return overlapping
+
+
+def build_overlap_reason(overlapping_plots):
+    """Build a reason string listing overlapping
+    plots. Truncates to 500 chars if needed."""
+    parts = []
+    for p in overlapping_plots:
+        parts.append(
+            f"{p.plot_name} ({p.instance_name})"
+        )
+    msg = (
+        "Polygon overlaps with: "
+        + ", ".join(parts)
+    )
+    if len(msg) > 500:
+        msg = msg[:497] + "..."
+    return msg
+
+
+def append_overlap_reason(
+    existing_reason, new_plot_name, new_instance
+):
+    """Append overlap info to an existing reason.
+
+    Skips if the instance already appears
+    in the reason (duplicate prevention).
+    Truncates to 500 chars.
+    """
+    if (
+        existing_reason
+        and new_instance in existing_reason
+    ):
+        return existing_reason
+
+    overlap_msg = (
+        f"Polygon overlaps with: "
+        f"{new_plot_name} ({new_instance})"
+    )
+
+    if not existing_reason:
+        return overlap_msg
+
+    combined = f"{existing_reason}; {overlap_msg}"
+    if len(combined) > 500:
+        combined = combined[:497] + "..."
+    return combined
+
+
 def extract_plot_data(raw_data, form):
     """Extract plot fields from submission raw_data.
 
@@ -214,31 +323,48 @@ def extract_plot_data(raw_data, form):
         "region": region,
         "sub_region": sub_region,
         "plot_name": plot_name,
+        "flagged_for_review": None,
+        "flagged_reason": None,
     }
 
     polygon_fields = _split_csv_fields(form.polygon_field)
     if not polygon_fields:
         return result
 
-    polygon_str = _extract_first_nonempty(raw_data, polygon_fields)
+    polygon_str = _extract_first_nonempty(
+        raw_data, polygon_fields
+    )
     if not polygon_str:
         logger.warning(
             "No polygon data found in fields: %s",
             polygon_fields,
+        )
+        result["flagged_for_review"] = True
+        result["flagged_reason"] = (
+            "No polygon data found in submission."
         )
         return result
 
     coords = parse_odk_geoshape(polygon_str)
     if coords is None:
         logger.warning(
-            "Failed to parse polygon from " "fields: %s",
+            "Failed to parse polygon from "
+            "fields: %s",
             polygon_fields,
+        )
+        result["flagged_for_review"] = True
+        result["flagged_reason"] = (
+            "Failed to parse polygon geometry."
         )
         return result
 
     is_valid, error_msg = validate_polygon(coords)
     if not is_valid:
-        logger.warning("Invalid polygon: %s", error_msg)
+        logger.warning(
+            "Invalid polygon: %s", error_msg
+        )
+        result["flagged_for_review"] = True
+        result["flagged_reason"] = error_msg
         return result
 
     bbox = compute_bbox(coords)

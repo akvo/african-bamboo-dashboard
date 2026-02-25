@@ -119,7 +119,8 @@ class PlotViewTest(TestCase, OdkTestHelperMixin):
         )
         self._create_plot(submission=sub)
         resp = self.client.get(
-            "/api/v1/odk/plots/" "?status=1",
+            "/api/v1/odk/plots/"
+            "?status=approved",
             **self.auth,
         )
         self.assertEqual(len(resp.json()["results"]), 1)

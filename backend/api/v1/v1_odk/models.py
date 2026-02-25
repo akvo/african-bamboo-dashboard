@@ -1,6 +1,7 @@
 import uuid
 
 from django.db import models
+from api.v1.v1_odk.constants import ApprovalStatusTypes
 
 
 class FormMetadata(models.Model):
@@ -67,8 +68,8 @@ class FormMetadata(models.Model):
 
 
 class ApprovalStatus(models.IntegerChoices):
-    APPROVED = 1, "Approved"
-    REJECTED = 2, "Not approved"
+    APPROVED = ApprovalStatusTypes.APPROVED, "Approved"
+    REJECTED = ApprovalStatusTypes.REJECTED, "Not approved"
 
 
 class Submission(models.Model):

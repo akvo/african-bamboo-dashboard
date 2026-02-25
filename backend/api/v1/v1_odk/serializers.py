@@ -2,6 +2,7 @@ from rest_framework import serializers
 
 from api.v1.v1_odk.models import FormMetadata, FormQuestion, Plot, Submission
 from utils.custom_serializer_fields import CustomCharField, CustomFloatField
+from api.v1.v1_odk.constants import ApprovalStatusTypes
 
 
 def build_option_lookup(form):
@@ -169,6 +170,30 @@ class SubmissionDetailSerializer(serializers.ModelSerializer):
 class SubmissionUpdateSerializer(serializers.ModelSerializer):
     """Restrict writable fields for approval."""
 
+    # Set flagged to False when approval is set whether approved or rejected
+    def update(self, instance, validated_data):
+        approval_status = validated_data.get(
+            "approval_status",
+            instance.approval_status,
+        )
+        has_plot = hasattr(instance, "plot")
+        if approval_status in (
+            ApprovalStatusTypes.APPROVED,
+            ApprovalStatusTypes.REJECTED,
+        ) and has_plot:
+            plot = instance.plot
+            plot.flagged_for_review = False
+            plot.flagged_reason = None
+            plot.save(
+                update_fields=[
+                    "flagged_for_review",
+                    "flagged_reason",
+                ]
+            )
+        return super().update(
+            instance, validated_data
+        )
+
     class Meta:
         model = Submission
         fields = [
@@ -271,6 +296,15 @@ class PlotSerializer(serializers.ModelSerializer):
             "region",
             "sub_region",
             "enumerator",
+            "created_at",
+            "submission_uuid",
+            "approval_status",
+            "flagged_for_review",
+            "flagged_reason",
+        ]
+
+        read_only_fields = [
+            "uuid",
             "created_at",
             "submission_uuid",
             "approval_status",

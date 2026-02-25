@@ -16,6 +16,11 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
+from django_q.tasks import async_task
+
+from api.v1.v1_odk.constants import (
+    ApprovalStatusTypes,
+)
 from api.v1.v1_odk.models import (
     FormMetadata,
     FormOption,
@@ -357,53 +362,55 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
             # Auto-generate plot
             plot_data = extract_plot_data(item, form)
             now_ms = int(time.time() * 1000)
+            defaults = {
+                "form": form,
+                "plot_name": (
+                    plot_data["plot_name"]
+                ),
+                "instance_name": (
+                    item.get(
+                        "meta/instanceName",
+                        "",
+                    )
+                ),
+                "polygon_wkt": (
+                    plot_data["polygon_wkt"]
+                ),
+                "min_lat": (
+                    plot_data["min_lat"]
+                ),
+                "max_lat": (
+                    plot_data["max_lat"]
+                ),
+                "min_lon": (
+                    plot_data["min_lon"]
+                ),
+                "max_lon": (
+                    plot_data["max_lon"]
+                ),
+                "region": (
+                    plot_data["region"]
+                ),
+                "sub_region": (
+                    plot_data["sub_region"]
+                ),
+                "created_at": now_ms,
+            }
+            # Only set flag fields when geometry
+            # is invalid; preserve DB value for
+            # valid polygons so tri-state works
+            # (None=unchecked, False=clean).
+            if plot_data["flagged_for_review"]:
+                defaults["flagged_for_review"] = (
+                    True
+                )
+                defaults["flagged_reason"] = (
+                    plot_data["flagged_reason"]
+                )
             plot, plot_is_new = (
                 Plot.objects.update_or_create(
                     submission=sub,
-                    defaults={
-                        "form": form,
-                        "plot_name": (
-                            plot_data["plot_name"]
-                        ),
-                        "instance_name": (
-                            item.get(
-                                "meta/instanceName",
-                                "",
-                            )
-                        ),
-                        "polygon_wkt": (
-                            plot_data["polygon_wkt"]
-                        ),
-                        "min_lat": (
-                            plot_data["min_lat"]
-                        ),
-                        "max_lat": (
-                            plot_data["max_lat"]
-                        ),
-                        "min_lon": (
-                            plot_data["min_lon"]
-                        ),
-                        "max_lon": (
-                            plot_data["max_lon"]
-                        ),
-                        "region": (
-                            plot_data["region"]
-                        ),
-                        "sub_region": (
-                            plot_data["sub_region"]
-                        ),
-                        "flagged_for_review": (
-                            plot_data[
-                                "flagged_for_review"
-                            ]
-                        ),
-                        "flagged_reason": (
-                            plot_data[
-                                "flagged_reason"
-                            ]
-                        ),
-                        "created_at": now_ms,
-                    },
+                    defaults=defaults,
                 )
             )
             if plot_is_new:
@@ -411,13 +418,10 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
             else:
                 plots_updated += 1
 
-            # Overlap detection (None only)
+            # Overlap detection (unchecked only)
             if (
                 plot_data["polygon_wkt"]
-                and plot_data[
-                    "flagged_for_review"
-                ]
-                is None
+                and plot.flagged_for_review is None
             ):
                 bbox = compute_bbox(
                     [
@@ -549,8 +553,8 @@ class SubmissionViewSet(
         return ctx
 
     STATUS_MAP = {
-        "approved": 1,
-        "rejected": 2,
+        "approved": ApprovalStatusTypes.APPROVED,
+        "rejected": ApprovalStatusTypes.REJECTED,
     }
 
     def get_queryset(self):
@@ -575,6 +579,34 @@ class SubmissionViewSet(
                     )
                 )
         return qs
+
+    def perform_update(self, serializer):
+        instance = serializer.save()
+        approval = instance.approval_status
+        kobo_uid = (
+            ApprovalStatusTypes.KoboStatusMap.get(
+                approval
+            )
+        )
+        if not kobo_uid:
+            return
+        user = self.request.user
+        if (
+            not user.kobo_url
+            or not user.kobo_username
+            or not user.kobo_password
+        ):
+            return
+        async_task(
+            "api.v1.v1_odk.tasks"
+            ".sync_kobo_validation_status",
+            user.kobo_url,
+            user.kobo_username,
+            user.kobo_password,
+            instance.form.asset_uid,
+            [int(instance.kobo_id)],
+            approval,
+        )
 
     @extend_schema(tags=["ODK"])
     @action(detail=False, methods=["get"])
@@ -610,8 +642,8 @@ class PlotViewSet(
     lookup_field = "uuid"
 
     STATUS_MAP = {
-        "approved": 1,
-        "rejected": 2,
+        "approved": ApprovalStatusTypes.APPROVED,
+        "rejected": ApprovalStatusTypes.REJECTED,
     }
 
     def get_queryset(self):

@@ -7,6 +7,8 @@ services:
       - 3000:3000
   backend:
     network_mode: service:mainnetwork
+  worker:
+    network_mode: service:mainnetwork
   frontend:
     network_mode: service:mainnetwork
   pgadmin:

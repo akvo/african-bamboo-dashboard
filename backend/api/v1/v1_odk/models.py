@@ -161,6 +161,21 @@ class Plot(models.Model):
         blank=True,
         related_name="plot",
     )
+    flagged_for_review = models.BooleanField(
+        null=True,
+        default=None,
+        help_text=(
+            "NULL = not yet checked, "
+            "False = checked and clean, "
+            "True = flagged for review."
+        ),
+    )
+    flagged_reason = models.CharField(
+        max_length=500,
+        null=True,
+        blank=True,
+        help_text="Reason for flagging the plot for review",
+    )
 
     class Meta:
         db_table = "plots"

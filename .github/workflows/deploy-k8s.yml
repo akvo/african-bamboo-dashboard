@@ -147,3 +147,13 @@ jobs:
           cluster-name: "test"
           namespace-name: "african-bamboo-dashboard-namespace"
           gcloud-sa:  ${{ secrets.GCLOUD_SERVICE_ACCOUNT_K8S }}
+
+      - name: Rollout Worker
+        uses: ./composite-actions/.github/actions/k8s-rollout
+        with:
+          app-name: "african-bamboo-dashboard"
+          deployment-name: "worker-deployment"
+          container-name: "worker"
+          cluster-name: "test"
+          namespace-name: "african-bamboo-dashboard-namespace"
+          gcloud-sa:  ${{ secrets.GCLOUD_SERVICE_ACCOUNT_K8S }}

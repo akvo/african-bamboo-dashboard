@@ -182,21 +182,23 @@ export default function PlotDetailPanel({
       </ScrollArea>
 
       {/* Action buttons */}
-      <div className="flex gap-2 border-t border-border p-4">
-        <Button
-          className="flex-1 bg-status-approved text-white hover:bg-status-approved/90"
-          onClick={() => onApprove(notes)}
-        >
-          Approve
-        </Button>
-        <Button
-          variant="destructive"
-          className="flex-1"
-          onClick={() => onReject(notes)}
-        >
-          Reject
-        </Button>
-      </div>
+      {["pending", "flagged"].includes(status) && (
+        <div className="flex gap-2 border-t border-border p-4">
+          <Button
+            className="flex-1 bg-status-approved text-white hover:bg-status-approved/90"
+            onClick={() => onApprove(notes)}
+          >
+            Approve
+          </Button>
+          <Button
+            variant="destructive"
+            className="flex-1"
+            onClick={() => onReject(notes)}
+          >
+            Reject
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

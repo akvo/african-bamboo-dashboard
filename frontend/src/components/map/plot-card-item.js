@@ -9,11 +9,11 @@ export default function PlotCardItem({ plot, isSelected, onClick }) {
   const status = getPlotStatus(plot);
 
   return (
-    <div
-      role="button"
+    <button
+      type="button"
       onClick={onClick}
       className={cn(
-        "flex w-full min-w-0 cursor-pointer flex-col overflow-hidden rounded-md text-left transition-colors duration-200 hover:bg-accent",
+        "flex w-full min-w-0 cursor-pointer flex-col overflow-hidden rounded-md text-left transition-colors duration-200 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         "border border-card-foreground/10 data-[status=flagged]:border-status-flagged/30 data-[status=flagged]:bg-status-flagged/10",
         isSelected && "bg-accent",
       )}
@@ -36,13 +36,13 @@ export default function PlotCardItem({ plot, isSelected, onClick }) {
       {/* Body: Region / Sub-region */}
       {(plot.region || plot.sub_region) && (
         <div className="grid w-full grid-cols-2 gap-2 border-b border-card-foreground/10 px-3 py-2 data-[status=flagged]:border-status-flagged/20">
-          {plot.region && (
+          {plot.enumerator && (
             <div className="min-w-0">
               <p className="text-[10px] text-muted-foreground">Enumerator</p>
               <p className="truncate text-xs font-medium">{plot.enumerator}</p>
             </div>
           )}
-          {plot.sub_region && (
+          {plot.region && (
             <div className="min-w-0">
               <p className="text-[10px] text-muted-foreground">Region</p>
               <p className="truncate text-xs font-medium">{plot.region}</p>
@@ -62,6 +62,6 @@ export default function PlotCardItem({ plot, isSelected, onClick }) {
           </div>
         </div>
       )}
-    </div>
+    </button>
   );
 }

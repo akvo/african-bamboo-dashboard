@@ -278,7 +278,7 @@ export default function FormsPage() {
         <CardContent>
           <form
             onSubmit={handleRegister}
-            className="flex flex-col gap-4 sm:flex-row sm:items-end"
+            className="flex flex-col gap-4 md:flex-row sm:items-start"
           >
             <div className="flex-1 space-y-2">
               <Label htmlFor="asset_uid">Asset UID</Label>
@@ -314,19 +314,25 @@ export default function FormsPage() {
                 A display name to identify this form in the dashboard
               </p>
             </div>
-            <Button type="submit" disabled={isRegistering} className="shrink-0">
-              {isRegistering ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" />
-                  Registering...
-                </>
-              ) : (
-                <>
-                  <Plus className="size-4" />
-                  Register
-                </>
-              )}
-            </Button>
+            <div className="pt-6">
+              <Button
+                type="submit"
+                disabled={isRegistering}
+                className="shrink-0"
+              >
+                {isRegistering ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" />
+                    Registering...
+                  </>
+                ) : (
+                  <>
+                    <Plus className="size-4" />
+                    Register
+                  </>
+                )}
+              </Button>
+            </div>
           </form>
 
           {status && (

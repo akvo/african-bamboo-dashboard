@@ -136,7 +136,7 @@ export default function MapPage() {
   return (
     <div className="-m-6 flex h-[calc(100%+3rem)] overflow-hidden">
       {/* Left Panel */}
-      <div className="hidden w-1/4 shrink-0 flex-col overflow-hidden border-r border-border bg-card md:flex">
+      <div className="hidden w-1/2 md:flex lg:w-2/5 xl:w-1/4 shrink-0 flex-col overflow-hidden border-r border-border bg-card">
         {isLoading ? (
           <div className="space-y-3 p-4">
             {Array.from({ length: 8 }).map((_, i) => (

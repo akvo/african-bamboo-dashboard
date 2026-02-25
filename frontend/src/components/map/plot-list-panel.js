@@ -82,7 +82,7 @@ export default function PlotListPanel({
 
       {/* Plot list */}
       <ScrollArea className="min-h-0 flex-1">
-        <div className="space-y-1 p-2">
+        <div className="space-y-2 p-2">
           {filteredPlots.length === 0 && (
             <p className="px-3 py-8 text-center text-sm text-muted-foreground">
               No plots found

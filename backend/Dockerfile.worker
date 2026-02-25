@@ -1,4 +1,4 @@
-FROM python:3.8.5
+FROM python:3.12.3
 
 WORKDIR /app
 
@@ -9,7 +9,6 @@ RUN set -e; \
     pip -q install --no-cache-dir -r requirements.txt && \
     pip check
 
-copy . /app/
+COPY . /app/
 
-
-CMD ["python","manage.py","qcluster"]
+CMD ["python", "manage.py", "qcluster"]

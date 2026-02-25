@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ArrowLeft, MapPin, Edit3 } from "lucide-react";
+import { ArrowLeft, MapPin, Edit3, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -102,6 +102,16 @@ export default function PlotDetailPanel({
               {plot.instance_name}
             </p>
           </div>
+
+          {/* Flagged reason banner */}
+          {plot.flagged_for_review && plot.flagged_reason && (
+            <div className="flex items-start gap-2 rounded-md border border-status-flagged/30 bg-status-flagged/10 px-3 py-2">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-status-flagged" />
+              <p className="text-sm text-status-flagged">
+                {plot.flagged_reason}
+              </p>
+            </div>
+          )}
 
           {/* Metadata grid */}
           {isLoadingSub ? (

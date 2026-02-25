@@ -16,6 +16,11 @@ const statusConfig = {
     className:
       "bg-status-rejected/15 text-status-rejected border-status-rejected/30",
   },
+  flagged: {
+    label: "Flagged",
+    className:
+      "bg-status-flagged/15 text-status-flagged border-status-flagged/30",
+  },
 };
 
 export function StatusBadge({ status }) {

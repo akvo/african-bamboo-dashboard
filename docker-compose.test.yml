@@ -27,7 +27,6 @@ services:
       - DB_HOST=db
       - DEBUG=True
       - SECRET_KEY=secret
-      - COVERALLS_REPO_TOKEN=${COVERALLS_REPO_TOKEN:-}
       - MAILJET_APIKEY=secret
       - MAILJET_SECRET=secret
       - WEBDOMAIN=notset

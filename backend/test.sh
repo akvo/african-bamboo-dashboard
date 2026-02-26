@@ -16,13 +16,7 @@ COVERAGE_PROCESS_START=./.coveragerc \
 echo "Coverage"
 coverage combine --rcfile=./.coveragerc
 coverage report -m --rcfile=./.coveragerc
-
-if [[ -n "${COVERALLS_REPO_TOKEN:-}" ]] ; then
-  export GIT_DISCOVERY_ACROSS_FILESYSTEM=1
-  git config --global --add safe.directory /app
-  # echo "Uploading coverage to coveralls"
-  # coveralls
-fi
+coverage lcov --rcfile=./.coveragerc -o coverage.lcov
 
 echo "Generate Django DBML"
 ./manage.py dbml > db.dbml

@@ -21,7 +21,7 @@ export function ExportProvider({ children }) {
 
   const clearPolling = useCallback(() => {
     if (intervalRef.current) {
-      clearInterval(intervalRef.current);
+      clearTimeout(intervalRef.current);
       intervalRef.current = null;
     }
   }, []);
@@ -52,20 +52,20 @@ export function ExportProvider({ children }) {
     document.body.appendChild(link);
     link.click();
     link.remove();
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   }, []);
 
   const pollJob = useCallback(
     (jobId) => {
       clearPolling();
 
-      intervalRef.current = setInterval(async () => {
+      const poll = async () => {
         try {
           const res = await api.get(`/v1/jobs/${jobId}/`);
           const { status } = res.data;
 
           if (status === "done") {
-            clearPolling();
+            intervalRef.current = null;
             await triggerDownload(jobId);
             setIsExporting(false);
             setToast({
@@ -73,15 +73,17 @@ export function ExportProvider({ children }) {
               type: "success",
             });
           } else if (status === "failed") {
-            clearPolling();
+            intervalRef.current = null;
             setIsExporting(false);
             setToast({
               message: "Export failed. Please try again.",
               type: "error",
             });
+          } else {
+            intervalRef.current = setTimeout(poll, POLL_INTERVAL_MS);
           }
         } catch (err) {
-          clearPolling();
+          intervalRef.current = null;
           setIsExporting(false);
           setToast({
             message:
@@ -90,7 +92,9 @@ export function ExportProvider({ children }) {
             type: "error",
           });
         }
-      }, POLL_INTERVAL_MS);
+      };
+
+      intervalRef.current = setTimeout(poll, POLL_INTERVAL_MS);
     },
     [clearPolling, triggerDownload],
   );
@@ -125,7 +129,7 @@ export function ExportProvider({ children }) {
         });
       }
     },
-    [isExporting, dismissToast, pollJob],
+    [isExporting, pollJob],
   );
 
   return (

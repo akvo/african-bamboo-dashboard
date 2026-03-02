@@ -18,6 +18,11 @@ urlpatterns = [
         name="v1_odk",
     ),
     path(
+        "api/v1/jobs/",
+        include("api.v1.v1_jobs.urls"),
+        name="v1_jobs",
+    ),
+    path(
         "api/schema/",
         SpectacularAPIView.as_view(),
         name="schema",

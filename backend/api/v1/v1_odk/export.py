@@ -188,7 +188,8 @@ def resolve_plot_attributes(
 
 
 def _wkt_to_pyshp_parts(wkt_string):
-    """Convert WKT POLYGON to pyshp parts.
+    """Convert WKT POLYGON/MULTIPOLYGON to pyshp
+    parts.
 
     Returns list of parts (list of [lon, lat])
     or None if invalid.
@@ -197,19 +198,33 @@ def _wkt_to_pyshp_parts(wkt_string):
         geom = shapely_wkt.loads(wkt_string)
         if not geom.is_valid:
             geom = geom.buffer(0)
-        parts = [
-            [
-                [c[0], c[1]]
-                for c in geom.exterior.coords
-            ]
-        ]
-        for interior in geom.interiors:
+
+        if geom.geom_type == "MultiPolygon":
+            polygons = geom.geoms
+        elif geom.geom_type == "Polygon":
+            polygons = [geom]
+        else:
+            logger.warning(
+                "Unsupported geometry type: %s",
+                geom.geom_type,
+            )
+            return None
+
+        parts = []
+        for poly in polygons:
             parts.append(
                 [
                     [c[0], c[1]]
-                    for c in interior.coords
+                    for c in poly.exterior.coords
                 ]
             )
+            for interior in poly.interiors:
+                parts.append(
+                    [
+                        [c[0], c[1]]
+                        for c in interior.coords
+                    ]
+                )
         return parts
     except Exception as e:
         logger.warning(

@@ -8,6 +8,7 @@ from api.v1.v1_odk.constants import (
     ApprovalStatusTypes,
 )
 from api.v1.v1_odk.tasks import (
+    sync_kobo_submission_geometry,
     sync_kobo_validation_status,
 )
 from utils.encryption import encrypt
@@ -133,5 +134,140 @@ class KoboClientValidationStatusTest(
                 "validation_status.uid"
             ],
             "validation_status_approved",
+        )
+        mock_resp.raise_for_status.assert_called_once()
+
+
+@override_settings(
+    USE_TZ=False,
+    TEST_ENV=True,
+    SECRET_KEY="test-secret-key-for-encryption",
+)
+class SyncKoboSubmissionGeometryTest(TestCase):
+    def setUp(self):
+        self.kobo_url = (
+            "https://kf.kobotoolbox.org"
+        )
+        self.kobo_username = "testuser"
+        self.kobo_password_enc = encrypt(
+            "testpass"
+        )
+        self.asset_uid = "aXYZ123"
+        self.kobo_id = 100
+        self.polygon_field = "geoshape"
+        self.odk_geoshape = (
+            "9.0 38.7 0 0; "
+            "9.0 38.8 0 0; "
+            "9.1 38.8 0 0; "
+            "9.0 38.7 0 0"
+        )
+
+    @patch(
+        "api.v1.v1_odk.tasks.KoboClient"
+    )
+    def test_sync_geometry_success(
+        self, mock_cls
+    ):
+        mock_client = MagicMock()
+        mock_cls.return_value = mock_client
+
+        sync_kobo_submission_geometry(
+            self.kobo_url,
+            self.kobo_username,
+            self.kobo_password_enc,
+            self.asset_uid,
+            self.kobo_id,
+            self.polygon_field,
+            self.odk_geoshape,
+        )
+
+        mock_cls.assert_called_once_with(
+            self.kobo_url,
+            self.kobo_username,
+            "testpass",
+        )
+        mock_client.update_submission_data.assert_called_once_with(  # noqa: E501
+            self.asset_uid,
+            self.kobo_id,
+            {self.polygon_field: self.odk_geoshape},
+        )
+
+    @patch(
+        "api.v1.v1_odk.tasks.KoboClient"
+    )
+    def test_sync_geometry_failure_logs(
+        self, mock_cls,
+    ):
+        mock_client = MagicMock()
+        mock_client.update_submission_data.side_effect = (  # noqa: E501
+            Exception("Kobo API down")
+        )
+        mock_cls.return_value = mock_client
+
+        with self.assertLogs(
+            "api.v1.v1_odk.tasks",
+            level=logging.ERROR,
+        ) as cm:
+            sync_kobo_submission_geometry(
+                self.kobo_url,
+                self.kobo_username,
+                self.kobo_password_enc,
+                self.asset_uid,
+                self.kobo_id,
+                self.polygon_field,
+                self.odk_geoshape,
+            )
+
+        self.assertTrue(
+            any(
+                "Failed to sync geometry" in msg
+                for msg in cm.output
+            )
+        )
+
+
+class KoboClientUpdateSubmissionDataTest(
+    SimpleTestCase,
+):
+    """Unit test for KoboClient
+    .update_submission_data()."""
+
+    @patch("utils.kobo_client.requests.Session")
+    def test_update_submission_data(
+        self, mock_session_cls,
+    ):
+        mock_session = MagicMock()
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {}
+        mock_session.patch.return_value = (
+            mock_resp
+        )
+        mock_session_cls.return_value = (
+            mock_session
+        )
+
+        client = KoboClient(
+            "https://kf.kobotoolbox.org",
+            "user",
+            "pass",
+        )
+        client.update_submission_data(
+            "aXYZ", 100, {"geoshape": "geo data"}
+        )
+
+        mock_session.patch.assert_called_once()
+        call_args = mock_session.patch.call_args
+        self.assertIn(
+            "/api/v2/assets/aXYZ/data/bulk/",
+            call_args[0][0],
+        )
+        payload = call_args[1]["json"]
+        self.assertEqual(
+            payload["payload"]["submission_ids"],
+            [100],
+        )
+        self.assertEqual(
+            payload["payload"]["data"],
+            {"geoshape": "geo data"},
         )
         mock_resp.raise_for_status.assert_called_once()

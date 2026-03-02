@@ -31,7 +31,9 @@ from api.v1.v1_odk.export import EXPORT_DIR
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def view_job(request, job_id):
-    job = get_object_or_404(Jobs, pk=job_id)
+    job = get_object_or_404(
+        Jobs, pk=job_id, created_by=request.user
+    )
     serializer = JobSerializer(instance=job)
     return Response(
         data=serializer.data,
@@ -55,7 +57,9 @@ CONTENT_TYPES = {
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def download_job_result(request, job_id):
-    job = get_object_or_404(Jobs, pk=job_id)
+    job = get_object_or_404(
+        Jobs, pk=job_id, created_by=request.user
+    )
     if job.status != JobStatus.done:
         return Response(
             {"message": "Job is not completed yet"},

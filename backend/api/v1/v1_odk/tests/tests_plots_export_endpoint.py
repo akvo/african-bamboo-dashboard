@@ -270,6 +270,7 @@ class PlotExportEndpointTest(
         job = Jobs.objects.create(
             type=JobTypes.export_shapefile,
             status=JobStatus.on_progress,
+            created_by=self.user,
             info={
                 "form_id": "export-form-1"
             },
@@ -292,6 +293,7 @@ class PlotExportEndpointTest(
         job = Jobs.objects.create(
             type=JobTypes.export_shapefile,
             status=JobStatus.on_progress,
+            created_by=self.user,
         )
         resp = self.client.get(
             DOWNLOAD_URL.format(
@@ -307,6 +309,7 @@ class PlotExportEndpointTest(
         job = Jobs.objects.create(
             type=JobTypes.export_shapefile,
             status=JobStatus.done,
+            created_by=self.user,
             info={
                 "file_path": "/nonexistent.zip"
             },

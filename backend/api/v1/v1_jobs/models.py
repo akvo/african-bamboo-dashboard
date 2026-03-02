@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import models
 
 from api.v1.v1_jobs.constants import (
@@ -26,6 +27,13 @@ class Jobs(models.Model):
     )
     info = models.JSONField(
         default=None, null=True
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        default=None,
+        related_name="jobs",
     )
     created = models.DateTimeField(
         auto_now_add=True

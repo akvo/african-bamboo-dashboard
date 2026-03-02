@@ -686,6 +686,7 @@ class PlotViewSet(
         job = Jobs.objects.create(
             type=valid_formats[fmt],
             status=JobStatus.pending,
+            created_by=request.user,
             info={
                 "form_id": form_id,
                 "filters": filters,

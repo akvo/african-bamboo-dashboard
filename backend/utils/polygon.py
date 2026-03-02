@@ -57,6 +57,60 @@ def coords_to_wkt(coords):
     return f"POLYGON(({pairs}))"
 
 
+def coords_to_odk_geoshape(coords):
+    """Convert [(lon, lat), ...] to ODK geoshape format.
+
+    Output: "lat lng 0 0; lat lng 0 0; ..."
+    Altitude and accuracy are set to 0.
+    """
+    parts = []
+    for lon, lat in coords:
+        parts.append(f"{lat} {lon} 0 0")
+    return "; ".join(parts)
+
+
+def parse_wkt_polygon(wkt_string):
+    """Parse WKT POLYGON to coordinate list.
+
+    Returns list of (lon, lat) tuples, or None.
+    """
+    if not wkt_string or not wkt_string.strip():
+        return None
+    try:
+        match = re.match(
+            r"POLYGON\(\((.+)\)\)",
+            wkt_string.strip(),
+        )
+        if not match:
+            return None
+        inner = match.group(1)
+        pairs = [
+            p.strip() for p in inner.split(",")
+        ]
+        coords = []
+        for pair in pairs:
+            parts = pair.split()
+            if len(parts) < 2:
+                return None
+            lon = float(parts[0])
+            lat = float(parts[1])
+            coords.append((lon, lat))
+        return coords
+    except (ValueError, AttributeError):
+        return None
+
+
+def wkt_to_odk_geoshape(wkt_string):
+    """Convert WKT POLYGON string to ODK geoshape.
+
+    Returns empty string on invalid input.
+    """
+    coords = parse_wkt_polygon(wkt_string)
+    if not coords:
+        return ""
+    return coords_to_odk_geoshape(coords)
+
+
 def compute_bbox(coords):
     """Compute bounding box from coordinates.
 
@@ -147,12 +201,13 @@ def _split_csv_fields(field_value):
 
 def _extract_first_nonempty(raw_data, fields):
     """Try each field in order, return the first
-    non-empty value. Returns None if all empty."""
+    non-empty (value, field_name) tuple.
+    Returns (None, None) if all empty."""
     for field in fields:
         val = raw_data.get(field)
         if val and str(val).strip():
-            return str(val).strip()
-    return None
+            return str(val).strip(), field
+    return None, None
 
 
 def _build_joined_value(raw_data, field_spec):
@@ -171,16 +226,16 @@ def _build_joined_value(raw_data, field_spec):
 def _build_plot_name(raw_data, plot_name_field):
     """Build plot name from comma-separated field
     names. Values are joined with spaces.
-    Returns "Unknown" if no valid fields found."""
+    Returns None when no fields match."""
     fields = _split_csv_fields(plot_name_field)
     if not fields:
-        return "Unknown"
+        return None
     parts = []
     for field in fields:
         val = raw_data.get(field)
         if val and str(val).strip():
             parts.append(str(val).strip())
-    return " ".join(parts) if parts else "Unknown"
+    return " ".join(parts) if parts else None
 
 
 def _polygons_overlap(wkt_a, wkt_b):
@@ -220,13 +275,17 @@ def find_overlapping_plots(
     """
     from api.v1.v1_odk.models import Plot
 
-    candidates = Plot.objects.filter(
-        form_id=form_id,
-        min_lon__lte=bbox["max_lon"],
-        max_lon__gte=bbox["min_lon"],
-        min_lat__lte=bbox["max_lat"],
-        max_lat__gte=bbox["min_lat"],
-    ).exclude(polygon_wkt__isnull=True)
+    candidates = (
+        Plot.objects.filter(
+            form_id=form_id,
+            min_lon__lte=bbox["max_lon"],
+            max_lon__gte=bbox["min_lon"],
+            min_lat__lte=bbox["max_lat"],
+            max_lat__gte=bbox["min_lat"],
+        )
+        .exclude(polygon_wkt__isnull=True)
+        .select_related("submission")
+    )
 
     if exclude_pk is not None:
         candidates = candidates.exclude(
@@ -247,8 +306,13 @@ def build_overlap_reason(overlapping_plots):
     plots. Truncates to 500 chars if needed."""
     parts = []
     for p in overlapping_plots:
+        inst = (
+            p.submission.instance_name
+            if p.submission
+            else None
+        ) or str(p.uuid)
         parts.append(
-            f"{p.plot_name} ({p.instance_name})"
+            f"{p.plot_name or inst} ({inst})"
         )
     msg = (
         "Polygon overlaps with: "
@@ -316,6 +380,7 @@ def extract_plot_data(raw_data, form):
 
     result = {
         "polygon_wkt": None,
+        "polygon_source_field": None,
         "min_lat": None,
         "max_lat": None,
         "min_lon": None,
@@ -331,9 +396,12 @@ def extract_plot_data(raw_data, form):
     if not polygon_fields:
         return result
 
-    polygon_str = _extract_first_nonempty(
-        raw_data, polygon_fields
+    polygon_str, source_field = (
+        _extract_first_nonempty(
+            raw_data, polygon_fields
+        )
     )
+    result["polygon_source_field"] = source_field
     if not polygon_str:
         logger.warning(
             "No polygon data found in fields: %s",

@@ -113,6 +113,35 @@ class KoboClient:
         resp.raise_for_status()
         return resp.json()
 
+    def update_submission_data(
+        self,
+        asset_uid: str,
+        submission_id: int,
+        data: dict,
+    ):
+        """Update a single submission's data
+        via the bulk PATCH endpoint."""
+        url = (
+            f"{self.base_url}"
+            f"/api/v2/assets/{asset_uid}"
+            f"/data/bulk/"
+        )
+        payload = {
+            "payload": {
+                "submission_ids": [
+                    submission_id
+                ],
+                "data": data,
+            }
+        }
+        resp = self.session.patch(
+            url,
+            json=payload,
+            timeout=self.timeout,
+        )
+        resp.raise_for_status()
+        return resp.json()
+
     def fetch_all_submissions(
         self,
         asset_uid: str,

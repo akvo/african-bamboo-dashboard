@@ -1,6 +1,6 @@
 import os
 
-from django.http import HttpResponse
+from django.http import FileResponse
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.decorators import (
@@ -20,6 +20,7 @@ from api.v1.v1_jobs.models import Jobs
 from api.v1.v1_jobs.serializers import (
     JobSerializer,
 )
+from api.v1.v1_odk.export import EXPORT_DIR
 
 
 @extend_schema(
@@ -71,17 +72,29 @@ def download_job_result(request, job_id):
             status=status.HTTP_404_NOT_FOUND,
         )
 
-    ext = os.path.splitext(file_path)[1]
+    real_path = os.path.realpath(file_path)
+    export_root = os.path.realpath(
+        str(EXPORT_DIR)
+    )
+    if not real_path.startswith(
+        export_root + os.sep
+    ):
+        return Response(
+            {"message": "File not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    ext = os.path.splitext(real_path)[1]
     content_type = CONTENT_TYPES.get(
         ext, "application/octet-stream"
     )
-    filename = os.path.basename(file_path)
+    filename = os.path.basename(real_path)
 
-    with open(file_path, "rb") as f:
-        response = HttpResponse(
-            f.read(), content_type=content_type
-        )
-        response["Content-Disposition"] = (
-            f'attachment; filename="{filename}"'
-        )
-        return response
+    response = FileResponse(
+        open(real_path, "rb"),
+        content_type=content_type,
+    )
+    response["Content-Disposition"] = (
+        f'attachment; filename="{filename}"'
+    )
+    return response

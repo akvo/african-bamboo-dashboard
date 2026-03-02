@@ -3,10 +3,12 @@ from django.test import TestCase
 from utils.polygon import (
     _build_joined_value,
     compute_bbox,
+    coords_to_odk_geoshape,
     coords_to_wkt,
     extract_plot_data,
     parse_odk_geoshape,
     validate_polygon,
+    wkt_to_odk_geoshape,
 )
 
 
@@ -223,14 +225,22 @@ class ExtractPlotDataTest(TestCase):
 
     def test_plot_name_all_empty(self):
         form = self._mock_form(
-            plot_name_field=("First_Name,Father_s_Name"),
+            plot_name_field=(
+                "First_Name,Father_s_Name"
+            ),
         )
-        result = extract_plot_data({}, form)
-        self.assertEqual(result["plot_name"], "Unknown")
+        result = extract_plot_data(
+            {"meta/instanceName": "Instance 1"},
+            form,
+        )
+        self.assertIsNone(result["plot_name"])
 
     def test_polygon_field_fallback(self):
         form = self._mock_form(
-            polygon_field=("primary_boundary," "fallback_boundary"),
+            polygon_field=(
+                "primary_boundary,"
+                "fallback_boundary"
+            ),
         )
         raw = {
             "fallback_boundary": (
@@ -244,11 +254,61 @@ class ExtractPlotDataTest(TestCase):
         result = extract_plot_data(raw, form)
         self.assertIsNotNone(result["polygon_wkt"])
 
+    def test_polygon_source_field_primary(self):
+        form = self._mock_form(
+            polygon_field="boundary",
+        )
+        raw = {
+            "boundary": (
+                "0.0 0.0 0 0; "
+                "0.001 0.0 0 0; "
+                "0.001 0.001 0 0; "
+                "0.0 0.001 0 0; "
+                "0.0 0.0 0 0"
+            ),
+        }
+        result = extract_plot_data(raw, form)
+        self.assertEqual(
+            result["polygon_source_field"],
+            "boundary",
+        )
+
+    def test_polygon_source_field_fallback(self):
+        form = self._mock_form(
+            polygon_field=(
+                "primary,fallback"
+            ),
+        )
+        raw = {
+            "fallback": (
+                "0.0 0.0 0 0; "
+                "0.001 0.0 0 0; "
+                "0.001 0.001 0 0; "
+                "0.0 0.001 0 0; "
+                "0.0 0.0 0 0"
+            ),
+        }
+        result = extract_plot_data(raw, form)
+        self.assertEqual(
+            result["polygon_source_field"],
+            "fallback",
+        )
+
+    def test_polygon_source_field_none(self):
+        form = self._mock_form()
+        result = extract_plot_data({}, form)
+        self.assertIsNone(
+            result["polygon_source_field"]
+        )
+
     def test_always_returns_dict(self):
         form = self._mock_form()
         result = extract_plot_data({}, form)
         self.assertIsInstance(result, dict)
         self.assertIn("polygon_wkt", result)
+        self.assertIn(
+            "polygon_source_field", result
+        )
         self.assertIn("plot_name", result)
         self.assertIn("region", result)
         self.assertIn("flagged_for_review", result)
@@ -383,3 +443,68 @@ class BuildJoinedValueTest(TestCase):
     def test_all_empty_returns_empty(self):
         result = _build_joined_value({}, "a,b")
         self.assertEqual(result, "")
+
+
+class CoordsToOdkGeoshapeTest(TestCase):
+    def test_simple_coords(self):
+        coords = [
+            (38.7, 9.0),
+            (38.8, 9.0),
+            (38.8, 9.1),
+            (38.7, 9.0),
+        ]
+        result = coords_to_odk_geoshape(coords)
+        self.assertEqual(
+            result,
+            "9.0 38.7 0 0; "
+            "9.0 38.8 0 0; "
+            "9.1 38.8 0 0; "
+            "9.0 38.7 0 0",
+        )
+
+    def test_empty_coords(self):
+        result = coords_to_odk_geoshape([])
+        self.assertEqual(result, "")
+
+
+class WktToOdkGeoshapeTest(TestCase):
+    def test_valid_wkt(self):
+        wkt = "POLYGON((38.7 9.0, 38.8 9.0, "
+        wkt += "38.8 9.1, 38.7 9.0))"
+        result = wkt_to_odk_geoshape(wkt)
+        self.assertIn("9.0 38.7 0 0", result)
+        self.assertIn("9.0 38.8 0 0", result)
+
+    def test_empty_string_returns_empty(self):
+        self.assertEqual(
+            wkt_to_odk_geoshape(""), ""
+        )
+
+    def test_none_returns_empty(self):
+        self.assertEqual(
+            wkt_to_odk_geoshape(None), ""
+        )
+
+    def test_invalid_format_returns_empty(self):
+        self.assertEqual(
+            wkt_to_odk_geoshape("not wkt"), ""
+        )
+
+    def test_round_trip(self):
+        """parse_odk_geoshape -> coords_to_wkt
+        -> wkt_to_odk_geoshape produces
+        equivalent output."""
+        odk_input = (
+            "9.0 38.7 100 5; "
+            "9.0 38.8 100 5; "
+            "9.1 38.8 100 5; "
+            "9.0 38.7 100 5"
+        )
+        coords = parse_odk_geoshape(odk_input)
+        wkt = coords_to_wkt(coords)
+        result = wkt_to_odk_geoshape(wkt)
+        # Alt/acc are stripped to 0, but
+        # lat/lon order is preserved
+        self.assertIn("9.0 38.7 0 0", result)
+        self.assertIn("9.0 38.8 0 0", result)
+        self.assertIn("9.1 38.8 0 0", result)

@@ -149,7 +149,6 @@ class FindOverlappingPlotsTest(TestCase):
             form=self.form,
             submission=self.sub,
             plot_name="Existing Plot",
-            instance_name="existing-inst",
             polygon_wkt=WKT_SQUARE_A,
             min_lat=0.0,
             max_lat=1.0,
@@ -234,7 +233,6 @@ class FindOverlappingPlotsTest(TestCase):
             form=self.form,
             submission=sub2,
             plot_name="No Geom",
-            instance_name="no-geom-inst",
             polygon_wkt=None,
             region="R",
             sub_region="SR",
@@ -255,13 +253,28 @@ class FindOverlappingPlotsTest(TestCase):
         self.assertEqual(len(result), 1)
 
 
+@override_settings(USE_TZ=False, TEST_ENV=True)
 class BuildOverlapReasonTest(TestCase):
     """Unit tests for build_overlap_reason."""
 
+    def setUp(self):
+        self.form = FormMetadata.objects.create(
+            asset_uid="reason-form",
+            name="Reason Form",
+        )
+
     def _make_plot(self, name, instance):
+        sub = Submission.objects.create(
+            uuid=f"sub-{instance}",
+            form=self.form,
+            kobo_id="1",
+            submission_time=1700000000000,
+            instance_name=instance,
+            raw_data={},
+        )
         p = Plot(
             plot_name=name,
-            instance_name=instance,
+            submission=sub,
         )
         return p
 
@@ -285,7 +298,9 @@ class BuildOverlapReasonTest(TestCase):
 
     def test_truncation(self):
         plots = [
-            self._make_plot("X" * 100, f"i{i}")
+            self._make_plot(
+                "X" * 100, f"i{i}"
+            )
             for i in range(10)
         ]
         reason = build_overlap_reason(plots)

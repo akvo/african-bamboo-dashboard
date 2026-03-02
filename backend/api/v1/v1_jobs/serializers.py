@@ -28,11 +28,8 @@ class JobSerializer(serializers.ModelSerializer):
         model = Jobs
         fields = [
             "id",
-            "task_id",
             "type",
             "status",
-            "result",
-            "info",
             "created",
             "available",
         ]

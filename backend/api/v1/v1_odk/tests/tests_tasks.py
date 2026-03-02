@@ -153,7 +153,7 @@ class SyncKoboSubmissionGeometryTest(TestCase):
             "testpass"
         )
         self.asset_uid = "aXYZ123"
-        self.kobo_id = 100
+        self.kobo_id = "100"
         self.polygon_field = "geoshape"
         self.odk_geoshape = (
             "9.0 38.7 0 0; "
@@ -252,7 +252,7 @@ class KoboClientUpdateSubmissionDataTest(
             "pass",
         )
         client.update_submission_data(
-            "aXYZ", 100, {"geoshape": "geo data"}
+            "aXYZ", "100", {"geoshape": "geo data"}
         )
 
         mock_session.patch.assert_called_once()
@@ -264,7 +264,7 @@ class KoboClientUpdateSubmissionDataTest(
         payload = call_args[1]["json"]
         self.assertEqual(
             payload["payload"]["submission_ids"],
-            [100],
+            ["100"],
         )
         self.assertEqual(
             payload["payload"]["data"],

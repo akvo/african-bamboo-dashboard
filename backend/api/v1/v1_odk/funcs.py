@@ -8,6 +8,8 @@ from api.v1.v1_odk.models import (
     Plot,
 )
 from utils.polygon import (
+    _extract_first_nonempty,
+    _split_csv_fields,
     append_overlap_reason,
     build_overlap_reason,
     compute_bbox,
@@ -247,10 +249,18 @@ def validate_and_check_plot(plot):
         plot.flagged_reason = (
             "Failed to parse polygon geometry."
         )
+        plot.min_lat = None
+        plot.max_lat = None
+        plot.min_lon = None
+        plot.max_lon = None
         plot.save(
             update_fields=[
                 "flagged_for_review",
                 "flagged_reason",
+                "min_lat",
+                "max_lat",
+                "min_lon",
+                "max_lon",
             ]
         )
         return
@@ -259,10 +269,18 @@ def validate_and_check_plot(plot):
     if not is_valid:
         plot.flagged_for_review = True
         plot.flagged_reason = error_msg
+        plot.min_lat = None
+        plot.max_lat = None
+        plot.min_lon = None
+        plot.max_lon = None
         plot.save(
             update_fields=[
                 "flagged_for_review",
                 "flagged_reason",
+                "min_lat",
+                "max_lat",
+                "min_lon",
+                "max_lon",
             ]
         )
         return
@@ -364,10 +382,19 @@ def dispatch_kobo_geometry_sync(
     if not polygon_wkt:
         return
 
-    polygon_field_name = (
-        plot.polygon_source_field
-        or form.polygon_field.split(",")[0].strip()
-    )
+    polygon_field_name = plot.polygon_source_field
+    if not polygon_field_name:
+        # Infer from raw_data to avoid writing
+        # to the wrong Kobo field.
+        raw = (
+            plot.submission.raw_data or {}
+        )
+        fields = _split_csv_fields(
+            form.polygon_field
+        )
+        _, polygon_field_name = (
+            _extract_first_nonempty(raw, fields)
+        )
     if not polygon_field_name:
         return
 
@@ -384,7 +411,7 @@ def dispatch_kobo_geometry_sync(
         user.kobo_username,
         user.kobo_password,
         form.asset_uid,
-        int(plot.submission.kobo_id),
+        plot.submission.kobo_id,
         polygon_field_name,
         odk_geoshape,
     )

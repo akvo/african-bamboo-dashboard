@@ -248,6 +248,14 @@ class PlotViewTest(TestCase, OdkTestHelperMixin):
     ):
         sub = self._create_submission(
             kobo_id="300",
+            raw_data={
+                "geoshape": (
+                    "7.05 38.47 0 0;"
+                    "7.06 38.47 0 0;"
+                    "7.06 38.48 0 0;"
+                    "7.05 38.47 0 0"
+                ),
+            },
         )
         self.form.polygon_field = "geoshape"
         self.form.save()

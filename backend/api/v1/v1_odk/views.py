@@ -430,7 +430,7 @@ class SubmissionViewSet(
             user.kobo_username,
             user.kobo_password,
             instance.form.asset_uid,
-            [int(instance.kobo_id)],
+            [instance.kobo_id],
             approval,
         )
 

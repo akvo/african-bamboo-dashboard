@@ -293,7 +293,7 @@ class SubmissionKoboSyncDispatchTest(
             ".sync_kobo_validation_status",
         )
         self.assertEqual(
-            args[5], [500]
+            args[5], ["500"]
         )
         self.assertEqual(
             args[6],

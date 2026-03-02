@@ -116,7 +116,7 @@ class KoboClient:
     def update_submission_data(
         self,
         asset_uid: str,
-        submission_id: int,
+        submission_id,
         data: dict,
     ):
         """Update a single submission's data

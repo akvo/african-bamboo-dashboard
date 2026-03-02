@@ -218,15 +218,25 @@ class PlotSerializer(serializers.ModelSerializer):
         read_only=True,
         allow_null=True,
     )
+    instance_name = (
+        serializers.SerializerMethodField()
+    )
     plot_name = serializers.SerializerMethodField()
     region = serializers.SerializerMethodField()
     sub_region = serializers.SerializerMethodField()
     enumerator = serializers.SerializerMethodField()
 
-    def get_plot_name(self, obj):
-        if obj.plot_name == "Unknown":
+    def get_instance_name(self, obj):
+        if obj.submission:
             return obj.submission.instance_name
-        return obj.plot_name
+        return None
+
+    def get_plot_name(self, obj):
+        if obj.plot_name:
+            return obj.plot_name
+        if obj.submission:
+            return obj.submission.instance_name
+        return None
 
     def _resolve_plot_fields(self, obj, field_spec):
         """Resolve comma-separated field spec for

@@ -165,7 +165,6 @@ class SubmissionApprovalClearsFlagsTest(
         )
         self.plot = Plot.objects.create(
             plot_name="Flagged Farmer",
-            instance_name="inst-flag",
             polygon_wkt="POLYGON((0 0,1 0,1 1,0 0))",
             min_lat=0.0,
             max_lat=1.0,

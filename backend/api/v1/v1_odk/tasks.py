@@ -54,3 +54,43 @@ def sync_kobo_validation_status(
             kobo_ids,
             asset_uid,
         )
+
+
+def sync_kobo_submission_geometry(
+    kobo_url,
+    kobo_username,
+    kobo_password_enc,
+    asset_uid,
+    kobo_id,
+    polygon_field_name,
+    odk_geoshape_str,
+):
+    """Sync edited polygon geometry back to
+    KoboToolbox as a submission data update.
+
+    All arguments are primitives so the task is
+    safe to serialise via the Django Q ORM broker.
+    """
+    try:
+        password = decrypt(kobo_password_enc)
+        client = KoboClient(
+            kobo_url, kobo_username, password
+        )
+        client.update_submission_data(
+            asset_uid,
+            kobo_id,
+            {polygon_field_name: odk_geoshape_str},
+        )
+        logger.info(
+            "Synced geometry for kobo_id=%s "
+            "on asset %s",
+            kobo_id,
+            asset_uid,
+        )
+    except Exception:
+        logger.exception(
+            "Failed to sync geometry "
+            "for kobo_id=%s on asset %s",
+            kobo_id,
+            asset_uid,
+        )

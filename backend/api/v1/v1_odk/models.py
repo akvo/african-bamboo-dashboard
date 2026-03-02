@@ -133,9 +133,19 @@ class Plot(models.Model):
     )
     plot_name = models.CharField(
         max_length=500,
+        null=True,
+        blank=True,
         help_text="Farmer full name",
     )
-    instance_name = models.CharField(max_length=255, db_index=True)
+    polygon_source_field = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        help_text=(
+            "Which polygon_field the geometry "
+            "was read from during extraction."
+        ),
+    )
     polygon_wkt = models.TextField(
         null=True,
         blank=True,
@@ -182,7 +192,14 @@ class Plot(models.Model):
         db_table = "plots"
 
     def __str__(self):
-        return self.plot_name
+        if self.plot_name:
+            return self.plot_name
+        if self.submission:
+            return (
+                self.submission.instance_name
+                or str(self.uuid)
+            )
+        return str(self.uuid)
 
 
 class FormQuestion(models.Model):

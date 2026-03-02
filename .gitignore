@@ -4,3 +4,4 @@
 .virtual_documents
 db.dbml
 app.env
+coverage.lcov

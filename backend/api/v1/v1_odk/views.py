@@ -1,4 +1,3 @@
-import logging
 import time
 from datetime import datetime
 from datetime import timezone as tz
@@ -21,10 +20,17 @@ from django_q.tasks import async_task
 from api.v1.v1_odk.constants import (
     ApprovalStatusTypes,
 )
+from api.v1.v1_odk.funcs import (
+    MAPPING_FIELDS,
+    SKIP_FIELD_TYPES,
+    check_and_flag_overlaps,
+    dispatch_kobo_geometry_sync,
+    rederive_plots,
+    sync_form_questions,
+    validate_and_check_plot,
+)
 from api.v1.v1_odk.models import (
     FormMetadata,
-    FormOption,
-    FormQuestion,
     Plot,
     Submission,
 )
@@ -40,164 +46,7 @@ from api.v1.v1_odk.serializers import (
 )
 from utils.encryption import decrypt
 from utils.kobo_client import KoboClient
-from utils.polygon import (
-    append_overlap_reason,
-    build_overlap_reason,
-    compute_bbox,
-    extract_plot_data,
-    find_overlapping_plots,
-)
-
-logger = logging.getLogger(__name__)
-
-SKIP_FIELD_TYPES = {
-    "start",
-    "end",
-    "calculate",
-    "note",
-    "begin_group",
-    "end_group",
-    "begin_repeat",
-    "end_repeat",
-}
-
-
-def _sync_form_questions(form, content):
-    """Sync survey questions and choices from
-    KoboToolbox asset content into FormQuestion
-    and FormOption records.
-
-    Deletes existing questions (cascades to options)
-    then bulk-creates from the asset content.
-    """
-    FormQuestion.objects.filter(form=form).delete()
-
-    survey = content.get("survey", [])
-    choices = content.get("choices", [])
-
-    # Build {list_name: [{name, label}, ...]}
-    choices_by_list = {}
-    for ch in choices:
-        ln = ch.get("list_name", "")
-        if not ln:
-            continue
-        label_list = ch.get("label", [])
-        label = label_list[0] if label_list else ch.get("name", "")
-        choices_by_list.setdefault(ln, []).append(
-            {"name": ch.get("name", ""), "label": label}
-        )
-
-    questions = []
-    # Map question object -> list_name for selects
-    select_list_map = []
-
-    for item in survey:
-        field_type = item.get("type", "")
-        if field_type in SKIP_FIELD_TYPES:
-            continue
-
-        name = item.get("$xpath", item.get("name", ""))
-        label_list = item.get("label", [])
-        label = label_list[0] if label_list else item.get("name", "")
-
-        # Determine select list_name
-        list_name = item.get("select_from_list_name", "")
-        q_type = field_type
-        if not list_name and field_type.startswith("select_"):
-            # Fallback: "select_one list_name" format
-            parts = field_type.split(" ", 1)
-            if len(parts) == 2:
-                q_type = parts[0]
-                list_name = parts[1]
-
-        q = FormQuestion(
-            form=form,
-            name=name,
-            label=label,
-            type=q_type,
-        )
-        questions.append(q)
-        if list_name:
-            select_list_map.append((len(questions) - 1, list_name))
-
-    created_qs = FormQuestion.objects.bulk_create(questions)
-
-    # Bulk-create options for select questions
-    options = []
-    for idx, list_name in select_list_map:
-        q = created_qs[idx]
-        for ch in choices_by_list.get(list_name, []):
-            options.append(
-                FormOption(
-                    question=q,
-                    name=ch["name"],
-                    label=ch["label"],
-                )
-            )
-
-    if options:
-        FormOption.objects.bulk_create(options)
-
-    return len(created_qs)
-
-
-MAPPING_FIELDS = {
-    "polygon_field",
-    "region_field",
-    "sub_region_field",
-    "plot_name_field",
-}
-
-
-def _rederive_plots(form):
-    """Re-derive plot fields from raw submission
-    data when field mappings change."""
-    plots = list(
-        Plot.objects.filter(form=form)
-        .select_related("submission")
-    )
-    updated = []
-    for plot in plots:
-        if not plot.submission:
-            continue
-        data = extract_plot_data(
-            plot.submission.raw_data, form
-        )
-        plot.plot_name = data["plot_name"]
-        plot.region = data["region"]
-        plot.sub_region = data["sub_region"]
-        plot.polygon_wkt = data["polygon_wkt"]
-        plot.min_lat = data["min_lat"]
-        plot.max_lat = data["max_lat"]
-        plot.min_lon = data["min_lon"]
-        plot.max_lon = data["max_lon"]
-        plot.flagged_for_review = data[
-            "flagged_for_review"
-        ]
-        plot.flagged_reason = data["flagged_reason"]
-        updated.append(plot)
-    if updated:
-        Plot.objects.bulk_update(
-            updated,
-            [
-                "plot_name",
-                "region",
-                "sub_region",
-                "polygon_wkt",
-                "min_lat",
-                "max_lat",
-                "min_lon",
-                "max_lon",
-                "flagged_for_review",
-                "flagged_reason",
-            ],
-        )
-    logger.info(
-        "Re-derived %d plots for form %s",
-        len(updated),
-        form.asset_uid,
-    )
-    return len(updated)
+from utils.polygon import extract_plot_data
 
 
 @extend_schema(tags=["Forms"])
@@ -232,7 +81,7 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
             for f in MAPPING_FIELDS
         )
         if changed:
-            _rederive_plots(instance)
+            rederive_plots(instance)
 
     @extend_schema(
         tags=["ODK"],
@@ -251,7 +100,9 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
             )
 
         try:
-            content = client.get_asset_detail(asset_uid)
+            content = client.get_asset_detail(
+                asset_uid
+            )
         except Exception as e:
             return Response(
                 {"message": str(e)},
@@ -270,7 +121,8 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
                     lbl
                     for lbl in label_list if lbl
                 )
-                if label_list else item.get("name", "")
+                if label_list
+                else item.get("name", "")
             )
             fields.append(
                 {
@@ -306,8 +158,12 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
         # Sync form questions and options
         questions_synced = 0
         try:
-            content = client.get_asset_detail(form.asset_uid)
-            questions_synced = _sync_form_questions(form, content)
+            content = client.get_asset_detail(
+                form.asset_uid
+            )
+            questions_synced = sync_form_questions(
+                form, content
+            )
         except Exception:
             pass  # Continue sync even if this fails
 
@@ -318,7 +174,9 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
                 tz=tz.utc,
             ).strftime("%Y-%m-%dT%H:%M:%S")
 
-        results = client.fetch_all_submissions(form.asset_uid, since_iso)
+        results = client.fetch_all_submissions(
+            form.asset_uid, since_iso
+        )
 
         created = 0
         plots_created = 0
@@ -340,8 +198,12 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
                     uuid=item["_uuid"],
                     defaults={
                         "form": form,
-                        "kobo_id": str(item["_id"]),
-                        "submission_time": sub_time_ms,
+                        "kobo_id": str(
+                            item["_id"]
+                        ),
+                        "submission_time": (
+                            sub_time_ms
+                        ),
                         "submitted_by": item.get(
                             "_submitted_by"
                         ),
@@ -373,11 +235,10 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
                 "plot_name": (
                     plot_data["plot_name"]
                 ),
-                "instance_name": (
-                    item.get(
-                        "meta/instanceName",
-                        "",
-                    )
+                "polygon_source_field": (
+                    plot_data[
+                        "polygon_source_field"
+                    ]
                 ),
                 "polygon_wkt": (
                     plot_data["polygon_wkt"]
@@ -424,90 +285,37 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
             else:
                 plots_updated += 1
 
-            # Overlap detection (unchecked only)
-            if (
-                plot_data["polygon_wkt"]
-                and plot.flagged_for_review is None
-            ):
-                bbox = compute_bbox(
-                    [
-                        (
-                            plot_data["min_lon"],
-                            plot_data["min_lat"],
-                        ),
-                        (
-                            plot_data["max_lon"],
-                            plot_data["max_lat"],
-                        ),
-                    ]
-                )
-                overlaps = (
-                    find_overlapping_plots(
-                        plot_data["polygon_wkt"],
-                        bbox,
-                        form.pk,
-                        exclude_pk=plot.pk,
-                    )
-                )
-                if overlaps:
-                    reason = (
-                        build_overlap_reason(
-                            overlaps
-                        )
-                    )
-                    plot.flagged_for_review = True
-                    plot.flagged_reason = reason
-                    plot.save(
-                        update_fields=[
-                            "flagged_for_review",
-                            "flagged_reason",
-                        ]
-                    )
-                    # Flag existing plots
-                    to_update = []
-                    for op in overlaps:
-                        op.flagged_for_review = (
-                            True
-                        )
-                        op.flagged_reason = (
-                            append_overlap_reason(
-                                op.flagged_reason,
-                                plot_data[
-                                    "plot_name"
-                                ],
-                                item.get(
-                                    "meta/"
-                                    "instanceName",
-                                    "",
-                                ),
-                            )
-                        )
-                        to_update.append(op)
-                    Plot.objects.bulk_update(
-                        to_update,
-                        [
-                            "flagged_for_review",
-                            "flagged_reason",
-                        ],
-                    )
-                else:
-                    # Checked, no overlaps
-                    plot.flagged_for_review = False
-                    plot.save(
-                        update_fields=[
-                            "flagged_for_review",
-                        ]
-                    )
+            # Overlap detection for valid geometry
+            if plot_data["polygon_wkt"]:
+                check_and_flag_overlaps(plot)
 
             if plot.flagged_for_review:
                 plots_flagged += 1
 
         if results:
-            latest = max(r["_submission_time"] for r in results)
+            latest = max(
+                r["_submission_time"]
+                for r in results
+            )
             form.last_sync_timestamp = int(
-                datetime.fromisoformat(latest).timestamp() * 1000
+                datetime.fromisoformat(
+                    latest
+                ).timestamp()
+                * 1000
             )
             form.save()
+
+        # Post-sync sweep: re-check plots whose
+        # flags were cleared by old buggy code
+        unchecked = Plot.objects.filter(
+            form=form,
+            flagged_for_review__isnull=True,
+            polygon_wkt__isnull=False,
+        )
+        for plot in unchecked:
+            check_and_flag_overlaps(plot)
+            if plot.flagged_for_review:
+                plots_flagged += 1
 
         return Response(
             {
@@ -547,11 +355,21 @@ class SubmissionViewSet(
     def get_serializer_context(self):
         ctx = super().get_serializer_context()
         if self.action == "list":
-            asset_uid = self.request.query_params.get("asset_uid")
+            asset_uid = (
+                self.request.query_params.get(
+                    "asset_uid"
+                )
+            )
             if asset_uid:
                 try:
-                    form = FormMetadata.objects.get(asset_uid=asset_uid)
-                    om, tm = build_option_lookup(form)
+                    form = (
+                        FormMetadata.objects.get(
+                            asset_uid=asset_uid
+                        )
+                    )
+                    om, tm = build_option_lookup(
+                        form
+                    )
                     ctx["option_lookup"] = om
                     ctx["type_map"] = tm
                 except FormMetadata.DoesNotExist:
@@ -581,7 +399,9 @@ class SubmissionViewSet(
             elif status_param in self.STATUS_MAP:
                 qs = qs.filter(
                     approval_status=(
-                        self.STATUS_MAP[status_param]
+                        self.STATUS_MAP[
+                            status_param
+                        ]
                     )
                 )
         return qs
@@ -619,19 +439,31 @@ class SubmissionViewSet(
     def latest_sync_time(self, request):
         """Get latest submission_time
         for a form."""
-        asset_uid = request.query_params.get("asset_uid")
+        asset_uid = request.query_params.get(
+            "asset_uid"
+        )
         if not asset_uid:
             return Response(
-                {"message": ("asset_uid is required")},
+                {
+                    "message": (
+                        "asset_uid is required"
+                    )
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
         latest = (
-            Submission.objects.filter(form__asset_uid=asset_uid)
+            Submission.objects.filter(
+                form__asset_uid=asset_uid
+            )
             .order_by("-submission_time")
-            .values_list("submission_time", flat=True)
+            .values_list(
+                "submission_time", flat=True
+            )
             .first()
         )
-        return Response({"latest_submission_time": latest})
+        return Response(
+            {"latest_submission_time": latest}
+        )
 
 
 @extend_schema(tags=["Plots"])
@@ -653,7 +485,11 @@ class PlotViewSet(
     }
 
     def get_queryset(self):
-        qs = super().get_queryset()
+        qs = (
+            super()
+            .get_queryset()
+            .select_related("submission")
+        )
         form_id = self.request.query_params.get(
             "form_id"
         )
@@ -676,10 +512,25 @@ class PlotViewSet(
             elif status_param in self.STATUS_MAP:
                 qs = qs.filter(
                     submission__approval_status=(
-                        self.STATUS_MAP[status_param]
+                        self.STATUS_MAP[
+                            status_param
+                        ]
                     )
                 )
         return qs
+
+    def perform_update(self, serializer):
+        instance = serializer.save()
+        if (
+            "polygon_wkt"
+            in serializer.validated_data
+        ):
+            validate_and_check_plot(instance)
+            dispatch_kobo_geometry_sync(
+                self.request.user,
+                instance,
+                instance.polygon_wkt,
+            )
 
     @extend_schema(
         request=PlotOverlapQuerySerializer,
@@ -690,7 +541,9 @@ class PlotViewSet(
     def overlap_candidates(self, request):
         """Find plots whose bounding boxes overlap
         with the given bounds."""
-        serializer = PlotOverlapQuerySerializer(data=request.data)
+        serializer = PlotOverlapQuerySerializer(
+            data=request.data
+        )
         serializer.is_valid(raise_exception=True)
         d = serializer.validated_data
 
@@ -701,18 +554,24 @@ class PlotViewSet(
             max_lat__gte=d["min_lat"],
         )
         if d.get("exclude_uuid"):
-            plots = plots.exclude(uuid=d["exclude_uuid"])
+            plots = plots.exclude(
+                uuid=d["exclude_uuid"]
+            )
 
-        return Response(PlotSerializer(plots, many=True).data)
+        return Response(
+            PlotSerializer(plots, many=True).data
+        )
 
     @extend_schema(
         tags=["ODK"],
-        summary="Reset polygon to original from Kobo",
+        summary=(
+            "Reset polygon to original from Kobo"
+        ),
     )
     @action(detail=True, methods=["post"])
     def reset_polygon(self, request, uuid=None):
-        """Re-derive polygon geometry from the linked
-        submission's raw_data."""
+        """Re-derive polygon geometry from the
+        linked submission's raw_data."""
         plot = self.get_object()
         if not plot.submission:
             return Response(
@@ -723,6 +582,9 @@ class PlotViewSet(
             plot.submission.raw_data, plot.form
         )
         plot.polygon_wkt = plot_data["polygon_wkt"]
+        plot.polygon_source_field = plot_data[
+            "polygon_source_field"
+        ]
         plot.min_lat = plot_data["min_lat"]
         plot.max_lat = plot_data["max_lat"]
         plot.min_lon = plot_data["min_lon"]
@@ -734,4 +596,11 @@ class PlotViewSet(
             "flagged_reason"
         ]
         plot.save()
+        # Re-run overlap detection for valid
+        # geometry
+        if plot_data["polygon_wkt"]:
+            check_and_flag_overlaps(plot)
+        dispatch_kobo_geometry_sync(
+            request.user, plot, plot.polygon_wkt
+        )
         return Response(PlotSerializer(plot).data)

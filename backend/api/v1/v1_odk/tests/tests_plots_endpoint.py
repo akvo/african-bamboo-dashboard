@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 from django.test import TestCase
 from django.test.utils import override_settings
 
@@ -36,7 +38,6 @@ class PlotViewTest(TestCase, OdkTestHelperMixin):
             overrides.setdefault("submission", sub)
         defaults = {
             "plot_name": "Farmer A",
-            "instance_name": "inst-1",
             "polygon_wkt": ("POLYGON((0 0,1 0,1 1,0 0))"),
             "min_lat": 0.0,
             "max_lat": 1.0,
@@ -55,7 +56,6 @@ class PlotViewTest(TestCase, OdkTestHelperMixin):
             "/api/v1/odk/plots/",
             {
                 "plot_name": "Farmer A",
-                "instance_name": "inst-1",
                 "polygon_wkt": ("POLYGON((0 0,1 0,1 1,0 0))"),
                 "min_lat": 0.0,
                 "max_lat": 1.0,
@@ -214,7 +214,6 @@ class PlotViewTest(TestCase, OdkTestHelperMixin):
         self._create_plot(
             submission=sub2,
             plot_name="Farmer B",
-            instance_name="inst-2",
             flagged_for_review=False,
         )
         resp = self.client.get(
@@ -242,3 +241,50 @@ class PlotViewTest(TestCase, OdkTestHelperMixin):
         self.assertEqual(
             len(resp.json()["results"]), 0
         )
+
+    @patch("api.v1.v1_odk.funcs.async_task")
+    def test_patch_polygon_triggers_kobo_sync(
+        self, mock_async,
+    ):
+        sub = self._create_submission(
+            kobo_id="300",
+        )
+        self.form.polygon_field = "geoshape"
+        self.form.save()
+        plot = self._create_plot(submission=sub)
+
+        new_wkt = (
+            "POLYGON(("
+            "38.47 7.05, 38.47 7.06, "
+            "38.48 7.06, 38.48 7.05, "
+            "38.47 7.05))"
+        )
+        resp = self.client.patch(
+            f"/api/v1/odk/plots/{plot.uuid}/",
+            {"polygon_wkt": new_wkt},
+            content_type="application/json",
+            **self.auth,
+        )
+        self.assertEqual(resp.status_code, 200)
+        mock_async.assert_called_once()
+        args = mock_async.call_args[0]
+        self.assertEqual(
+            args[0],
+            "api.v1.v1_odk.tasks"
+            ".sync_kobo_submission_geometry",
+        )
+
+    @patch("api.v1.v1_odk.funcs.async_task")
+    def test_patch_without_polygon_no_sync(
+        self, mock_async,
+    ):
+        self._create_plot()
+        plot = Plot.objects.first()
+        resp = self.client.patch(
+            f"/api/v1/odk/plots/{plot.uuid}/",
+            {"plot_name": "New Name"},
+            content_type="application/json",
+            **self.auth,
+        )
+        self.assertEqual(resp.status_code, 200)
+        mock_async.assert_not_called()

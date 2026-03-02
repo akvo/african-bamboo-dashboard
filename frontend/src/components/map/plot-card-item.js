@@ -25,9 +25,11 @@ export default function PlotCardItem({ plot, isSelected, onClick }) {
           <p className="truncate text-sm font-medium text-foreground">
             {plot.plot_name}
           </p>
-          <p className="truncate text-xs text-muted-foreground">
-            {plot.instance_name}
-          </p>
+          {plot.instance_name !== plot.plot_name && (
+            <p className="truncate text-xs text-muted-foreground">
+              {plot.instance_name}
+            </p>
+          )}
         </div>
         <StatusBadge status={status} />
         <ChevronRight className="size-4 shrink-0 text-muted-foreground" />

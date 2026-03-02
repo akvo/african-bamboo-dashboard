@@ -97,7 +97,7 @@ export default function MapPage() {
       setEditedGeo(null);
       mapState.handleCancelEditing();
       await refetch();
-      mapState.setToastMessage("Geometry saved successfully");
+      mapState.setToastMessage("Geometry saved. Syncing to Kobo...");
     } catch {
       mapState.setToastMessage({
         message: "Failed to save geometry. Please try again.",
@@ -122,7 +122,7 @@ export default function MapPage() {
       await api.post(`/v1/odk/plots/${mapState.editingPlotId}/reset_polygon/`);
       setEditedGeo(null);
       await refetch();
-      mapState.setToastMessage("Polygon reset to original");
+      mapState.setToastMessage("Polygon reset to original. Syncing to Kobo...");
     } catch {
       mapState.setToastMessage({
         message: "Failed to reset polygon. Please try again.",

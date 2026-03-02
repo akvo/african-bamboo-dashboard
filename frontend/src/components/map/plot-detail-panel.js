@@ -98,9 +98,11 @@ export default function PlotDetailPanel({
               <h2 className="text-lg font-semibold">{plot.plot_name}</h2>
               <StatusBadge status={status} />
             </div>
-            <p className="text-sm text-muted-foreground">
-              {plot.instance_name}
-            </p>
+            {plot.plot_name !== plot.instance_name && (
+              <p className="text-sm text-muted-foreground">
+                {plot.instance_name}
+              </p>
+            )}
           </div>
 
           {/* Flagged reason banner */}

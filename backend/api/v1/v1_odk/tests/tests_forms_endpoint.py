@@ -394,7 +394,6 @@ class FormMappingRederiveTest(
             form=self.form,
             submission=self.sub,
             plot_name="Abebe",
-            instance_name="inst-rd1",
             region="Oromia",
             sub_region="Jimma",
             created_at=1700000000000,

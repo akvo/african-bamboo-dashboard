@@ -35,8 +35,8 @@ export default function SaveEditDialog({ open, onOpenChange, onConfirm }) {
             Save polygon changes?
           </DialogTitle>
           <DialogDescription className="text-center">
-            This will overwrite the current polygon geometry. The original data
-            in Kobo remains unchanged.
+            This will overwrite the current polygon geometry. The changes will
+            also be synced to Kobo.
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>

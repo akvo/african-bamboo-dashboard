@@ -146,7 +146,6 @@ class PlotModelTest(TestCase):
     def test_create_plot(self):
         plot = Plot.objects.create(
             plot_name="Farmer A",
-            instance_name="inst-1",
             polygon_wkt=("POLYGON((0 0,1 0,1 1,0 0))"),
             min_lat=0.0,
             max_lat=1.0,
@@ -163,7 +162,6 @@ class PlotModelTest(TestCase):
     def test_create_plot_null_geometry(self):
         plot = Plot.objects.create(
             plot_name="Farmer B",
-            instance_name="inst-2",
             form=self.form,
             region="Region A",
             sub_region="Sub A",
@@ -172,14 +170,17 @@ class PlotModelTest(TestCase):
         self.assertIsNone(plot.polygon_wkt)
         self.assertIsNone(plot.min_lat)
 
-    def test_plot_str(self):
+    def test_plot_str_with_name(self):
         plot = Plot(plot_name="Farmer B")
         self.assertEqual(str(plot), "Farmer B")
+
+    def test_plot_str_without_name(self):
+        plot = Plot(uuid="test-uuid")
+        self.assertEqual(str(plot), "test-uuid")
 
     def test_submission_set_null_on_delete(self):
         plot = Plot.objects.create(
             plot_name="Farmer C",
-            instance_name="inst-3",
             polygon_wkt=("POLYGON((0 0,1 0,1 1,0 0))"),
             min_lat=0.0,
             max_lat=1.0,
@@ -198,7 +199,6 @@ class PlotModelTest(TestCase):
     def test_default_flag_values(self):
         plot = Plot.objects.create(
             plot_name="Farmer Flag",
-            instance_name="inst-flag",
             form=self.form,
             region="R",
             sub_region="SR",
@@ -210,7 +210,6 @@ class PlotModelTest(TestCase):
     def test_explicitly_flagged_plot(self):
         plot = Plot.objects.create(
             plot_name="Farmer Flagged",
-            instance_name="inst-flagged",
             form=self.form,
             region="R",
             sub_region="SR",
@@ -231,7 +230,6 @@ class PlotModelTest(TestCase):
         Plot.objects.create(
             uuid="plot-1",
             plot_name="Farmer D",
-            instance_name="inst-4",
             polygon_wkt=("POLYGON((0 0,1 0,1 1,0 0))"),
             min_lat=0.0,
             max_lat=1.0,
@@ -247,7 +245,6 @@ class PlotModelTest(TestCase):
             Plot.objects.create(
                 uuid="plot-2",
                 plot_name="Farmer E",
-                instance_name="inst-5",
                 polygon_wkt=("POLYGON((0 0,1 0,1 1,0 0))"),
                 min_lat=0.0,
                 max_lat=1.0,

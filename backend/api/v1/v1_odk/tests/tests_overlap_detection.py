@@ -296,6 +296,29 @@ class BuildOverlapReasonTest(TestCase):
         self.assertIn("Abebe (inst1)", reason)
         self.assertIn("Kebede (inst2)", reason)
 
+    def test_no_duplicate_when_name_matches(self):
+        plots = [
+            self._make_plot(None, "enum-001")
+        ]
+        reason = build_overlap_reason(plots)
+        self.assertEqual(
+            reason,
+            "Polygon overlaps with: enum-001",
+        )
+
+    def test_shows_both_when_name_differs(self):
+        plots = [
+            self._make_plot(
+                "Farmer A", "enum-001"
+            )
+        ]
+        reason = build_overlap_reason(plots)
+        self.assertEqual(
+            reason,
+            "Polygon overlaps with: "
+            "Farmer A (enum-001)",
+        )
+
     def test_truncation(self):
         plots = [
             self._make_plot(
@@ -319,6 +342,15 @@ class AppendOverlapReasonTest(TestCase):
             result,
             "Polygon overlaps with: "
             "Abebe (inst1)",
+        )
+
+    def test_append_no_duplicate_when_same(self):
+        result = append_overlap_reason(
+            None, "enum-001", "enum-001"
+        )
+        self.assertEqual(
+            result,
+            "Polygon overlaps with: enum-001",
         )
 
     def test_append_to_existing(self):

@@ -312,7 +312,7 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
             flagged_for_review__isnull=True,
             polygon_wkt__isnull=False,
         )
-        for plot in unchecked:
+        for plot in unchecked.iterator():
             check_and_flag_overlaps(plot)
             if plot.flagged_for_review:
                 plots_flagged += 1

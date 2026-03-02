@@ -301,6 +301,16 @@ def find_overlapping_plots(
     return overlapping
 
 
+def _format_plot_label(plot_name, instance_name):
+    """Format a plot label for overlap reasons.
+
+    Shows 'plot_name (instance)' only when they
+    differ; otherwise just the identifier."""
+    if plot_name and plot_name != instance_name:
+        return f"{plot_name} ({instance_name})"
+    return instance_name
+
+
 def build_overlap_reason(overlapping_plots):
     """Build a reason string listing overlapping
     plots. Truncates to 500 chars if needed."""
@@ -312,7 +322,7 @@ def build_overlap_reason(overlapping_plots):
             else None
         ) or str(p.uuid)
         parts.append(
-            f"{p.plot_name or inst} ({inst})"
+            _format_plot_label(p.plot_name, inst)
         )
     msg = (
         "Polygon overlaps with: "
@@ -338,9 +348,11 @@ def append_overlap_reason(
     ):
         return existing_reason
 
+    label = _format_plot_label(
+        new_plot_name, new_instance
+    )
     overlap_msg = (
-        f"Polygon overlaps with: "
-        f"{new_plot_name} ({new_instance})"
+        f"Polygon overlaps with: {label}"
     )
 
     if not existing_reason:

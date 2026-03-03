@@ -148,6 +148,17 @@ class SubmissionDetailSerializer(serializers.ModelSerializer):
 
     form = serializers.CharField(source="form.asset_uid", read_only=True)
     resolved_data = serializers.SerializerMethodField()
+    questions = serializers.SerializerMethodField()
+
+    EXCLUDED_QUESTION_TYPES = {
+        "geoshape",
+        "geotrace",
+        "geopoint",
+        "image",
+        "file",
+        "audio",
+        "video",
+    }
 
     class Meta:
         model = Submission
@@ -165,6 +176,37 @@ class SubmissionDetailSerializer(serializers.ModelSerializer):
                     type_map.get(key),
                 )
         return resolved
+
+    def get_questions(self, obj):
+        form = obj.form
+        mapped_fields = set()
+        for spec in [
+            form.region_field,
+            form.sub_region_field,
+            form.plot_name_field,
+        ]:
+            if spec:
+                for f in spec.split(","):
+                    stripped = f.strip()
+                    if stripped:
+                        mapped_fields.add(stripped)
+
+        qs = (
+            FormQuestion.objects.filter(form=form)
+            .exclude(
+                type__in=self.EXCLUDED_QUESTION_TYPES
+            )
+            .order_by("pk")
+        )
+        return [
+            {
+                "name": q.name,
+                "label": q.label,
+                "type": q.type,
+            }
+            for q in qs
+            if q.name not in mapped_fields
+        ]
 
 
 class SubmissionUpdateSerializer(serializers.ModelSerializer):

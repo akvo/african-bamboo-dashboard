@@ -60,15 +60,14 @@ def sync_form_questions(form, content):
         ln = ch.get("list_name", "")
         if not ln:
             continue
+        choice_name = ch.get("name", "")
         label_list = ch.get("label", [])
-        label = (
-            label_list[0]
-            if label_list
-            else ch.get("name", "")
-        )
+        label = " ".join(
+            [lb for lb in label_list if lb]
+        ) if len(label_list) else choice_name
         choices_by_list.setdefault(ln, []).append(
             {
-                "name": ch.get("name", ""),
+                "name": choice_name,
                 "label": label,
             }
         )
@@ -86,11 +85,14 @@ def sync_form_questions(form, content):
             "$xpath", item.get("name", "")
         )
         label_list = item.get("label", [])
-        label = (
-            label_list[0]
-            if label_list
-            else item.get("name", "")
-        )
+        # Join multi-language labels with spaces,
+        # or fallback to name
+        label_list = [
+            lb
+            for lb in label_list
+            if lb
+        ]
+        label = " ".join(label_list) if len(label_list) else name
 
         # Determine select list_name
         list_name = item.get(

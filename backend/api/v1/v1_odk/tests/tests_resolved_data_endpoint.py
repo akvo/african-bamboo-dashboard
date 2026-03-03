@@ -89,6 +89,37 @@ class ResolvedDataDetailTest(TestCase, OdkTestHelperMixin):
             name="coffee",
             label="Coffee",
         )
+        # Extra questions for questions-field tests
+        FormQuestion.objects.create(
+            form=self.form,
+            name="full_name",
+            label="Full Name",
+            type="text",
+        )
+        FormQuestion.objects.create(
+            form=self.form,
+            name="age",
+            label="Age",
+            type="integer",
+        )
+        FormQuestion.objects.create(
+            form=self.form,
+            name="plot_geo",
+            label="Plot Geometry",
+            type="geoshape",
+        )
+        FormQuestion.objects.create(
+            form=self.form,
+            name="plot_trace",
+            label="Plot Trace",
+            type="geotrace",
+        )
+        FormQuestion.objects.create(
+            form=self.form,
+            name="photo",
+            label="Photo",
+            type="image",
+        )
 
     def test_detail_includes_resolved_data(self):
         resp = self.client.get(
@@ -149,6 +180,53 @@ class ResolvedDataDetailTest(TestCase, OdkTestHelperMixin):
             data["resolved_data"],
             data["raw_data"],
         )
+
+    def test_detail_includes_questions(self):
+        resp = self.client.get(
+            "/api/v1/odk/submissions/sub-r1/",
+            **self.auth,
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertIn("questions", data)
+        self.assertIsInstance(data["questions"], list)
+        self.assertTrue(len(data["questions"]) > 0)
+
+    def test_questions_have_name_label_type(self):
+        resp = self.client.get(
+            "/api/v1/odk/submissions/sub-r1/",
+            **self.auth,
+        )
+        questions = resp.json()["questions"]
+        for q in questions:
+            self.assertIn("name", q)
+            self.assertIn("label", q)
+            self.assertIn("type", q)
+
+    def test_questions_exclude_geometry_types(self):
+        resp = self.client.get(
+            "/api/v1/odk/submissions/sub-r1/",
+            **self.auth,
+        )
+        questions = resp.json()["questions"]
+        names = [q["name"] for q in questions]
+        self.assertNotIn("plot_geo", names)
+        self.assertNotIn("plot_trace", names)
+        types = [q["type"] for q in questions]
+        self.assertNotIn("geoshape", types)
+        self.assertNotIn("geotrace", types)
+        self.assertNotIn("image", types)
+
+    def test_questions_exclude_mapped_fields(self):
+        resp = self.client.get(
+            "/api/v1/odk/submissions/sub-r1/",
+            **self.auth,
+        )
+        questions = resp.json()["questions"]
+        names = [q["name"] for q in questions]
+        # region and woreda are mapped fields
+        self.assertNotIn("region", names)
+        self.assertNotIn("woreda", names)
 
 
 @override_settings(USE_TZ=False, TEST_ENV=True)

@@ -172,8 +172,16 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
             questions_synced = sync_form_questions(
                 form, content
             )
-        except Exception:
-            pass  # Continue sync even if this fails
+        except Exception as e:
+            return Response(
+                {
+                    "message": (
+                        f"Error syncing form "
+                        f"questions: {str(e)}"
+                    )
+                },
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
 
         since_iso = None
         if form.last_sync_timestamp > 0:

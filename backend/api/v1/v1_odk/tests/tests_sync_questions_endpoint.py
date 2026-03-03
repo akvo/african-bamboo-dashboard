@@ -199,7 +199,7 @@ class SyncQuestionsTest(TestCase, OdkTestHelperMixin):
         self.assertEqual(crops_q.options.count(), 2)
 
     @patch("api.v1.v1_odk.views.KoboClient")
-    def test_sync_continues_on_asset_detail_failure(self, mock_client_cls):
+    def test_sync_stop_on_asset_detail_failure(self, mock_client_cls):
         mock = mock_client_cls.return_value
         mock.get_asset_detail.side_effect = Exception("API error")
         mock.fetch_all_submissions.return_value = [
@@ -218,10 +218,7 @@ class SyncQuestionsTest(TestCase, OdkTestHelperMixin):
             content_type="application/json",
             **self.auth,
         )
-        self.assertEqual(resp.status_code, 200)
-        data = resp.json()
-        self.assertEqual(data["questions_synced"], 0)
-        self.assertEqual(data["synced"], 1)
+        self.assertEqual(resp.status_code, 502)
 
     @patch("api.v1.v1_odk.views.KoboClient")
     def test_xpath_used_as_question_name(self, mock_client_cls):

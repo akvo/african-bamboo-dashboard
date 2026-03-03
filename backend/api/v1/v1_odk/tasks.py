@@ -17,6 +17,9 @@ from api.v1.v1_jobs.constants import (
 )
 from api.v1.v1_jobs.models import Jobs
 from api.v1.v1_odk.models import Plot
+from api.v1.v1_odk.models import (
+    FormMetadata,
+)
 from utils.encryption import decrypt
 from utils.kobo_client import KoboClient
 
@@ -50,10 +53,6 @@ def generate_export_file(job_id):
         info = job.info or {}
         form_id = info.get("form_id")
         filters = info.get("filters", {})
-
-        from api.v1.v1_odk.models import (
-            FormMetadata,
-        )
 
         form = FormMetadata.objects.get(
             asset_uid=form_id

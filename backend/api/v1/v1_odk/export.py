@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import re
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -9,6 +10,7 @@ from zipfile import ZipFile
 import shapefile
 from shapely import wkt as shapely_wkt
 from shapely.geometry import mapping
+from shapely.geometry.polygon import orient
 
 from django.conf import settings
 
@@ -66,6 +68,43 @@ def _epoch_ms_to_iso(epoch_ms):
         return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
     except (ValueError, TypeError, OSError):
         return ""
+
+
+def _close_wkt_rings(wkt_string):
+    """Close any unclosed linear rings in a
+    WKT POLYGON or MULTIPOLYGON string.
+
+    Fixes 'Points of LinearRing do not form
+    a closed linestring' errors.
+    """
+
+    def _close_ring(match):
+        coords_str = match.group(1)
+        coords = [
+            c.strip()
+            for c in coords_str.split(",")
+        ]
+        if coords and coords[0] != coords[-1]:
+            coords.append(coords[0])
+        return "(" + ", ".join(coords) + ")"
+
+    return re.sub(
+        r"\(([^()]+)\)", _close_ring, wkt_string
+    )
+
+
+def _parse_wkt(wkt_string):
+    """Parse WKT string into a Shapely geometry,
+    attempting to repair unclosed rings if the
+    initial parse fails."""
+    try:
+        geom = shapely_wkt.loads(wkt_string)
+    except Exception:
+        fixed = _close_wkt_rings(wkt_string)
+        geom = shapely_wkt.loads(fixed)
+    if not geom.is_valid:
+        geom = geom.buffer(0)
+    return geom
 
 
 def _resolve_field_spec(
@@ -195,9 +234,7 @@ def _wkt_to_pyshp_parts(wkt_string):
     or None if invalid.
     """
     try:
-        geom = shapely_wkt.loads(wkt_string)
-        if not geom.is_valid:
-            geom = geom.buffer(0)
+        geom = _parse_wkt(wkt_string)
 
         if geom.geom_type == "MultiPolygon":
             polygons = geom.geoms
@@ -212,6 +249,9 @@ def _wkt_to_pyshp_parts(wkt_string):
 
         parts = []
         for poly in polygons:
+            # Shapefile requires CW exterior,
+            # CCW interior (sign=-1.0)
+            poly = orient(poly, sign=-1.0)
             parts.append(
                 [
                     [c[0], c[1]]
@@ -299,12 +339,18 @@ def generate_shapefile(
         with open(prj_path, "w") as prj_file:
             prj_file.write(WGS84_PRJ)
 
+    # Write .cpg file (encoding declaration)
+    cpg_path = shp_path + ".cpg"
+    with open(cpg_path, "w") as cpg_file:
+        cpg_file.write("UTF-8")
+
     # Zip all shapefile components
     zip_path = os.path.join(
         output_dir, f"{filename}.zip"
     )
+    exts = ["shp", "shx", "dbf", "prj", "cpg"]
     with ZipFile(zip_path, "w") as zf:
-        for ext in ["shp", "shx", "dbf", "prj"]:
+        for ext in exts:
             fpath = f"{shp_path}.{ext}"
             if os.path.exists(fpath):
                 zf.write(
@@ -335,11 +381,7 @@ def generate_geojson(
     ).iterator()
     for plot in qs:
         try:
-            geom = shapely_wkt.loads(
-                plot.polygon_wkt
-            )
-            if not geom.is_valid:
-                geom = geom.buffer(0)
+            geom = _parse_wkt(plot.polygon_wkt)
         except Exception as e:
             logger.warning(
                 "Skipping plot %s: %s",

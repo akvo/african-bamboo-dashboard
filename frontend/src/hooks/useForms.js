@@ -16,6 +16,7 @@ export function FormsProvider({ children }) {
   const [activeForm, setActiveForm] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [isChanged, setIsChanged] = useState(false);
 
   const fetchForms = useCallback(async () => {
     setIsLoading(true);
@@ -82,6 +83,8 @@ export function FormsProvider({ children }) {
         forms,
         activeForm,
         setActiveForm,
+        isChanged,
+        setIsChanged,
         isLoading,
         error,
         registerForm,

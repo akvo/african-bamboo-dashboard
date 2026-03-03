@@ -1,37 +1,40 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useForms } from "@/hooks/useForms";
-import { usePlots } from "@/hooks/usePlots";
 import { useMapState } from "@/hooks/useMapState";
 import { toWktPolygon } from "@/lib/wkt-parser";
 import { calculateBbox } from "@/lib/plot-utils";
 import api from "@/lib/api";
 import { DEFAULT_BASEMAP } from "@/lib/basemap-config";
+import { CheckCircle2, XCircle, Save } from "lucide-react";
 
 import MapContainerDynamic from "@/components/map/map-container-dynamic";
 import MapFilterBar from "@/components/map/map-filter-bar";
 import PlotListPanel from "@/components/map/plot-list-panel";
 import PlotDetailPanel from "@/components/map/plot-detail-panel";
-import ApprovalDialog from "@/components/map/approval-dialog";
-import RejectionDialog from "@/components/map/rejection-dialog";
-import SaveEditDialog from "@/components/map/save-edit-dialog";
+import ConfirmDialog from "@/components/map/confirm-dialog";
 import ToastNotification from "@/components/map/toast-notification";
 
 export default function MapPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const { activeForm, isChanged, setIsChanged } = useForms();
-  const { plots, count, isLoading, refetch } = usePlots({
-    formId: activeForm?.asset_uid,
-  });
+  const { isChanged, setIsChanged } = useForms();
 
-  const mapState = useMapState({
-    plots,
-    initialPlotId: searchParams.get("plot"),
-  });
+  const mapState = useMapState();
+  const { plots, count, isLoading, refetch } = mapState;
+
+  const initialPlotApplied = useRef(false);
+
+  useEffect(() => {
+    const plotId = searchParams.get("plot");
+    if (plotId && !initialPlotApplied.current) {
+      mapState.setSelectedPlotId(plotId);
+      initialPlotApplied.current = true;
+    }
+  }, [searchParams, mapState]);
 
   const [editedGeo, setEditedGeo] = useState(null);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
@@ -198,20 +201,50 @@ export default function MapPage() {
       </div>
 
       {/* Dialogs */}
-      <ApprovalDialog
+      <ConfirmDialog
         open={mapState.approvalDialogOpen}
         onOpenChange={mapState.setApprovalDialogOpen}
         onConfirm={handleApprove}
+        icon={CheckCircle2}
+        iconClassName="text-status-approved"
+        iconBgClassName="bg-status-approved/15"
+        title="Confirm Approval"
+        description="Approve this plot to confirm the boundary mapping is valid."
+        confirmLabel="Confirm"
+        confirmingLabel="Approving..."
+        confirmClassName="bg-status-approved text-white hover:bg-status-approved/90"
+        textarea={{
+          label: "Notes to enumerator",
+          placeholder: "Optional notes...",
+        }}
       />
-      <RejectionDialog
+      <ConfirmDialog
         open={mapState.rejectionDialogOpen}
         onOpenChange={mapState.setRejectionDialogOpen}
         onConfirm={handleReject}
+        icon={XCircle}
+        iconClassName="text-status-rejected"
+        iconBgClassName="bg-status-rejected/15"
+        title="Reject Plot"
+        description="Provide a reason for rejecting this plot boundary."
+        confirmLabel="Reject"
+        confirmingLabel="Rejecting..."
+        confirmVariant="destructive"
+        textarea={{
+          label: "Reason for rejection *",
+          placeholder: "Describe the issue...",
+          required: true,
+        }}
       />
-      <SaveEditDialog
+      <ConfirmDialog
         open={saveDialogOpen}
         onOpenChange={setSaveDialogOpen}
         onConfirm={handleSaveEdit}
+        icon={Save}
+        title="Save polygon changes?"
+        description="This will overwrite the current polygon geometry. The changes will also be synced to Kobo."
+        confirmLabel="Confirm Save"
+        confirmingLabel="Saving..."
       />
 
       {/* Toast */}

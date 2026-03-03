@@ -9,6 +9,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { getPlotStatus } from "@/lib/plot-utils";
 import api from "@/lib/api";
+import { useMapState } from "@/hooks/useMapState";
 
 function MetadataRow({ label, value }) {
   if (!value) {
@@ -31,7 +32,8 @@ export default function PlotDetailPanel({
 }) {
   const [submission, setSubmission] = useState(null);
   const [isLoadingSub, setIsLoadingSub] = useState(false);
-  const [notes, setNotes] = useState("");
+  const [isResetting, setIsResetting] = useState(false);
+  const { notes, setNotes } = useMapState();
 
   useEffect(() => {
     if (!plot?.submission_uuid) {
@@ -61,7 +63,7 @@ export default function PlotDetailPanel({
     return () => {
       cancelled = true;
     };
-  }, [plot?.submission_uuid]);
+  }, [plot.submission_uuid, setNotes]);
 
   if (!plot) return null;
 
@@ -191,7 +193,7 @@ export default function PlotDetailPanel({
       </ScrollArea>
 
       {/* Action buttons */}
-      {["pending", "flagged"].includes(status) && (
+      {(["pending", "flagged"].includes(status) || isResetting) && (
         <div className="flex gap-2 border-t border-border p-4 position-sticky bottom-0 bg-card">
           <Button
             className="flex-1 bg-status-approved text-white hover:bg-status-approved/90"
@@ -205,6 +207,17 @@ export default function PlotDetailPanel({
             onClick={() => onReject(notes)}
           >
             Reject
+          </Button>
+        </div>
+      )}
+      {["approved", "rejected"].includes(status) && !isResetting && (
+        <div className="flex gap-2 border-t border-border p-4 position-sticky bottom-0 bg-card">
+          <Button
+            variant="outline"
+            className="flex-1"
+            onClick={() => setIsResetting(true)}
+          >
+            Reset Approval
           </Button>
         </div>
       )}

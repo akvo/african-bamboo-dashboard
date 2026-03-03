@@ -51,15 +51,16 @@ export default function MapPage() {
 
   const handleApprove = useCallback(
     async (notes) => {
-      if (!mapState.selectedPlot?.submission_uuid) return;
+      if (!mapState.selectedPlot?.submission_uuid) {
+        return;
+      }
       try {
         await api.patch(
           `/v1/odk/submissions/${mapState.selectedPlot.submission_uuid}/`,
           { approval_status: 1, reviewer_notes: notes || "" },
         );
-        mapState.setApprovalDialogOpen(false);
-        mapState.handleBackToList();
         await refetch();
+        mapState.setApprovalDialogOpen(false);
         mapState.setToastMessage("Plot approved successfully");
       } catch {
         mapState.setApprovalDialogOpen(false);
@@ -74,15 +75,16 @@ export default function MapPage() {
 
   const handleReject = useCallback(
     async (reason) => {
-      if (!mapState.selectedPlot?.submission_uuid) return;
+      if (!mapState.selectedPlot?.submission_uuid) {
+        return;
+      }
       try {
         await api.patch(
           `/v1/odk/submissions/${mapState.selectedPlot.submission_uuid}/`,
           { approval_status: 2, reviewer_notes: reason },
         );
-        mapState.setRejectionDialogOpen(false);
-        mapState.handleBackToList();
         await refetch();
+        mapState.setRejectionDialogOpen(false);
         mapState.setToastMessage("Plot rejected");
       } catch {
         mapState.setRejectionDialogOpen(false);

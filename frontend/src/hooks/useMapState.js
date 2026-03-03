@@ -4,7 +4,6 @@ import { useState, useCallback, useMemo } from "react";
 
 export function useMapState({ plots, initialPlotId = null }) {
   const [selectedPlotId, setSelectedPlotId] = useState(initialPlotId);
-  const [panelMode, setPanelMode] = useState(initialPlotId ? "detail" : "list");
   const [editingPlotId, setEditingPlotId] = useState(null);
   const [approvalDialogOpen, setApprovalDialogOpen] = useState(false);
   const [rejectionDialogOpen, setRejectionDialogOpen] = useState(false);
@@ -32,19 +31,19 @@ export function useMapState({ plots, initialPlotId = null }) {
     (plotUuid) => {
       if (editingPlotId && plotUuid !== editingPlotId) return;
       setSelectedPlotId(plotUuid);
-      if (plotUuid) setPanelMode("detail");
     },
     [editingPlotId],
   );
 
   const handleBackToList = useCallback(() => {
     setSelectedPlotId(null);
-    setPanelMode("list");
     setEditingPlotId(null);
   }, []);
 
   const handleStartEditing = useCallback(() => {
-    if (selectedPlotId) setEditingPlotId(selectedPlotId);
+    if (selectedPlotId) {
+      setEditingPlotId(selectedPlotId);
+    }
   }, [selectedPlotId]);
 
   const handleCancelEditing = useCallback(() => {
@@ -54,7 +53,6 @@ export function useMapState({ plots, initialPlotId = null }) {
   return {
     selectedPlotId,
     selectedPlot,
-    panelMode,
     editingPlotId,
     approvalDialogOpen,
     rejectionDialogOpen,
@@ -68,6 +66,7 @@ export function useMapState({ plots, initialPlotId = null }) {
     setToastMessage,
     setApprovalDialogOpen,
     setRejectionDialogOpen,
+    setSelectedPlotId,
     handleSelectPlot,
     handleBackToList,
     handleStartEditing,

@@ -1,10 +1,135 @@
 import logging
 
-from api.v1.v1_odk.constants import ApprovalStatusTypes
+from django.utils import timezone
+
+from api.v1.v1_odk.constants import (
+    ApprovalStatusTypes,
+)
+from api.v1.v1_odk.export import (
+    EXPORT_DIR,
+    cleanup_old_exports,
+    generate_geojson,
+    generate_shapefile,
+)
+from api.v1.v1_jobs.constants import (
+    JobStatus,
+    JobTypes,
+)
+from api.v1.v1_jobs.models import Jobs
+from api.v1.v1_odk.models import Plot
+from api.v1.v1_odk.models import (
+    FormMetadata,
+)
 from utils.encryption import decrypt
 from utils.kobo_client import KoboClient
 
 logger = logging.getLogger(__name__)
+
+
+STATUS_MAP = {
+    "approved": ApprovalStatusTypes.APPROVED,
+    "rejected": ApprovalStatusTypes.REJECTED,
+}
+
+
+def generate_export_file(job_id):
+    """Generate export file (Shapefile or GeoJSON)
+    for the given job.
+
+    Called asynchronously via Django-Q2 worker.
+    """
+    try:
+        job = Jobs.objects.get(pk=job_id)
+    except Jobs.DoesNotExist:
+        logger.error("Job %s not found", job_id)
+        return
+
+    job.status = JobStatus.on_progress
+    job.save()
+
+    try:
+        cleanup_old_exports()
+
+        info = job.info or {}
+        form_id = info.get("form_id")
+        filters = info.get("filters", {})
+
+        form = FormMetadata.objects.get(
+            asset_uid=form_id
+        )
+
+        qs = Plot.objects.filter(form=form)
+
+        # Apply status filter
+        status_param = filters.get("status")
+        if status_param:
+            if status_param == "flagged":
+                qs = qs.filter(
+                    flagged_for_review=True
+                )
+            elif status_param == "pending":
+                qs = qs.filter(
+                    submission__approval_status__isnull=True,  # noqa: E501
+                )
+            elif status_param in STATUS_MAP:
+                qs = qs.filter(
+                    submission__approval_status=(
+                        STATUS_MAP[status_param]
+                    )
+                )
+
+        # Apply search filter
+        search = filters.get("search")
+        if search:
+            qs = qs.filter(
+                plot_name__icontains=search
+            )
+
+        # Exclude plots without geometry
+        qs = qs.filter(
+            polygon_wkt__isnull=False
+        ).exclude(polygon_wkt="")
+
+        output_dir = str(EXPORT_DIR)
+        filename = f"plots_{form_id}_{job_id}"
+
+        if job.type == JobTypes.export_geojson:
+            file_path, count = generate_geojson(
+                qs, form, output_dir, filename
+            )
+        else:
+            file_path, count = (
+                generate_shapefile(
+                    qs,
+                    form,
+                    output_dir,
+                    filename,
+                )
+            )
+
+        job.status = JobStatus.done
+        job.info = {
+            **info,
+            "file_path": file_path,
+            "record_count": count,
+        }
+        job.available = timezone.now()
+        job.save()
+
+        logger.info(
+            "Export job %s completed: "
+            "%d records, file=%s",
+            job_id,
+            count,
+            file_path,
+        )
+    except Exception as e:
+        logger.exception(
+            "Export job %s failed", job_id
+        )
+        job.status = JobStatus.failed
+        job.result = str(e)
+        job.save()
 
 
 def sync_kobo_validation_status(

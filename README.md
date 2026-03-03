@@ -248,6 +248,12 @@ curl -X POST http://localhost:8000/api/v1/odk/plots/overlap_candidates/ \
   -d '{ "min_lat": 9.0, "max_lat": 9.1, "min_lon": 38.7, "max_lon": 38.8 }'
 ```
 
+### Exported Shapefile — Polygons Not Visible in QGIS
+
+If polygons don't appear after opening an exported Shapefile in QGIS, the plots may be spread across distant geographic regions. QGIS zooms to fit the full extent, making small polygons invisible at that scale.
+
+To verify: open the attribute table, right-click a row, and select **Zoom to Feature** — the polygon should appear.
+
 ### API Endpoint Summary
 
 | Method | Endpoint | Description |

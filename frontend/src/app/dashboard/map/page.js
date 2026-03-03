@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useForms } from "@/hooks/useForms";
@@ -23,7 +23,7 @@ import ToastNotification from "@/components/map/toast-notification";
 export default function MapPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const { activeForm } = useForms();
+  const { activeForm, isChanged, setIsChanged } = useForms();
   const { plots, count, isLoading, refetch } = usePlots({
     formId: activeForm?.asset_uid,
   });
@@ -37,6 +37,14 @@ export default function MapPage() {
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [basemap, setBasemap] = useState(DEFAULT_BASEMAP);
   const [isResetting, setIsResetting] = useState(false);
+
+  useEffect(() => {
+    if (isChanged) {
+      mapState.setSelectedPlotId(null);
+      refetch();
+      setIsChanged(false);
+    }
+  }, [isChanged, setIsChanged, mapState, refetch]);
 
   const handleApprove = useCallback(
     async (notes) => {
@@ -136,25 +144,14 @@ export default function MapPage() {
   return (
     <div className="-m-6 flex h-[calc(100%+3rem)] overflow-hidden">
       {/* Left Panel */}
-      <div className="hidden w-1/2 md:flex lg:w-2/5 xl:w-1/4 shrink-0 flex-col overflow-hidden border-r border-border bg-card">
+      <div className="hidden md:flex w-1/2 max-w-[400px] shrink-0 flex-col overflow-hidden border-r border-border bg-card">
         {isLoading ? (
           <div className="space-y-3 p-4">
             {Array.from({ length: 8 }).map((_, i) => (
               <Skeleton key={i} className="h-14 w-full" />
             ))}
           </div>
-        ) : mapState.panelMode === "list" ? (
-          <PlotListPanel
-            plots={plots}
-            count={count}
-            activeTab={mapState.activeTab}
-            sortBy={mapState.sortBy}
-            selectedPlotId={mapState.selectedPlotId}
-            onTabChange={mapState.setActiveTab}
-            onSortChange={mapState.setSortBy}
-            onSelectPlot={mapState.handleSelectPlot}
-          />
-        ) : (
+        ) : mapState.selectedPlotId ? (
           <PlotDetailPanel
             plot={mapState.selectedPlot}
             onBack={() => {
@@ -166,6 +163,17 @@ export default function MapPage() {
             onApprove={() => mapState.setApprovalDialogOpen(true)}
             onReject={() => mapState.setRejectionDialogOpen(true)}
             onStartEditing={mapState.handleStartEditing}
+          />
+        ) : (
+          <PlotListPanel
+            plots={plots}
+            count={count}
+            activeTab={mapState.activeTab}
+            sortBy={mapState.sortBy}
+            selectedPlotId={mapState.selectedPlotId}
+            onTabChange={mapState.setActiveTab}
+            onSortChange={mapState.setSortBy}
+            onSelectPlot={mapState.handleSelectPlot}
           />
         )}
       </div>

@@ -17,6 +17,14 @@ from rest_framework.viewsets import GenericViewSet
 
 from django_q.tasks import async_task
 
+from api.v1.v1_jobs.constants import (
+    JobStatus,
+    JobTypes,
+)
+from api.v1.v1_jobs.models import Jobs
+from api.v1.v1_jobs.serializers import (
+    JobSerializer,
+)
 from api.v1.v1_odk.constants import (
     ApprovalStatusTypes,
 )
@@ -517,6 +525,15 @@ class PlotViewSet(
                         ]
                     )
                 )
+        search = (
+            self.request.query_params.get(
+                "search"
+            )
+        )
+        if search:
+            qs = qs.filter(
+                plot_name__icontains=search
+            )
         return qs
 
     def perform_update(self, serializer):
@@ -604,3 +621,88 @@ class PlotViewSet(
             request.user, plot, plot.polygon_wkt
         )
         return Response(PlotSerializer(plot).data)
+
+    @extend_schema(
+        tags=["Plots"],
+        summary=(
+            "Export plots as Shapefile or GeoJSON"
+        ),
+    )
+    @action(detail=False, methods=["post"])
+    def export(self, request):
+        """Initiate async export of filtered
+        plots as Shapefile or GeoJSON."""
+        form_id = request.data.get("form_id")
+        if not form_id:
+            return Response(
+                {
+                    "message": (
+                        "form_id is required"
+                    )
+                },
+                status=(
+                    status.HTTP_400_BAD_REQUEST
+                ),
+            )
+
+        if not FormMetadata.objects.filter(
+            asset_uid=form_id
+        ).exists():
+            return Response(
+                {"message": "Form not found"},
+                status=(
+                    status.HTTP_404_NOT_FOUND
+                ),
+            )
+
+        fmt = request.data.get("format", "shp")
+        valid_formats = {
+            "shp": JobTypes.export_shapefile,
+            "geojson": JobTypes.export_geojson,
+        }
+        if fmt not in valid_formats:
+            return Response(
+                {
+                    "message": (
+                        "Invalid format. "
+                        "Use 'shp' or 'geojson'"
+                    )
+                },
+                status=(
+                    status.HTTP_400_BAD_REQUEST
+                ),
+            )
+
+        filters = {}
+        status_param = request.data.get(
+            "status"
+        )
+        if status_param and status_param != "all":
+            filters["status"] = status_param
+        search = request.data.get("search")
+        if search:
+            filters["search"] = search
+
+        job = Jobs.objects.create(
+            type=valid_formats[fmt],
+            status=JobStatus.pending,
+            created_by=request.user,
+            info={
+                "form_id": form_id,
+                "filters": filters,
+            },
+        )
+
+        task_id = async_task(
+            "api.v1.v1_odk.tasks"
+            ".generate_export_file",
+            job.id,
+            timeout=300,
+        )
+        job.task_id = task_id
+        job.save()
+
+        return Response(
+            JobSerializer(job).data,
+            status=status.HTTP_201_CREATED,
+        )

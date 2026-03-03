@@ -14,15 +14,18 @@ export default function MapFilterBar({
   basemap = DEFAULT_BASEMAP,
   onBasemapChange,
 }) {
-  const { forms, activeForm, setActiveForm } = useForms();
+  const { forms, activeForm, setActiveForm, setIsChanged } = useForms();
 
   return (
     <div className="absolute left-3 right-3 top-3 z-[999] flex items-center gap-2 rounded-lg border border-border bg-card/90 px-3 py-2 shadow-md backdrop-blur-sm">
       <Select
         value={activeForm?.asset_uid || ""}
-        onValueChange={(uid) => {
+        onValueChange={async (uid) => {
           const form = forms.find((f) => f.asset_uid === uid);
-          if (form) setActiveForm(form);
+          if (form) {
+            setActiveForm(form);
+            setIsChanged(true);
+          }
         }}
       >
         <SelectTrigger size="sm" className="h-8 max-w-[200px] text-xs">

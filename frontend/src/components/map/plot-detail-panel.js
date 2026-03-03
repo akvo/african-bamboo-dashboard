@@ -90,7 +90,7 @@ export default function PlotDetailPanel({
         </button>
       </div>
 
-      <ScrollArea className="flex-1">
+      <ScrollArea className="min-h-0 flex-1">
         <div className="space-y-4 p-4">
           {/* Title */}
           <div>
@@ -185,7 +185,7 @@ export default function PlotDetailPanel({
 
       {/* Action buttons */}
       {["pending", "flagged"].includes(status) && (
-        <div className="flex gap-2 border-t border-border p-4">
+        <div className="flex gap-2 border-t border-border p-4 position-sticky bottom-0 bg-card">
           <Button
             className="flex-1 bg-status-approved text-white hover:bg-status-approved/90"
             onClick={() => onApprove(notes)}

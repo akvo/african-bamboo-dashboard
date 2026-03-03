@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Download, Search } from "lucide-react";
+import { Download, Loader2, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,11 +14,13 @@ import { TablePagination } from "@/components/table-pagination";
 import { useForms } from "@/hooks/useForms";
 import { usePlots } from "@/hooks/usePlots";
 import { useSubmissions } from "@/hooks/useSubmissions";
+import { useExport } from "@/hooks/useExport";
 
 const stats = [];
 
 const DashboardPage = () => {
   const { activeForm } = useForms();
+  const { startExport, isExporting } = useExport();
 
   const [activeTab, setActiveTab] = useState("all");
   const [search, setSearch] = useState("");
@@ -36,6 +38,14 @@ const DashboardPage = () => {
       return plotName?.toLowerCase()?.includes(search.toLowerCase());
     });
   }, [data, search]);
+
+  const handleExport = () => {
+    startExport({
+      formId: activeForm?.asset_uid,
+      status: activeTab,
+      search,
+    });
+  };
 
   return (
     <div className="space-y-6">
@@ -57,9 +67,23 @@ const DashboardPage = () => {
             <h2 className="text-lg font-semibold">{activeForm.name}</h2>
             <Badge variant="secondary">{count} Data points</Badge>
           </div>
-          <Button variant="outline" size="sm">
-            <Download className="size-4" />
-            Export data
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExport}
+            disabled={isExporting}
+          >
+            {isExporting ? (
+              <>
+                <Loader2 className="size-4 animate-spin" />
+                Exporting...
+              </>
+            ) : (
+              <>
+                <Download className="size-4" />
+                Export data
+              </>
+            )}
           </Button>
         </div>
       )}

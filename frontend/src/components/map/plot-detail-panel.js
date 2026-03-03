@@ -11,10 +11,13 @@ import { getPlotStatus } from "@/lib/plot-utils";
 import api from "@/lib/api";
 
 function MetadataRow({ label, value }) {
+  if (!value) {
+    return null;
+  }
   return (
-    <div>
+    <div className="w-full flex flex-col gap-2 border border-card-foreground/10 rounded-md px-3 py-2">
       <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="text-sm font-medium">{value || "—"}</p>
+      <p className="text-sm font-medium truncate">{value}</p>
     </div>
   );
 }
@@ -75,6 +78,12 @@ export default function PlotDetailPanel({
   const centerLon = hasGeometry
     ? ((plot.min_lon + plot.max_lon) / 2).toFixed(6)
     : null;
+  console.log("PlotDetailPanel render", {
+    plot,
+    submission,
+    status,
+    hasGeometry,
+  });
 
   return (
     <div className="flex h-full flex-col">
@@ -123,18 +132,16 @@ export default function PlotDetailPanel({
               ))}
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3">
               <MetadataRow label="Region" value={plot.region} />
               <MetadataRow label="Sub-region" value={plot.sub_region} />
-              <MetadataRow label="Enumerator" value={resolved.enumerator_id} />
-              <MetadataRow
-                label="Boundary method"
-                value={resolved["boundary_mapping/boundary_method"]}
-              />
-              <MetadataRow label="Farmer" value={resolved.full_name} />
-              <MetadataRow label="Age" value={resolved.age_of_farmer} />
-              <MetadataRow label="Phone" value={resolved.Phone_Number} />
-              <MetadataRow label="Points" value={resolved.numpoints} />
+              {(submission?.questions || []).map((q) => (
+                <MetadataRow
+                  key={q.name}
+                  label={q.label}
+                  value={resolved[q.name]}
+                />
+              ))}
             </div>
           )}
 
@@ -164,7 +171,7 @@ export default function PlotDetailPanel({
             onClick={onStartEditing}
           >
             <Edit3 className="mr-2 size-4" />
-            Fix Geometry
+            Edit polygon
           </Button>
 
           {/* Notes */}

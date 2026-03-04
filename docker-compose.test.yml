@@ -30,7 +30,7 @@ services:
       - MAILJET_APIKEY=secret
       - MAILJET_SECRET=secret
       - WEBDOMAIN=notset
-      - STORAGE_PATH="./storage"
+      - STORAGE_PATH=./storage
     depends_on:
       - db
   frontend:

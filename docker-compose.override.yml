@@ -8,11 +8,11 @@ services:
   backend:
     network_mode: service:mainnetwork
     volumes:
-      - ${STORAGE_PATH}:/app/storage:delegated
+      - ${STORAGE_PATH:-./storage}:/app/storage:delegated
   worker:
     network_mode: service:mainnetwork
     volumes:
-      - ${STORAGE_PATH}:/app/storage:delegated
+      - ${STORAGE_PATH:-./storage}:/app/storage:delegated
   frontend:
     network_mode: service:mainnetwork
   pgadmin:

@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import re
+import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -13,17 +14,15 @@ from shapely.geometry import mapping
 from shapely.geometry.polygon import orient
 
 from django.conf import settings
-
 from api.v1.v1_odk.serializers import (
     build_option_lookup,
     resolve_value,
 )
+from utils import storage
 
 logger = logging.getLogger(__name__)
 
-EXPORT_DIR = (
-    Path(settings.BASE_DIR) / "tmp" / "exports"
-)
+EXPORT_FOLDER = "exports"
 
 WGS84_PRJ = (
     'GEOGCS["GCS_WGS_1984",'
@@ -274,103 +273,133 @@ def _wkt_to_pyshp_parts(wkt_string):
 
 
 def generate_shapefile(
-    queryset, form, output_dir, filename
+    queryset, form, filename
 ):
     """Generate a zipped Shapefile from a
     Plot queryset.
 
-    Returns (zip_file_path, record_count).
+    Files are written to a temp directory then
+    uploaded to persistent storage via
+    utils.storage.
+
+    Returns (stored_file_path, record_count).
     """
-    os.makedirs(output_dir, exist_ok=True)
     option_map, type_map = build_option_lookup(
         form
     )
 
-    shp_path = os.path.join(
-        output_dir, filename
-    )
-    w = shapefile.Writer(
-        shp_path, encoding="utf-8"
-    )
-    w.autoBalance = 1
-
-    for name, ftype, size, decimal in SHP_FIELDS:
-        w.field(name, ftype, size, decimal)
-
-    count = 0
-    qs = queryset.select_related(
-        "submission", "form"
-    ).iterator()
-    for plot in qs:
-        parts = _wkt_to_pyshp_parts(
-            plot.polygon_wkt
+    with tempfile.TemporaryDirectory() as tmpdir:
+        shp_path = os.path.join(
+            tmpdir, filename
         )
-        if parts is None:
-            logger.warning(
-                "Skipping plot %s: invalid "
-                "geometry",
-                plot.uuid,
+        w = shapefile.Writer(
+            shp_path, encoding="utf-8"
+        )
+        w.autoBalance = 1
+
+        for (
+            name,
+            ftype,
+            size,
+            decimal,
+        ) in SHP_FIELDS:
+            w.field(name, ftype, size, decimal)
+
+        count = 0
+        qs = queryset.select_related(
+            "submission", "form"
+        ).iterator()
+        for plot in qs:
+            parts = _wkt_to_pyshp_parts(
+                plot.polygon_wkt
             )
-            continue
-
-        attrs = resolve_plot_attributes(
-            plot, option_map, type_map
-        )
-        w.poly(parts)
-        w.record(
-            attrs["PLOT_ID"],
-            attrs["PLOT_NAME"],
-            attrs["ENUMERATOR"],
-            attrs["REGION"],
-            attrs["WOREDA"],
-            attrs["VAL_STATUS"],
-            attrs["NEEDS_RECL"],
-            attrs["REJ_REASON"],
-            attrs["CREATED_AT"],
-            attrs["SUBMIT_AT"],
-        )
-        count += 1
-
-    w.close()
-
-    # Write .prj file
-    prj_path = shp_path + ".prj"
-    if not os.path.exists(prj_path):
-        with open(prj_path, "w") as prj_file:
-            prj_file.write(WGS84_PRJ)
-
-    # Write .cpg file (encoding declaration)
-    cpg_path = shp_path + ".cpg"
-    with open(cpg_path, "w") as cpg_file:
-        cpg_file.write("UTF-8")
-
-    # Zip all shapefile components
-    zip_path = os.path.join(
-        output_dir, f"{filename}.zip"
-    )
-    exts = ["shp", "shx", "dbf", "prj", "cpg"]
-    with ZipFile(zip_path, "w") as zf:
-        for ext in exts:
-            fpath = f"{shp_path}.{ext}"
-            if os.path.exists(fpath):
-                zf.write(
-                    fpath,
-                    arcname=f"{filename}.{ext}",
+            if parts is None:
+                logger.warning(
+                    "Skipping plot %s: "
+                    "invalid geometry",
+                    plot.uuid,
                 )
-                os.remove(fpath)
+                continue
 
-    return zip_path, count
+            attrs = resolve_plot_attributes(
+                plot, option_map, type_map
+            )
+            w.poly(parts)
+            w.record(
+                attrs["PLOT_ID"],
+                attrs["PLOT_NAME"],
+                attrs["ENUMERATOR"],
+                attrs["REGION"],
+                attrs["WOREDA"],
+                attrs["VAL_STATUS"],
+                attrs["NEEDS_RECL"],
+                attrs["REJ_REASON"],
+                attrs["CREATED_AT"],
+                attrs["SUBMIT_AT"],
+            )
+            count += 1
+
+        w.close()
+
+        # Write .prj file
+        prj_path = shp_path + ".prj"
+        if not os.path.exists(prj_path):
+            with open(
+                prj_path, "w"
+            ) as prj_file:
+                prj_file.write(WGS84_PRJ)
+
+        # Write .cpg file
+        cpg_path = shp_path + ".cpg"
+        with open(
+            cpg_path, "w"
+        ) as cpg_file:
+            cpg_file.write("UTF-8")
+
+        # Zip all shapefile components
+        zip_name = f"{filename}.zip"
+        zip_path = os.path.join(
+            tmpdir, zip_name
+        )
+        exts = [
+            "shp",
+            "shx",
+            "dbf",
+            "prj",
+            "cpg",
+        ]
+        with ZipFile(zip_path, "w") as zf:
+            for ext in exts:
+                fpath = f"{shp_path}.{ext}"
+                if os.path.exists(fpath):
+                    zf.write(
+                        fpath,
+                        arcname=(
+                            f"{filename}.{ext}"
+                        ),
+                    )
+
+        stored = storage.upload(
+            zip_path,
+            folder=EXPORT_FOLDER,
+            filename=zip_name,
+        )
+
+    return stored, count
 
 
 def generate_geojson(
-    queryset, form, output_dir, filename
+    queryset, form, filename
 ):
     """Generate a GeoJSON file from a
     Plot queryset.
 
-    Returns (file_path, record_count).
+    The file is written to a temp directory
+    then uploaded to persistent storage via
+    utils.storage.
+
+    Returns (stored_file_path, record_count).
     """
-    os.makedirs(output_dir, exist_ok=True)
     option_map, type_map = build_option_lookup(
         form
     )
@@ -415,27 +444,44 @@ def generate_geojson(
         "features": features,
     }
 
-    file_path = os.path.join(
-        output_dir, f"{filename}.geojson"
-    )
-    with open(file_path, "w", encoding="utf-8") as f:
-        json.dump(collection, f)
+    geojson_name = f"{filename}.geojson"
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_path = os.path.join(
+            tmpdir, geojson_name
+        )
+        with open(
+            tmp_path, "w", encoding="utf-8"
+        ) as f:
+            json.dump(collection, f)
 
-    return file_path, len(features)
+        stored = storage.upload(
+            tmp_path,
+            folder=EXPORT_FOLDER,
+            filename=geojson_name,
+        )
+
+    return stored, len(features)
 
 
 def cleanup_old_exports(max_age_hours=24):
     """Delete export files older than
     max_age_hours."""
-    if not EXPORT_DIR.exists():
+    export_dir = (
+        Path(settings.STORAGE_PATH) / EXPORT_FOLDER
+    )
+    if not export_dir.exists():
         return
     now = time.time()
     max_age_secs = max_age_hours * 3600
-    for fpath in EXPORT_DIR.iterdir():
+    for fpath in export_dir.iterdir():
         if fpath.is_file():
             age = now - fpath.stat().st_mtime
             if age > max_age_secs:
+                rel = (
+                    f"{EXPORT_FOLDER}/"
+                    f"{fpath.name}"
+                )
                 try:
-                    fpath.unlink()
+                    storage.delete(rel)
                 except OSError:
                     pass

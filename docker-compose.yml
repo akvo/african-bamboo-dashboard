@@ -30,6 +30,7 @@ services:
       - MAILJET_APIKEY=$MAILJET_APIKEY
       - MAILJET_SECRET=$MAILJET_SECRET
       - WEBDOMAIN=$WEBDOMAIN
+      - STORAGE_PATH=$STORAGE_PATH
     depends_on:
       - db
   worker:
@@ -48,6 +49,7 @@ services:
       - MAILJET_APIKEY=$MAILJET_APIKEY
       - MAILJET_SECRET=$MAILJET_SECRET
       - WEBDOMAIN=$WEBDOMAIN
+      - STORAGE_PATH=$STORAGE_PATH
     depends_on:
       - backend
   frontend:

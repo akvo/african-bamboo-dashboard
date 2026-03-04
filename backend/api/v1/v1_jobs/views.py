@@ -20,7 +20,10 @@ from api.v1.v1_jobs.models import Jobs
 from api.v1.v1_jobs.serializers import (
     JobSerializer,
 )
-from api.v1.v1_odk.export import EXPORT_DIR
+from african_bamboo_dashboard.settings import (
+    STORAGE_PATH,
+)
+from utils.storage import check as storage_check
 
 
 @extend_schema(
@@ -68,21 +71,28 @@ def download_job_result(request, job_id):
 
     info = job.info or {}
     file_path = info.get("file_path")
-    if not file_path or not os.path.exists(
-        file_path
-    ):
+    if not file_path:
         return Response(
             {"message": "File not found"},
             status=status.HTTP_404_NOT_FOUND,
         )
 
     real_path = os.path.realpath(file_path)
-    export_root = os.path.realpath(
-        str(EXPORT_DIR)
+    storage_root = os.path.realpath(
+        STORAGE_PATH
     )
     if not real_path.startswith(
-        export_root + os.sep
+        storage_root + os.sep
     ):
+        return Response(
+            {"message": "File not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    rel_path = os.path.relpath(
+        real_path, storage_root
+    )
+    if not storage_check(rel_path):
         return Response(
             {"message": "File not found"},
             status=status.HTTP_404_NOT_FOUND,

@@ -6,7 +6,6 @@ from api.v1.v1_odk.constants import (
     ApprovalStatusTypes,
 )
 from api.v1.v1_odk.export import (
-    EXPORT_DIR,
     cleanup_old_exports,
     generate_geojson,
     generate_shapefile,
@@ -90,20 +89,16 @@ def generate_export_file(job_id):
             polygon_wkt__isnull=False
         ).exclude(polygon_wkt="")
 
-        output_dir = str(EXPORT_DIR)
         filename = f"plots_{form_id}_{job_id}"
 
         if job.type == JobTypes.export_geojson:
             file_path, count = generate_geojson(
-                qs, form, output_dir, filename
+                qs, form, filename
             )
         else:
             file_path, count = (
                 generate_shapefile(
-                    qs,
-                    form,
-                    output_dir,
-                    filename,
+                    qs, form, filename
                 )
             )
 

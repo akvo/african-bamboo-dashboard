@@ -211,3 +211,6 @@ Q_CLUSTER = {
     "retry": 120,
     "orm": "default",
 }
+
+# Storage path for file uploads and exports
+STORAGE_PATH = environ.get("STORAGE_PATH", "./storage")

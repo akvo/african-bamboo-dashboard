@@ -7,8 +7,12 @@ services:
       - 3000:3000
   backend:
     network_mode: service:mainnetwork
+    volumes:
+      - ${STORAGE_PATH}:/app/storage:delegated
   worker:
     network_mode: service:mainnetwork
+    volumes:
+      - ${STORAGE_PATH}:/app/storage:delegated
   frontend:
     network_mode: service:mainnetwork
   pgadmin:

@@ -1,35 +1,65 @@
 import os
-from african_bamboo_dashboard.settings import STORAGE_PATH
-from pathlib import Path
 import shutil
+from pathlib import Path
+
+from django.conf import settings
 
 
-def upload(file: str, folder: str = None, filename: str = None):
-    storage_location = STORAGE_PATH
-    if folder:
-        # create folder if not exists
-        Path(f"{STORAGE_PATH}/{folder}").mkdir(parents=True, exist_ok=True)
-        storage_location = f"{STORAGE_PATH}/{folder}"
+def get_path(path: str):
+    """Return the full filesystem path for a
+    path relative to settings.STORAGE_PATH."""
+    return f"{settings.STORAGE_PATH}/{path}"
+
+
+def upload(
+    file: str,
+    folder: str = None,
+    filename: str = None,
+):
+    """Copy *file* into persistent storage.
+
+    Returns the path **relative to
+    settings.STORAGE_PATH** so it can be passed directly
+    to check() / delete() / get_path().
+    """
     if not filename:
         filename = file.split("/")[-1]
-    location = f"{storage_location}/{filename}"
-    shutil.copy2(file, location)
-    return location
+    if folder:
+        rel_path = f"{folder}/{filename}"
+    else:
+        rel_path = filename
+    full = get_path(rel_path)
+    Path(full).parent.mkdir(
+        parents=True, exist_ok=True
+    )
+    shutil.copy2(file, full)
+    return rel_path
 
 
-def delete(url: str):
-    os.remove(f"{STORAGE_PATH}/{url}")
-    return url
+def delete(path: str):
+    """Remove a file from storage.
+
+    *path* is relative to settings.STORAGE_PATH.
+    """
+    os.remove(get_path(path))
+    return path
 
 
-def check(url: str):
-    path = Path(f"{STORAGE_PATH}/{url}")
-    return path.is_file()
+def check(path: str):
+    """Return True if *path* exists in storage.
+
+    *path* is relative to settings.STORAGE_PATH.
+    """
+    return Path(get_path(path)).is_file()
 
 
-def download(url):
-    # copy to tmp folder
-    tmp_file = url.split("/")[-1]
+def download(path: str):
+    """Copy a storage file to ./tmp/ and return
+    the tmp path.
+
+    *path* is relative to settings.STORAGE_PATH.
+    """
+    tmp_file = path.split("/")[-1]
     tmp_file = f"./tmp/{tmp_file}"
-    shutil.copy2(f"{STORAGE_PATH}/{url}", tmp_file)
-    return f"{STORAGE_PATH}/{url}"
+    shutil.copy2(get_path(path), tmp_file)
+    return tmp_file

@@ -15,6 +15,7 @@ from api.v1.v1_jobs.models import Jobs
 from api.v1.v1_odk.export import (
     generate_shapefile,
 )
+from utils.storage import get_path
 from api.v1.v1_odk.models import (
     FormMetadata,
     Plot,
@@ -336,17 +337,16 @@ class PlotExportEndpointTest(
         qs = Plot.objects.filter(
             form=self.form
         )
-        zip_path, count = generate_shapefile(
+        rel_path, count = generate_shapefile(
             qs, self.form, "test"
         )
+        full = get_path(rel_path)
 
         self.assertEqual(count, 2)
-        self.assertTrue(
-            os.path.exists(zip_path)
-        )
+        self.assertTrue(os.path.exists(full))
 
         with zipfile.ZipFile(
-            zip_path, "r"
+            full, "r"
         ) as zf:
             names = zf.namelist()
             self.assertIn("test.shp", names)
@@ -359,7 +359,7 @@ class PlotExportEndpointTest(
                 "GCS_WGS_1984", prj
             )
 
-        os.remove(zip_path)
+        os.remove(full)
 
     def test_shapefile_skips_null_geometry(
         self,
@@ -376,13 +376,14 @@ class PlotExportEndpointTest(
             polygon_wkt__isnull=False,
         ).exclude(polygon_wkt="")
 
-        zip_path, count = generate_shapefile(
+        rel_path, count = generate_shapefile(
             qs, self.form, "test2"
         )
         self.assertEqual(count, 1)
 
-        if os.path.exists(zip_path):
-            os.remove(zip_path)
+        full = get_path(rel_path)
+        if os.path.exists(full):
+            os.remove(full)
 
     def test_shapefile_uses_edited_geometry(
         self,
@@ -405,9 +406,10 @@ class PlotExportEndpointTest(
         qs = Plot.objects.filter(
             form=self.form
         )
-        zip_path, count = generate_shapefile(
+        rel_path, count = generate_shapefile(
             qs, self.form, "test_edited"
         )
+        full = get_path(rel_path)
         self.assertEqual(count, 1)
 
         import shapefile as shp
@@ -415,7 +417,7 @@ class PlotExportEndpointTest(
         with tempfile.TemporaryDirectory() \
                 as tmpdir:
             with zipfile.ZipFile(
-                zip_path, "r"
+                full, "r"
             ) as zf:
                 zf.extractall(tmpdir)
 
@@ -436,7 +438,7 @@ class PlotExportEndpointTest(
                 )
             )
 
-        os.remove(zip_path)
+        os.remove(full)
 
     # --- GeoJSON Generation Tests ---
 
@@ -452,15 +454,16 @@ class PlotExportEndpointTest(
         qs = Plot.objects.filter(
             form=self.form
         )
-        file_path, count = generate_geojson(
+        rel_path, count = generate_geojson(
             qs, self.form, "test_gj"
         )
+        full = get_path(rel_path)
         self.assertEqual(count, 1)
         self.assertTrue(
-            os.path.exists(file_path)
+            os.path.exists(full)
         )
 
-        with open(file_path) as f:
+        with open(full) as f:
             data = json.load(f)
 
         self.assertEqual(
@@ -485,7 +488,7 @@ class PlotExportEndpointTest(
             props["VAL_STATUS"], "pending"
         )
 
-        os.remove(file_path)
+        os.remove(full)
 
     # --- Attribute Tests ---
 
@@ -504,11 +507,12 @@ class PlotExportEndpointTest(
         qs = Plot.objects.filter(
             form=self.form
         )
-        file_path, _ = generate_geojson(
+        rel_path, _ = generate_geojson(
             qs, self.form, "test_approved"
         )
+        full = get_path(rel_path)
 
-        with open(file_path) as f:
+        with open(full) as f:
             data = json.load(f)
         props = data["features"][0][
             "properties"
@@ -517,7 +521,7 @@ class PlotExportEndpointTest(
             props["VAL_STATUS"], "approved"
         )
 
-        os.remove(file_path)
+        os.remove(full)
 
     def test_export_attributes_flagged(self):
         """Flagged plot should have
@@ -535,11 +539,12 @@ class PlotExportEndpointTest(
         qs = Plot.objects.filter(
             form=self.form
         )
-        file_path, _ = generate_geojson(
+        rel_path, _ = generate_geojson(
             qs, self.form, "test_flagged"
         )
+        full = get_path(rel_path)
 
-        with open(file_path) as f:
+        with open(full) as f:
             data = json.load(f)
         props = data["features"][0][
             "properties"
@@ -552,4 +557,4 @@ class PlotExportEndpointTest(
             "Overlap detected",
         )
 
-        os.remove(file_path)
+        os.remove(full)

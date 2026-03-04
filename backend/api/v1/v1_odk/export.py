@@ -13,9 +13,7 @@ from shapely import wkt as shapely_wkt
 from shapely.geometry import mapping
 from shapely.geometry.polygon import orient
 
-from african_bamboo_dashboard.settings import (
-    STORAGE_PATH,
-)
+from django.conf import settings
 from api.v1.v1_odk.serializers import (
     build_option_lookup,
     resolve_value,
@@ -469,7 +467,7 @@ def cleanup_old_exports(max_age_hours=24):
     """Delete export files older than
     max_age_hours."""
     export_dir = (
-        Path(STORAGE_PATH) / EXPORT_FOLDER
+        Path(settings.STORAGE_PATH) / EXPORT_FOLDER
     )
     if not export_dir.exists():
         return

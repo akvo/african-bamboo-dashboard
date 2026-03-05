@@ -1,3 +1,4 @@
+from django.core.exceptions import FieldDoesNotExist
 from django.db import IntegrityError
 from django.test import TestCase
 from django.test.utils import override_settings
@@ -453,15 +454,7 @@ class RejectionAuditModelTest(TestCase):
     def test_submission_no_reviewer_notes_field(
         self,
     ):
-        self.assertFalse(
-            hasattr(
-                Submission,
-                "reviewer_notes",
+        with self.assertRaises(FieldDoesNotExist):
+            Submission._meta.get_field(
+                "reviewer_notes"
             )
-            and isinstance(
-                Submission._meta.get_field(
-                    "reviewer_notes"
-                ),
-                type(None),
-            )
-        )

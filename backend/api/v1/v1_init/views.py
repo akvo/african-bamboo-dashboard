@@ -90,4 +90,14 @@ def telegram_groups(request, version):
             {"detail": str(e)},
             status=status.HTTP_502_BAD_GATEWAY,
         )
+    except Exception:
+        return Response(
+            {
+                "detail": (
+                    "Failed to connect to "
+                    "Telegram API"
+                )
+            },
+            status=status.HTTP_502_BAD_GATEWAY,
+        )
     return Response(groups)

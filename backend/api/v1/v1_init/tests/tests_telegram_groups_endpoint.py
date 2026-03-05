@@ -3,6 +3,8 @@ from unittest.mock import MagicMock, patch
 from django.test import TestCase
 from django.test.utils import override_settings
 
+import requests
+
 from api.v1.v1_users.models import SystemUser
 from utils.encryption import encrypt
 from utils.telegram_client import TelegramSendError
@@ -168,3 +170,49 @@ class TelegramGroupsTest(TestCase):
         )
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.json(), [])
+
+    @patch(
+        "api.v1.v1_init.views.TelegramClient"
+    )
+    def test_network_error_returns_502(
+        self, mock_cls
+    ):
+        mock_client = MagicMock()
+        mock_client.get_groups.side_effect = (
+            requests.ConnectionError(
+                "Connection refused"
+            )
+        )
+        mock_cls.return_value = mock_client
+
+        auth = self._login()
+        resp = self.client.get(
+            self.URL, **auth
+        )
+        self.assertEqual(resp.status_code, 502)
+        self.assertIn(
+            "Failed to connect",
+            resp.json()["detail"],
+        )
+
+    @patch(
+        "api.v1.v1_init.views.TelegramClient"
+    )
+    def test_timeout_error_returns_502(
+        self, mock_cls
+    ):
+        mock_client = MagicMock()
+        mock_client.get_groups.side_effect = (
+            requests.Timeout("Request timed out")
+        )
+        mock_cls.return_value = mock_client
+
+        auth = self._login()
+        resp = self.client.get(
+            self.URL, **auth
+        )
+        self.assertEqual(resp.status_code, 502)
+        self.assertIn(
+            "Failed to connect",
+            resp.json()["detail"],
+        )

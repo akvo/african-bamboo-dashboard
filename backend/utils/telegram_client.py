@@ -18,6 +18,51 @@ class TelegramClient:
             token=bot_token
         )
 
+    def get_groups(self):
+        """Fetch group chats from recent updates.
+
+        Calls getUpdates and extracts unique
+        group/supergroup chats the bot has seen.
+        Returns list of {id, title, type}.
+        """
+        resp = requests.get(
+            f"{self.base_url}/getUpdates",
+            timeout=10,
+        )
+        if not resp.ok:
+            raise TelegramSendError(
+                f"Telegram API error "
+                f"{resp.status_code}: "
+                f"{resp.text}"
+            )
+        results = resp.json().get("result", [])
+        seen = {}
+        for update in results:
+            msg = (
+                update.get("message")
+                or update.get("my_chat_member", {})
+                .get("chat")
+            )
+            if not msg:
+                continue
+            chat = msg.get("chat") or msg
+            chat_type = chat.get("type", "")
+            if chat_type not in (
+                "group",
+                "supergroup",
+            ):
+                continue
+            chat_id = str(chat.get("id"))
+            if chat_id not in seen:
+                seen[chat_id] = {
+                    "id": chat_id,
+                    "title": chat.get(
+                        "title", "Untitled"
+                    ),
+                    "type": chat_type,
+                }
+        return list(seen.values())
+
     def send_message(
         self, chat_id, text, parse_mode="Markdown"
     ):

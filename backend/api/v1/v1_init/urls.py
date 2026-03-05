@@ -13,4 +13,9 @@ urlpatterns = [
         views.telegram_settings,
         name="telegram_settings",
     ),
+    re_path(
+        r"^(?P<version>(v1))/settings/telegram/groups/$",
+        views.telegram_groups,
+        name="telegram_groups",
+    ),
 ]

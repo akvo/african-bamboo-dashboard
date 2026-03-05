@@ -15,6 +15,10 @@ from api.v1.v1_init.models import SystemSetting
 from api.v1.v1_init.serializers import (
     TelegramSettingsSerializer,
 )
+from utils.telegram_client import (
+    TelegramClient,
+    TelegramSendError,
+)
 
 
 @extend_schema(
@@ -57,3 +61,33 @@ def telegram_settings(request, version):
 
     config = get_telegram_config()
     return Response(config)
+
+
+@extend_schema(
+    description=(
+        "Fetch Telegram groups visible to the bot"
+    ),
+    tags=["Settings"],
+)
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def telegram_groups(request, version):
+    config = get_telegram_config()
+    bot_token = (
+        request.query_params.get("bot_token")
+        or config.get("bot_token")
+    )
+    if not bot_token:
+        return Response(
+            {"detail": "No bot token configured"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    try:
+        client = TelegramClient(bot_token)
+        groups = client.get_groups()
+    except TelegramSendError as e:
+        return Response(
+            {"detail": str(e)},
+            status=status.HTTP_502_BAD_GATEWAY,
+        )
+    return Response(groups)

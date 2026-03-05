@@ -277,6 +277,9 @@ To verify: open the attribute table, right-click a row, and select **Zoom to Fea
 | PATCH | `/api/v1/odk/plots/{uuid}/` | Update plot (geometry) |
 | DELETE | `/api/v1/odk/plots/{uuid}/` | Delete a plot |
 | POST | `/api/v1/odk/plots/overlap_candidates/` | Find overlapping plots |
+| GET | `/api/v1/settings/telegram/` | Get Telegram notification config |
+| PUT | `/api/v1/settings/telegram/` | Update Telegram notification config |
+| GET | `/api/v1/settings/telegram/groups/` | List Telegram groups visible to the bot |
 
 ## Telegram Notifications
 
@@ -286,15 +289,15 @@ When a plot is rejected, the system can send notifications to Telegram groups af
 
 1. **Create a bot** — message [@BotFather](https://t.me/BotFather) on Telegram, send `/newbot`, and follow the prompts. Copy the bot token.
 
-2. **Get group chat IDs** — add the bot to your Telegram group(s), then send a message in the group and run:
+2. **Add the bot to your group(s)** — add the bot to the Telegram group(s) you want to receive notifications, then send at least one message in each group so the bot can see it.
 
-   ```bash
-   curl https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates
-   ```
+3. **Configure via the UI** — go to **Settings > Telegram** in the dashboard:
+   - Enable notifications
+   - Paste the bot token and click the refresh button to load available groups
+   - Select supervisor and enumerator groups from the dropdowns
+   - Save
 
-   Look for `"chat":{"id":-100xxxxxxxxxx}` in the response. The negative number is the group ID.
-
-3. **Configure environment** — add to your `.env`:
+   Alternatively, configure via environment variables in `.env`:
 
    ```env
    TELEGRAM_ENABLED=True
@@ -303,10 +306,27 @@ When a plot is rejected, the system can send notifications to Telegram groups af
    TELEGRAM_ENUMERATOR_GROUP_ID=<group_id>
    ```
 
-4. **Restart services**:
+   DB settings (saved via the UI) override environment variables.
+
+4. **Fetch groups via API** (optional) — if you prefer the CLI:
 
    ```bash
-   docker compose restart backend worker
+   # List groups the bot can see
+   curl "http://localhost:8000/api/v1/settings/telegram/groups/" \
+     -H "Authorization: Bearer <token>"
+
+   # Or with a specific bot token
+   curl "http://localhost:8000/api/v1/settings/telegram/groups/?bot_token=<your_bot_token>" \
+     -H "Authorization: Bearer <token>"
+   ```
+
+   Response:
+
+   ```json
+   [
+     { "id": "-100123456789", "title": "Supervisors", "type": "supergroup" },
+     { "id": "-100987654321", "title": "Enumerators", "type": "group" }
+   ]
    ```
 
 ### How it works

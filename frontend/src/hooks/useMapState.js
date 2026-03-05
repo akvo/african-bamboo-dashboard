@@ -28,7 +28,6 @@ export function MapStateProvider({ children }) {
   const [sortBy, setSortBy] = useState("priority");
   const [search, setSearch] = useState("");
   const [toast, setToast] = useState(null);
-  const [notes, setNotes] = useState("");
 
   const formId = activeForm?.asset_uid;
 
@@ -111,8 +110,6 @@ export function MapStateProvider({ children }) {
         sortBy,
         search,
         toast,
-        notes,
-        setNotes,
         setActiveTab,
         setSortBy,
         setSearch,

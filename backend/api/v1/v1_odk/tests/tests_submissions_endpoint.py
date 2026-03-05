@@ -119,12 +119,25 @@ class SubmissionViewTest(TestCase, OdkTestHelperMixin):
             ApprovalStatus.APPROVED,
         )
 
-    def test_reject_submission_with_notes(self):
+    def test_reject_submission_with_category(self):
+        Plot.objects.create(
+            plot_name="Test Plot",
+            form=self.form,
+            region="R",
+            sub_region="S",
+            created_at=1700000000000,
+            submission=self.sub,
+        )
         resp = self.client.patch(
             "/api/v1/odk/submissions/sub-001/",
             {
-                "approval_status": (ApprovalStatus.REJECTED),
-                "reviewer_notes": ("Boundary is unclear"),
+                "approval_status": (
+                    ApprovalStatus.REJECTED
+                ),
+                "reason_category": "polygon_error",
+                "reason_text": (
+                    "Boundary is unclear"
+                ),
             },
             content_type="application/json",
             **self.auth,
@@ -134,10 +147,6 @@ class SubmissionViewTest(TestCase, OdkTestHelperMixin):
         self.assertEqual(
             self.sub.approval_status,
             ApprovalStatus.REJECTED,
-        )
-        self.assertEqual(
-            self.sub.reviewer_notes,
-            "Boundary is unclear",
         )
 
 
@@ -206,7 +215,10 @@ class SubmissionApprovalClearsFlagsTest(
                 "approval_status": (
                     ApprovalStatus.REJECTED
                 ),
-                "reviewer_notes": "Bad boundary",
+                "reason_category": (
+                    "polygon_error"
+                ),
+                "reason_text": "Bad boundary",
             },
             content_type="application/json",
             **self.auth,
@@ -304,12 +316,23 @@ class SubmissionKoboSyncDispatchTest(
     def test_reject_dispatches_kobo_sync(
         self, mock_async,
     ):
+        Plot.objects.create(
+            plot_name="Sync Plot",
+            form=self.form,
+            region="R",
+            sub_region="S",
+            created_at=1700000000000,
+            submission=self.sub,
+        )
         resp = self.client.patch(
             "/api/v1/odk/submissions/"
             "sub-sync-001/",
             {
                 "approval_status": (
                     ApprovalStatus.REJECTED
+                ),
+                "reason_category": (
+                    "polygon_error"
                 ),
             },
             content_type="application/json",

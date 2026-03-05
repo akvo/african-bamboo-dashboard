@@ -49,39 +49,40 @@ export default function MapPage() {
     }
   }, [isChanged, setIsChanged, mapState, refetch]);
 
-  const handleApprove = useCallback(
-    async (notes) => {
-      if (!mapState.selectedPlot?.submission_uuid) {
-        return;
-      }
-      try {
-        await api.patch(
-          `/v1/odk/submissions/${mapState.selectedPlot.submission_uuid}/`,
-          { approval_status: 1, reviewer_notes: notes || "" },
-        );
-        await refetch();
-        mapState.setApprovalDialogOpen(false);
-        mapState.setToastMessage("Plot approved successfully");
-      } catch {
-        mapState.setApprovalDialogOpen(false);
-        mapState.setToastMessage({
-          message: "Failed to approve plot. Please try again.",
-          type: "error",
-        });
-      }
-    },
-    [mapState, refetch],
-  );
+  const handleApprove = useCallback(async () => {
+    if (!mapState.selectedPlot?.submission_uuid) {
+      return;
+    }
+    try {
+      await api.patch(
+        `/v1/odk/submissions/${mapState.selectedPlot.submission_uuid}/`,
+        { approval_status: 1 },
+      );
+      await refetch();
+      mapState.setApprovalDialogOpen(false);
+      mapState.setToastMessage("Plot approved successfully");
+    } catch {
+      mapState.setApprovalDialogOpen(false);
+      mapState.setToastMessage({
+        message: "Failed to approve plot. Please try again.",
+        type: "error",
+      });
+    }
+  }, [mapState, refetch]);
 
   const handleReject = useCallback(
-    async (reason) => {
+    async ({ selectValue, notes }) => {
       if (!mapState.selectedPlot?.submission_uuid) {
         return;
       }
       try {
         await api.patch(
           `/v1/odk/submissions/${mapState.selectedPlot.submission_uuid}/`,
-          { approval_status: 2, reviewer_notes: reason },
+          {
+            approval_status: 2,
+            reason_category: selectValue,
+            reason_text: notes || "",
+          },
         );
         await refetch();
         mapState.setRejectionDialogOpen(false);
@@ -96,6 +97,25 @@ export default function MapPage() {
     },
     [mapState, refetch],
   );
+
+  const handleRevertToPending = useCallback(async () => {
+    if (!mapState.selectedPlot?.submission_uuid) {
+      return;
+    }
+    try {
+      await api.patch(
+        `/v1/odk/submissions/${mapState.selectedPlot.submission_uuid}/`,
+        { approval_status: null },
+      );
+      await refetch();
+      mapState.setToastMessage("Plot reverted to pending");
+    } catch {
+      mapState.setToastMessage({
+        message: "Failed to revert. Please try again.",
+        type: "error",
+      });
+    }
+  }, [mapState, refetch]);
 
   const handleSaveEdit = useCallback(async () => {
     if (!editedGeo || !mapState.editingPlotId) return;
@@ -167,6 +187,7 @@ export default function MapPage() {
             }}
             onApprove={() => mapState.setApprovalDialogOpen(true)}
             onReject={() => mapState.setRejectionDialogOpen(true)}
+            onRevertToPending={handleRevertToPending}
             onStartEditing={mapState.handleStartEditing}
           />
         ) : (
@@ -215,10 +236,6 @@ export default function MapPage() {
         confirmLabel="Confirm"
         confirmingLabel="Approving..."
         confirmClassName="bg-status-approved text-white hover:bg-status-approved/90"
-        textarea={{
-          label: "Notes to enumerator",
-          placeholder: "Optional notes...",
-        }}
       />
       <ConfirmDialog
         open={mapState.rejectionDialogOpen}
@@ -232,10 +249,20 @@ export default function MapPage() {
         confirmLabel="Reject"
         confirmingLabel="Rejecting..."
         confirmVariant="destructive"
-        textarea={{
-          label: "Reason for rejection *",
-          placeholder: "Describe the issue...",
+        select={{
+          label: "Rejection category *",
+          placeholder: "Select a category...",
           required: true,
+          options: [
+            { value: "polygon_error", label: "Polygon Error" },
+            { value: "overlap", label: "Overlap" },
+            { value: "duplicate", label: "Duplicate Submission" },
+            { value: "other", label: "Other" },
+          ],
+        }}
+        textarea={{
+          label: "Additional details",
+          placeholder: "Optional explanation...",
         }}
       />
       <ConfirmDialog

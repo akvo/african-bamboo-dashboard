@@ -200,16 +200,18 @@ Approve or reject a submission:
 curl -X PATCH http://localhost:8000/api/v1/odk/submissions/<uuid>/ \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
-  -d '{ "approval_status": 1, "reviewer_notes": "Boundary verified" }'
+  -d '{ "approval_status": 1 }'
 
-# Reject (approval_status: 2)
+# Reject (approval_status: 2) — reason_category is required
 curl -X PATCH http://localhost:8000/api/v1/odk/submissions/<uuid>/ \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
-  -d '{ "approval_status": 2, "reviewer_notes": "Polygon too small" }'
+  -d '{ "approval_status": 2, "reason_category": "polygon_error", "reason_text": "Polygon too small" }'
 ```
 
 Approval status: `null` = Pending, `1` = Approved, `2` = Rejected.
+
+Rejection categories: `polygon_error`, `overlap`, `duplicate`, `other`.
 
 ### ODK API — Plots
 
@@ -275,3 +277,61 @@ To verify: open the attribute table, right-click a row, and select **Zoom to Fea
 | PATCH | `/api/v1/odk/plots/{uuid}/` | Update plot (geometry) |
 | DELETE | `/api/v1/odk/plots/{uuid}/` | Delete a plot |
 | POST | `/api/v1/odk/plots/overlap_candidates/` | Find overlapping plots |
+| GET | `/api/v1/settings/telegram/` | Get Telegram notification config |
+| PUT | `/api/v1/settings/telegram/` | Update Telegram notification config |
+| GET | `/api/v1/settings/telegram/groups/` | List Telegram groups visible to the bot |
+
+## Telegram Notifications
+
+When a plot is rejected, the system can send notifications to Telegram groups after the rejection syncs to KoboToolbox.
+
+### Setup
+
+1. **Create a bot** — message [@BotFather](https://t.me/BotFather) on Telegram, send `/newbot`, and follow the prompts. Copy the bot token.
+
+2. **Add the bot to your group(s)** — add the bot to the Telegram group(s) you want to receive notifications, then send at least one message in each group so the bot can see it.
+
+3. **Configure via the UI** — go to **Settings > Telegram** in the dashboard:
+   - Enable notifications
+   - Paste the bot token and click the refresh button to load available groups
+   - Select supervisor and enumerator groups from the dropdowns
+   - Save
+
+   Alternatively, configure via environment variables in `.env`:
+
+   ```env
+   TELEGRAM_ENABLED=True
+   TELEGRAM_BOT_TOKEN=<your_bot_token>
+   TELEGRAM_SUPERVISOR_GROUP_ID=<group_id>
+   TELEGRAM_ENUMERATOR_GROUP_ID=<group_id>
+   ```
+
+   DB settings (saved via the UI) override environment variables.
+
+4. **Fetch groups via API** (optional) — if you prefer the CLI:
+
+   ```bash
+   # List groups the bot can see
+   curl "http://localhost:8000/api/v1/settings/telegram/groups/" \
+     -H "Authorization: Bearer <token>"
+
+   # Or with a specific bot token
+   curl "http://localhost:8000/api/v1/settings/telegram/groups/?bot_token=<your_bot_token>" \
+     -H "Authorization: Bearer <token>"
+   ```
+
+   Response:
+
+   ```json
+   [
+     { "id": "-100123456789", "title": "Supervisors", "type": "supergroup" },
+     { "id": "-100987654321", "title": "Enumerators", "type": "group" }
+   ]
+   ```
+
+### How it works
+
+- Rejections create a `RejectionAudit` record and dispatch a Kobo validation sync
+- After successful Kobo sync, a Telegram notification is queued automatically
+- Messages are sent to both supervisor and enumerator groups
+- If `TELEGRAM_ENABLED=False` (default), no notifications are sent

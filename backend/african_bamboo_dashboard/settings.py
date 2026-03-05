@@ -214,3 +214,20 @@ Q_CLUSTER = {
 
 # Storage path for file uploads and exports
 STORAGE_PATH = environ.get("STORAGE_PATH", "./storage")
+
+# Telegram notification settings
+# These are fallback defaults; DB settings
+# (SystemSetting model) override these at runtime.
+TELEGRAM_ENABLED = (
+    environ.get("TELEGRAM_ENABLED", "False").lower()
+    in ("true", "1", "yes")
+)
+TELEGRAM_BOT_TOKEN = environ.get(
+    "TELEGRAM_BOT_TOKEN", ""
+)
+TELEGRAM_SUPERVISOR_GROUP_ID = environ.get(
+    "TELEGRAM_SUPERVISOR_GROUP_ID", ""
+)
+TELEGRAM_ENUMERATOR_GROUP_ID = environ.get(
+    "TELEGRAM_ENUMERATOR_GROUP_ID", ""
+)

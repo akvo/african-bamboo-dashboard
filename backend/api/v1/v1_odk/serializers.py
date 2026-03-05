@@ -1,8 +1,20 @@
 from rest_framework import serializers
 
-from api.v1.v1_odk.models import FormMetadata, FormQuestion, Plot, Submission
-from utils.custom_serializer_fields import CustomCharField, CustomFloatField
-from api.v1.v1_odk.constants import ApprovalStatusTypes
+from api.v1.v1_odk.constants import (
+    ApprovalStatusTypes,
+    RejectionCategory,
+)
+from api.v1.v1_odk.models import (
+    FormMetadata,
+    FormQuestion,
+    Plot,
+    RejectionAudit,
+    Submission,
+)
+from utils.custom_serializer_fields import (
+    CustomCharField,
+    CustomFloatField,
+)
 
 
 def build_option_lookup(form):
@@ -143,12 +155,56 @@ class SubmissionListSerializer(serializers.ModelSerializer):
         return self._resolve_field(obj, "enumerator_id")
 
 
-class SubmissionDetailSerializer(serializers.ModelSerializer):
+class RejectionAuditSerializer(
+    serializers.ModelSerializer
+):
+    reason_category_display = (
+        serializers.CharField(
+            source="get_reason_category_display",
+            read_only=True,
+        )
+    )
+    validator_name = serializers.CharField(
+        source="validator.name",
+        read_only=True,
+        default=None,
+    )
+
+    class Meta:
+        model = RejectionAudit
+        fields = [
+            "id",
+            "reason_category",
+            "reason_category_display",
+            "reason_text",
+            "rejected_at",
+            "sync_status",
+            "telegram_sent_at",
+            "validator_name",
+        ]
+        read_only_fields = fields
+
+
+class SubmissionDetailSerializer(
+    serializers.ModelSerializer
+):
     """Full serializer with raw_data."""
 
-    form = serializers.CharField(source="form.asset_uid", read_only=True)
-    resolved_data = serializers.SerializerMethodField()
-    questions = serializers.SerializerMethodField()
+    form = serializers.CharField(
+        source="form.asset_uid", read_only=True
+    )
+    resolved_data = (
+        serializers.SerializerMethodField()
+    )
+    questions = (
+        serializers.SerializerMethodField()
+    )
+    rejection_audits = RejectionAuditSerializer(
+        many=True, read_only=True
+    )
+    reviewer_notes = (
+        serializers.SerializerMethodField()
+    )
 
     EXCLUDED_QUESTION_TYPES = {
         "geoshape",
@@ -164,8 +220,20 @@ class SubmissionDetailSerializer(serializers.ModelSerializer):
         model = Submission
         fields = "__all__"
 
+    def get_reviewer_notes(self, obj):
+        audit = (
+            obj.rejection_audits.order_by(
+                "-rejected_at"
+            ).first()
+        )
+        if audit:
+            return audit.reason_text
+        return None
+
     def get_resolved_data(self, obj):
-        option_map, type_map = build_option_lookup(obj.form)
+        option_map, type_map = build_option_lookup(
+            obj.form
+        )
         raw = obj.raw_data or {}
         resolved = dict(raw)
         for key, val in raw.items():
@@ -209,11 +277,60 @@ class SubmissionDetailSerializer(serializers.ModelSerializer):
         ]
 
 
-class SubmissionUpdateSerializer(serializers.ModelSerializer):
+class SubmissionUpdateSerializer(
+    serializers.ModelSerializer
+):
     """Restrict writable fields for approval."""
 
-    # Set flagged to False when approval is set whether approved or rejected
+    approval_status = serializers.IntegerField(
+        required=False,
+        allow_null=True,
+    )
+    reason_category = serializers.ChoiceField(
+        choices=RejectionCategory.CHOICES,
+        required=False,
+        write_only=True,
+    )
+    reason_text = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        write_only=True,
+    )
+    reviewer_notes = (
+        serializers.SerializerMethodField(
+            read_only=True,
+        )
+    )
+
+    def get_reviewer_notes(self, obj):
+        audit = (
+            obj.rejection_audits.order_by(
+                "-rejected_at"
+            ).first()
+        )
+        if audit:
+            return audit.reason_text
+        return None
+
+    def validate(self, attrs):
+        approval = attrs.get("approval_status")
+        if (
+            approval == ApprovalStatusTypes.REJECTED
+            and not attrs.get("reason_category")
+        ):
+            raise serializers.ValidationError(
+                {
+                    "reason_category": (
+                        "This field is required "
+                        "when rejecting."
+                    )
+                }
+            )
+        return attrs
+
     def update(self, instance, validated_data):
+        validated_data.pop("reason_category", None)
+        validated_data.pop("reason_text", None)
         approval_status = validated_data.get(
             "approval_status",
             instance.approval_status,
@@ -240,6 +357,8 @@ class SubmissionUpdateSerializer(serializers.ModelSerializer):
         model = Submission
         fields = [
             "approval_status",
+            "reason_category",
+            "reason_text",
             "reviewer_notes",
         ]
 

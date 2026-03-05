@@ -3,13 +3,12 @@
 import { useState, useEffect } from "react";
 import { ArrowLeft, MapPin, Edit3, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/status-badge";
+import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { getPlotStatus } from "@/lib/plot-utils";
 import api from "@/lib/api";
-import { useMapState } from "@/hooks/useMapState";
 
 function MetadataRow({ label, value }) {
   if (!value) {
@@ -28,17 +27,16 @@ export default function PlotDetailPanel({
   onBack,
   onApprove,
   onReject,
+  onRevertToPending,
   onStartEditing,
 }) {
   const [submission, setSubmission] = useState(null);
   const [isLoadingSub, setIsLoadingSub] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
-  const { notes, setNotes } = useMapState();
 
   useEffect(() => {
     if (!plot?.submission_uuid) {
       setSubmission(null);
-      setNotes("");
       return;
     }
     let cancelled = false;
@@ -48,13 +46,11 @@ export default function PlotDetailPanel({
       .then((res) => {
         if (!cancelled) {
           setSubmission(res.data);
-          setNotes(res.data.reviewer_notes || "");
         }
       })
       .catch(() => {
         if (!cancelled) {
           setSubmission(null);
-          setNotes("");
         }
       })
       .finally(() => {
@@ -63,7 +59,7 @@ export default function PlotDetailPanel({
     return () => {
       cancelled = true;
     };
-  }, [plot.submission_uuid, setNotes]);
+  }, [plot?.submission_uuid]);
 
   if (!plot) return null;
 
@@ -80,13 +76,6 @@ export default function PlotDetailPanel({
   const centerLon = hasGeometry
     ? ((plot.min_lon + plot.max_lon) / 2).toFixed(6)
     : null;
-  console.log("PlotDetailPanel render", {
-    plot,
-    submission,
-    status,
-    hasGeometry,
-  });
-
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
@@ -176,19 +165,37 @@ export default function PlotDetailPanel({
             Edit polygon
           </Button>
 
-          {/* Notes */}
-          <div className="space-y-2">
-            <label htmlFor="plot-notes" className="text-sm font-medium">
-              Notes
-            </label>
-            <Textarea
-              id="plot-notes"
-              placeholder="Add notes for the enumerator..."
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              className="min-h-20"
-            />
-          </div>
+          {/* Rejection audit trail */}
+          {submission?.rejection_audits?.length > 0 && (
+            <div className="space-y-2">
+              <h3 className="text-sm font-medium">Rejection History</h3>
+              <div className="space-y-2">
+                {submission.rejection_audits.map((audit) => (
+                  <div
+                    key={audit.id}
+                    className="rounded-md border border-border p-3 space-y-1"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="text-xs">
+                        {audit.reason_category_display}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground">
+                        {new Date(audit.rejected_at).toLocaleDateString()}
+                      </span>
+                    </div>
+                    {audit.reason_text && (
+                      <p className="text-sm text-muted-foreground">
+                        {audit.reason_text}
+                      </p>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      by {audit.validator_name || "Unknown"}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </ScrollArea>
 
@@ -197,27 +204,34 @@ export default function PlotDetailPanel({
         <div className="flex gap-2 border-t border-border p-4 position-sticky bottom-0 bg-card">
           <Button
             className="flex-1 bg-status-approved text-white hover:bg-status-approved/90"
-            onClick={() => onApprove(notes)}
+            onClick={onApprove}
           >
             Approve
           </Button>
           <Button
             variant="destructive"
             className="flex-1"
-            onClick={() => onReject(notes)}
+            onClick={onReject}
           >
             Reject
           </Button>
         </div>
       )}
       {["approved", "rejected"].includes(status) && !isResetting && (
-        <div className="flex gap-2 border-t border-border p-4 position-sticky bottom-0 bg-card">
+        <div className="flex flex-col gap-2 border-t border-border p-4 position-sticky bottom-0 bg-card">
           <Button
             variant="outline"
-            className="flex-1"
+            className="w-full"
             onClick={() => setIsResetting(true)}
           >
             Reset Approval
+          </Button>
+          <Button
+            variant="outline"
+            className="w-full"
+            onClick={onRevertToPending}
+          >
+            Revert to Pending
           </Button>
         </div>
       )}

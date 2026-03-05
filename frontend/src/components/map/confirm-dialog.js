@@ -11,7 +11,13 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { useMapState } from "@/hooks/useMapState";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export default function ConfirmDialog({
   open,
@@ -27,25 +33,43 @@ export default function ConfirmDialog({
   confirmVariant = "default",
   confirmClassName,
   textarea,
+  select,
 }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { notes, setNotes } = useMapState();
+  const [selectValue, setSelectValue] = useState("");
+  const [notes, setNotes] = useState("");
 
   const needsInput = !!textarea;
-  const isDisabled = isSubmitting || (textarea?.required && !notes.trim());
+  const needsSelect = !!select;
+  const isDisabled =
+    isSubmitting ||
+    (textarea?.required && !notes.trim()) ||
+    (select?.required && !selectValue);
 
   const handleConfirm = async () => {
     setIsSubmitting(true);
     try {
-      await onConfirm(needsInput ? notes : undefined);
+      await onConfirm({
+        notes: needsInput ? notes : undefined,
+        selectValue: needsSelect ? selectValue : undefined,
+      });
       setNotes("");
+      setSelectValue("");
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  const handleOpenChange = (val) => {
+    if (!val) {
+      setSelectValue("");
+      setNotes("");
+    }
+    onOpenChange(val);
+  };
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           {Icon && (
@@ -62,6 +86,28 @@ export default function ConfirmDialog({
             </DialogDescription>
           )}
         </DialogHeader>
+        {select && (
+          <div className="space-y-2">
+            <label
+              htmlFor="confirm-dialog-select"
+              className="text-sm font-medium"
+            >
+              {select.label}
+            </label>
+            <Select value={selectValue} onValueChange={setSelectValue}>
+              <SelectTrigger id="confirm-dialog-select" className="w-full">
+                <SelectValue placeholder={select.placeholder || "Select..."} />
+              </SelectTrigger>
+              <SelectContent>
+                {(select.options || []).map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
         {textarea && (
           <div className="space-y-2">
             <label
@@ -82,7 +128,7 @@ export default function ConfirmDialog({
         <DialogFooter>
           <Button
             variant="outline"
-            onClick={() => onOpenChange(false)}
+            onClick={() => handleOpenChange(false)}
             disabled={isSubmitting}
           >
             Cancel

@@ -40,6 +40,7 @@ from api.v1.v1_odk.funcs import (
 from api.v1.v1_odk.models import (
     FormMetadata,
     Plot,
+    RejectionAudit,
     Submission,
 )
 from api.v1.v1_odk.serializers import (
@@ -423,11 +424,60 @@ class SubmissionViewSet(
         return qs
 
     def perform_update(self, serializer):
+        reason_category = (
+            serializer.validated_data.get(
+                "reason_category"
+            )
+        )
+        reason_text = (
+            serializer.validated_data.get(
+                "reason_text", ""
+            )
+        )
         instance = serializer.save()
         approval = instance.approval_status
+
+        # Re-check polygon & overlaps on revert
+        if approval is None:
+            plot = getattr(
+                instance, "plot", None
+            )
+            if plot:
+                validate_and_check_plot(plot)
+
+        # Create RejectionAudit for rejections
+        audit = None
+        if (
+            approval
+            == ApprovalStatusTypes.REJECTED
+            and reason_category
+        ):
+            plot = getattr(
+                instance, "plot", None
+            )
+            if plot:
+                audit = (
+                    RejectionAudit.objects.create(
+                        plot=plot,
+                        submission=instance,
+                        validator=(
+                            self.request.user
+                        ),
+                        reason_category=(
+                            reason_category
+                        ),
+                        reason_text=reason_text,
+                    )
+                )
+
+        kobo_key = (
+            approval
+            if approval is not None
+            else ApprovalStatusTypes.PENDING
+        )
         kobo_uid = (
             ApprovalStatusTypes.KoboStatusMap.get(
-                approval
+                kobo_key
             )
         )
         if not kobo_uid:
@@ -439,6 +489,15 @@ class SubmissionViewSet(
             or not user.kobo_password
         ):
             return
+
+        task_kwargs = {}
+        if audit:
+            task_kwargs["hook"] = (
+                "api.v1.v1_odk.tasks"
+                ".on_kobo_sync_complete"
+            )
+            task_kwargs["audit_id"] = audit.pk
+
         async_task(
             "api.v1.v1_odk.tasks"
             ".sync_kobo_validation_status",
@@ -447,7 +506,8 @@ class SubmissionViewSet(
             user.kobo_password,
             instance.form.asset_uid,
             [instance.kobo_id],
-            approval,
+            kobo_key,
+            **task_kwargs,
         )
 
     @extend_schema(tags=["ODK"])

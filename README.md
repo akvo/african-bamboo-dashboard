@@ -200,16 +200,18 @@ Approve or reject a submission:
 curl -X PATCH http://localhost:8000/api/v1/odk/submissions/<uuid>/ \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
-  -d '{ "approval_status": 1, "reviewer_notes": "Boundary verified" }'
+  -d '{ "approval_status": 1 }'
 
-# Reject (approval_status: 2)
+# Reject (approval_status: 2) — reason_category is required
 curl -X PATCH http://localhost:8000/api/v1/odk/submissions/<uuid>/ \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
-  -d '{ "approval_status": 2, "reviewer_notes": "Polygon too small" }'
+  -d '{ "approval_status": 2, "reason_category": "polygon_error", "reason_text": "Polygon too small" }'
 ```
 
 Approval status: `null` = Pending, `1` = Approved, `2` = Rejected.
+
+Rejection categories: `POLYGON_ERROR`, `OVERLAP`, `duplicate`, `other`.
 
 ### ODK API — Plots
 
@@ -275,3 +277,41 @@ To verify: open the attribute table, right-click a row, and select **Zoom to Fea
 | PATCH | `/api/v1/odk/plots/{uuid}/` | Update plot (geometry) |
 | DELETE | `/api/v1/odk/plots/{uuid}/` | Delete a plot |
 | POST | `/api/v1/odk/plots/overlap_candidates/` | Find overlapping plots |
+
+## Telegram Notifications
+
+When a plot is rejected, the system can send notifications to Telegram groups after the rejection syncs to KoboToolbox.
+
+### Setup
+
+1. **Create a bot** — message [@BotFather](https://t.me/BotFather) on Telegram, send `/newbot`, and follow the prompts. Copy the bot token.
+
+2. **Get group chat IDs** — add the bot to your Telegram group(s), then send a message in the group and run:
+
+   ```bash
+   curl https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates
+   ```
+
+   Look for `"chat":{"id":-100xxxxxxxxxx}` in the response. The negative number is the group ID.
+
+3. **Configure environment** — add to your `.env`:
+
+   ```env
+   TELEGRAM_ENABLED=True
+   TELEGRAM_BOT_TOKEN=<your_bot_token>
+   TELEGRAM_SUPERVISOR_GROUP_ID=<group_id>
+   TELEGRAM_ENUMERATOR_GROUP_ID=<group_id>
+   ```
+
+4. **Restart services**:
+
+   ```bash
+   docker compose restart backend worker
+   ```
+
+### How it works
+
+- Rejections create a `RejectionAudit` record and dispatch a Kobo validation sync
+- After successful Kobo sync, a Telegram notification is queued automatically
+- Messages are sent to both supervisor and enumerator groups
+- If `TELEGRAM_ENABLED=False` (default), no notifications are sent

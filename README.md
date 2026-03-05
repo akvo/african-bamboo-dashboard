@@ -211,7 +211,7 @@ curl -X PATCH http://localhost:8000/api/v1/odk/submissions/<uuid>/ \
 
 Approval status: `null` = Pending, `1` = Approved, `2` = Rejected.
 
-Rejection categories: `POLYGON_ERROR`, `OVERLAP`, `duplicate`, `other`.
+Rejection categories: `polygon_error`, `overlap`, `duplicate`, `other`.
 
 ### ODK API — Plots
 

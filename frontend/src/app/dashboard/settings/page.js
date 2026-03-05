@@ -12,7 +12,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { LogOut } from "lucide-react";
+import TelegramTab from "@/components/settings/telegram-tab";
 
 export default function SettingsPage() {
   const { user } = useAuth();
@@ -26,52 +28,69 @@ export default function SettingsPage() {
         </p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Profile</CardTitle>
-          <CardDescription>
-            Your KoboToolbox account information (read-only)
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-1">
-            <Label className="text-muted-foreground">Name</Label>
-            <p className="text-sm font-medium">{user?.name || "-"}</p>
-          </div>
-          <Separator />
-          <div className="space-y-1">
-            <Label className="text-muted-foreground">Email</Label>
-            <p className="text-sm font-medium">{user?.email || "-"}</p>
-          </div>
-          <Separator />
-          <div className="space-y-1">
-            <Label className="text-muted-foreground">
-              KoboToolbox Username
-            </Label>
-            <p className="text-sm font-medium">{user?.kobo_username || "-"}</p>
-          </div>
-          <Separator />
-          <div className="space-y-1">
-            <Label className="text-muted-foreground">KoboToolbox Server</Label>
-            <p className="text-sm font-medium">{user?.kobo_url || "-"}</p>
-          </div>
-        </CardContent>
-      </Card>
+      <Tabs defaultValue="profile">
+        <TabsList>
+          <TabsTrigger value="profile">Profile</TabsTrigger>
+          <TabsTrigger value="telegram">Telegram</TabsTrigger>
+        </TabsList>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Session</CardTitle>
-          <CardDescription>Manage your current session</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form action={logout}>
-            <Button variant="destructive" type="submit">
-              <LogOut className="size-4" />
-              Sign out
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+        <TabsContent value="profile" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Profile</CardTitle>
+              <CardDescription>
+                Your KoboToolbox account information (read-only)
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-1">
+                <Label className="text-muted-foreground">Name</Label>
+                <p className="text-sm font-medium">{user?.name || "-"}</p>
+              </div>
+              <Separator />
+              <div className="space-y-1">
+                <Label className="text-muted-foreground">Email</Label>
+                <p className="text-sm font-medium">{user?.email || "-"}</p>
+              </div>
+              <Separator />
+              <div className="space-y-1">
+                <Label className="text-muted-foreground">
+                  KoboToolbox Username
+                </Label>
+                <p className="text-sm font-medium">
+                  {user?.kobo_username || "-"}
+                </p>
+              </div>
+              <Separator />
+              <div className="space-y-1">
+                <Label className="text-muted-foreground">
+                  KoboToolbox Server
+                </Label>
+                <p className="text-sm font-medium">{user?.kobo_url || "-"}</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Session</CardTitle>
+              <CardDescription>Manage your current session</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form action={logout}>
+                <Button variant="destructive" type="submit">
+                  <LogOut className="size-4" />
+                  Sign out
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="telegram">
+          <TelegramTab />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

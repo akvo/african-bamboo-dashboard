@@ -1,7 +1,13 @@
 import uuid
 
+from django.conf import settings
 from django.db import models
-from api.v1.v1_odk.constants import ApprovalStatusTypes
+
+from api.v1.v1_odk.constants import (
+    ApprovalStatusTypes,
+    RejectionCategory,
+    SyncStatus,
+)
 
 
 class FormMetadata(models.Model):
@@ -110,11 +116,6 @@ class Submission(models.Model):
         db_index=True,
         help_text="NULL means pending",
     )
-    reviewer_notes = models.TextField(
-        null=True,
-        blank=True,
-        help_text=("Notes from reviewer on " "approval or rejection"),
-    )
 
     class Meta:
         db_table = "submissions"
@@ -200,6 +201,76 @@ class Plot(models.Model):
                 or str(self.uuid)
             )
         return str(self.uuid)
+
+
+class RejectionAudit(models.Model):
+    plot = models.ForeignKey(
+        Plot,
+        on_delete=models.CASCADE,
+        related_name="rejection_audits",
+    )
+    submission = models.ForeignKey(
+        Submission,
+        on_delete=models.CASCADE,
+        related_name="rejection_audits",
+    )
+    validator = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="rejection_audits",
+    )
+    reason_category = models.CharField(
+        max_length=50,
+        choices=RejectionCategory.CHOICES,
+    )
+    reason_text = models.TextField(
+        null=True,
+        blank=True,
+    )
+    rejected_at = models.DateTimeField(
+        auto_now_add=True,
+    )
+    sync_status = models.CharField(
+        max_length=20,
+        default=SyncStatus.PENDING,
+    )
+    kobo_response = models.JSONField(
+        null=True,
+        blank=True,
+    )
+    retry_count = models.IntegerField(default=0)
+    last_sync_attempt = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+    synced_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+    telegram_sent_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+    telegram_chat_ids = models.JSONField(
+        null=True,
+        blank=True,
+    )
+    telegram_message_id = models.CharField(
+        max_length=100,
+        null=True,
+        blank=True,
+    )
+
+    class Meta:
+        db_table = "rejection_audits"
+        ordering = ["-rejected_at"]
+
+    def __str__(self):
+        return (
+            f"Rejection #{self.pk} "
+            f"for {self.submission}"
+        )
 
 
 class FormQuestion(models.Model):

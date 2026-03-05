@@ -2,8 +2,16 @@ from django.db import IntegrityError
 from django.test import TestCase
 from django.test.utils import override_settings
 
-from api.v1.v1_odk.models import (ApprovalStatus, FormMetadata, FormOption,
-                                  FormQuestion, Plot, Submission)
+from api.v1.v1_odk.models import (
+    ApprovalStatus,
+    FormMetadata,
+    FormOption,
+    FormQuestion,
+    Plot,
+    RejectionAudit,
+    Submission,
+)
+from api.v1.v1_users.models import SystemUser
 
 
 @override_settings(USE_TZ=False, TEST_ENV=True)
@@ -71,7 +79,6 @@ class SubmissionModelTest(TestCase):
             submission_time=1700000000000,
             raw_data={},
             approval_status=(ApprovalStatus.REJECTED),
-            reviewer_notes="Boundary unclear",
         )
         self.assertEqual(
             sub.approval_status,
@@ -81,7 +88,6 @@ class SubmissionModelTest(TestCase):
             sub.get_approval_status_display(),
             "Not approved",
         )
-        self.assertEqual(sub.reviewer_notes, "Boundary unclear")
 
     def test_submission_str_with_instance_name(
         self,
@@ -359,4 +365,103 @@ class FormOptionModelTest(TestCase):
             label="Oromia",
         )
         self.form.delete()
-        self.assertFalse(FormOption.objects.filter(name="ET04").exists())
+        self.assertFalse(
+            FormOption.objects.filter(
+                name="ET04"
+            ).exists()
+        )
+
+
+@override_settings(USE_TZ=False, TEST_ENV=True)
+class RejectionAuditModelTest(TestCase):
+    def setUp(self):
+        self.form = FormMetadata.objects.create(
+            asset_uid="form1",
+            name="Test Form",
+        )
+        self.submission = Submission.objects.create(
+            uuid="sub-audit-001",
+            form=self.form,
+            kobo_id="100",
+            submission_time=1700000000000,
+            raw_data={"q": "a"},
+        )
+        self.plot = Plot.objects.create(
+            plot_name="Farmer Audit",
+            form=self.form,
+            region="R",
+            sub_region="SR",
+            created_at=1700000000000,
+            submission=self.submission,
+        )
+        self.validator = (
+            SystemUser.objects.create_superuser(
+                email="validator@test.local",
+                password="Changeme123",
+                name="validator",
+            )
+        )
+
+    def test_rejection_audit_creation(self):
+        audit = RejectionAudit.objects.create(
+            plot=self.plot,
+            submission=self.submission,
+            validator=self.validator,
+            reason_category="polygon_error",
+            reason_text="Bad polygon",
+        )
+        self.assertEqual(
+            audit.reason_category,
+            "polygon_error",
+        )
+        self.assertEqual(
+            audit.reason_text, "Bad polygon"
+        )
+        self.assertEqual(
+            audit.sync_status, "pending"
+        )
+
+    def test_rejection_audit_str(self):
+        audit = RejectionAudit.objects.create(
+            plot=self.plot,
+            submission=self.submission,
+            validator=self.validator,
+            reason_category="other",
+        )
+        expected = (
+            f"Rejection #{audit.pk} "
+            f"for {self.submission}"
+        )
+        self.assertEqual(str(audit), expected)
+
+    def test_rejection_audit_cascade_delete(
+        self,
+    ):
+        RejectionAudit.objects.create(
+            plot=self.plot,
+            submission=self.submission,
+            validator=self.validator,
+            reason_category="duplicate",
+        )
+        self.plot.delete()
+        self.assertFalse(
+            RejectionAudit.objects.filter(
+                submission=self.submission
+            ).exists()
+        )
+
+    def test_submission_no_reviewer_notes_field(
+        self,
+    ):
+        self.assertFalse(
+            hasattr(
+                Submission,
+                "reviewer_notes",
+            )
+            and isinstance(
+                Submission._meta.get_field(
+                    "reviewer_notes"
+                ),
+                type(None),
+            )
+        )

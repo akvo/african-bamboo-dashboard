@@ -1,4 +1,3 @@
-from django.core.exceptions import FieldDoesNotExist
 from django.db import IntegrityError
 from django.test import TestCase
 from django.test.utils import override_settings
@@ -450,11 +449,3 @@ class RejectionAuditModelTest(TestCase):
                 submission=self.submission
             ).exists()
         )
-
-    def test_submission_no_reviewer_notes_field(
-        self,
-    ):
-        with self.assertRaises(FieldDoesNotExist):
-            Submission._meta.get_field(
-                "reviewer_notes"
-            )

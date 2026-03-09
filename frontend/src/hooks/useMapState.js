@@ -9,6 +9,7 @@ import {
   useEffect,
 } from "react";
 import { useForms } from "@/hooks/useForms";
+import { getDateRange } from "@/components/filter-bar";
 import api from "@/lib/api";
 
 const MapStateContext = createContext(null);
@@ -27,9 +28,17 @@ export function MapStateProvider({ children }) {
   const [activeTab, setActiveTab] = useState("all");
   const [sortBy, setSortBy] = useState("priority");
   const [search, setSearch] = useState("");
+  const [datePreset, setDatePreset] = useState("");
+  const [region, setRegion] = useState("");
+  const [subRegion, setSubRegion] = useState("");
+  const [dynamicValues, setDynamicValues] = useState({});
   const [toast, setToast] = useState(null);
 
   const formId = activeForm?.asset_uid;
+  const { start: startDate, end: endDate } = useMemo(
+    () => getDateRange(datePreset),
+    [datePreset],
+  );
 
   const fetchPlots = useCallback(async () => {
     if (!formId) {
@@ -39,9 +48,18 @@ export function MapStateProvider({ children }) {
     setIsLoading(true);
     setError(null);
     try {
-      const res = await api.get("/v1/odk/plots/", {
-        params: { form_id: formId, limit: 200 },
+      const params = { form_id: formId, limit: 200 };
+      if (activeTab && activeTab !== "all") params.status = activeTab;
+      if (search) params.search = search;
+      if (sortBy && sortBy !== "priority") params.sort = sortBy;
+      if (startDate) params.start_date = startDate;
+      if (endDate) params.end_date = endDate;
+      if (region) params.region = region;
+      if (subRegion) params.sub_region = subRegion;
+      Object.entries(dynamicValues).forEach(([k, v]) => {
+        if (v) params[`filter__${k}`] = v;
       });
+      const res = await api.get("/v1/odk/plots/", { params });
       setPlots(res.data.results || []);
       setCount(res.data.count || 0);
     } catch (err) {
@@ -49,7 +67,17 @@ export function MapStateProvider({ children }) {
     } finally {
       setIsLoading(false);
     }
-  }, [formId]);
+  }, [
+    formId,
+    activeTab,
+    search,
+    sortBy,
+    startDate,
+    endDate,
+    region,
+    subRegion,
+    dynamicValues,
+  ]);
 
   useEffect(() => {
     fetchPlots();
@@ -93,6 +121,16 @@ export function MapStateProvider({ children }) {
     setEditingPlotId(null);
   }, []);
 
+  const handleResetFilters = useCallback(() => {
+    setActiveTab("all");
+    setSortBy("priority");
+    setSearch("");
+    setDatePreset("");
+    setRegion("");
+    setSubRegion("");
+    setDynamicValues({});
+  }, []);
+
   return (
     <MapStateContext.Provider
       value={{
@@ -109,10 +147,18 @@ export function MapStateProvider({ children }) {
         activeTab,
         sortBy,
         search,
+        datePreset,
+        region,
+        subRegion,
+        dynamicValues,
         toast,
         setActiveTab,
         setSortBy,
         setSearch,
+        setDatePreset,
+        setRegion,
+        setSubRegion,
+        setDynamicValues,
         setToastMessage,
         setApprovalDialogOpen,
         setRejectionDialogOpen,
@@ -121,6 +167,7 @@ export function MapStateProvider({ children }) {
         handleBackToList,
         handleStartEditing,
         handleCancelEditing,
+        handleResetFilters,
         setEditingPlotId,
       }}
     >

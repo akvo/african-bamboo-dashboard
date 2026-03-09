@@ -100,7 +100,17 @@ export function ExportProvider({ children }) {
   );
 
   const startExport = useCallback(
-    async ({ formId, status, search, format = "shp" }) => {
+    async ({
+      formId,
+      status,
+      search,
+      format = "shp",
+      region,
+      subRegion,
+      start_date,
+      end_date,
+      dynamic_filters,
+    }) => {
       if (isExporting) return;
 
       setIsExporting(true);
@@ -110,12 +120,15 @@ export function ExportProvider({ children }) {
       });
 
       try {
-        const res = await api.post("/v1/odk/plots/export/", {
-          form_id: formId,
-          status,
-          search,
-          format,
-        });
+        const body = { form_id: formId, status, search, format };
+        if (region) body.region = region;
+        if (subRegion) body.sub_region = subRegion;
+        if (start_date) body.start_date = start_date;
+        if (end_date) body.end_date = end_date;
+        if (dynamic_filters && Object.keys(dynamic_filters).length > 0) {
+          body.dynamic_filters = dynamic_filters;
+        }
+        const res = await api.post("/v1/odk/plots/export/", body);
 
         const job = res.data;
         pollJob(job.id);

@@ -6,6 +6,7 @@ from django.db.models import Q
 from drf_spectacular.utils import extend_schema
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.mixins import (
     DestroyModelMixin,
     ListModelMixin,
@@ -59,6 +60,46 @@ from api.v1.v1_odk.serializers import (
 from utils.encryption import decrypt
 from utils.kobo_client import KoboClient
 from utils.polygon import extract_plot_data
+
+
+def _parse_date_param(params, name):
+    """Parse an integer timestamp query param.
+
+    Returns None when the param is absent.
+    Raises ValidationError for non-integer values.
+    """
+    raw = params.get(name)
+    if raw is None:
+        return None
+    try:
+        return int(raw)
+    except (ValueError, TypeError):
+        raise ValidationError(
+            {name: "Must be an integer timestamp."}
+        )
+
+
+def _parse_date_range(params):
+    """Return (start, end) integer timestamps.
+
+    Raises ValidationError when values are not
+    integers or when start_date > end_date.
+    """
+    start = _parse_date_param(params, "start_date")
+    end = _parse_date_param(params, "end_date")
+    if (
+        start is not None
+        and end is not None
+        and start > end
+    ):
+        raise ValidationError(
+            {
+                "start_date": (
+                    "start_date must be <= end_date."
+                )
+            }
+        )
+    return start, end
 
 
 @extend_schema(tags=["Forms"])
@@ -519,17 +560,16 @@ class SubmissionViewSet(
                     instance_name__icontains=search
                 )
             )
-        start_date = params.get("start_date")
-        if start_date:
+        start_date, end_date = _parse_date_range(
+            params
+        )
+        if start_date is not None:
             qs = qs.filter(
-                submission_time__gte=int(
-                    start_date
-                )
+                submission_time__gte=start_date
             )
-        end_date = params.get("end_date")
-        if end_date:
+        if end_date is not None:
             qs = qs.filter(
-                submission_time__lte=int(end_date)
+                submission_time__lte=end_date
             )
         # Dynamic raw_data filters
         if asset_uid:
@@ -745,18 +785,19 @@ class PlotViewSet(
         sub_region = params.get("sub_region")
         if sub_region:
             qs = qs.filter(sub_region=sub_region)
-        start_date = params.get("start_date")
-        if start_date:
+        start_date, end_date = _parse_date_range(
+            params
+        )
+        if start_date is not None:
             qs = qs.filter(
                 submission__submission_time__gte=(
-                    int(start_date)
+                    start_date
                 )
             )
-        end_date = params.get("end_date")
-        if end_date:
+        if end_date is not None:
             qs = qs.filter(
                 submission__submission_time__lte=(
-                    int(end_date)
+                    end_date
                 )
             )
         sort = params.get("sort")

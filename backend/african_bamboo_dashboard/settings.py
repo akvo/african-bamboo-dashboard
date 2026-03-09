@@ -214,6 +214,9 @@ Q_CLUSTER = {
 
 # Storage path for file uploads and exports
 STORAGE_PATH = environ.get("STORAGE_PATH", "./storage")
+STORAGE_SECRET = environ.get(
+    "STORAGE_SECRET", SECRET_KEY
+)
 
 # Telegram notification settings
 # These are fallback defaults; DB settings

@@ -71,6 +71,7 @@ services:
       - SESSION_SECRET=${SESSION_SECRET}
       - NEXT_PUBLIC_MAPBOX_TOKEN=${NEXT_PUBLIC_MAPBOX_TOKEN}
       - NEXT_PUBLIC_SUPPORT_EMAIL=${NEXT_PUBLIC_SUPPORT_EMAIL}
+      - WATCHPACK_POLLING=true
     depends_on:
       - backend
 volumes:

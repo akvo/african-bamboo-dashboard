@@ -35,15 +35,17 @@ function getAttachmentUrl(attachments, questionName) {
   return att?.local_url || null;
 }
 
-function ImageCell({ url, label, onPreview }) {
-  if (!url) return <span className="text-muted-foreground">-</span>;
+function ImageCell({ url, label, instanceName, onPreview }) {
+  if (!url) {
+    return <span className="text-muted-foreground">-</span>;
+  }
   return (
     <button
       type="button"
       className="flex cursor-pointer items-center gap-1.5 text-sm text-primary hover:underline"
       onClick={(e) => {
         e.stopPropagation();
-        onPreview({ url, label });
+        onPreview({ url, label, instanceName });
       }}
     >
       <ImageIcon className="size-4 shrink-0" />
@@ -164,12 +166,11 @@ export function SubmissionsTable({
                           <ImageCell
                             url={getAttachmentUrl(attachments, q.name)}
                             label={q.label}
+                            instanceName={row.instance_name}
                             onPreview={setPreview}
                           />
-                        ) : resolved[q.name] != null ? (
-                          String(resolved[q.name])
                         ) : (
-                          "-"
+                          resolved?.[q.name] || "-"
                         )}
                       </TableCell>
                     ))}
@@ -184,6 +185,9 @@ export function SubmissionsTable({
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>{preview?.label}</DialogTitle>
+            <p className="text-sm text-muted-foreground">
+              {preview?.instanceName}
+            </p>
           </DialogHeader>
           {preview?.url && (
             /* eslint-disable-next-line @next/next/no-img-element */

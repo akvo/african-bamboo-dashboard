@@ -16,6 +16,15 @@ class SyncStatus:
     FAILED = "failed"
 
 
+ATTACHMENTS_FOLDER = "attachments"
+
+EXCLUDED_QUESTION_TYPES = [
+    "geoshape",
+    "geotrace",
+    "geopoint",
+]
+
+
 class RejectionCategory:
     POLYGON_ERROR = "polygon_error"
     OVERLAP = "overlap"

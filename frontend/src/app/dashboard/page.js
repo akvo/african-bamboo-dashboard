@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Download, Loader2, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,44 +8,87 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DashboardHeader } from "@/components/dashboard-header";
 import { StatCard } from "@/components/stat-card";
-import { FilterBar } from "@/components/filter-bar";
+import { FilterBar, getDateRange } from "@/components/filter-bar";
 import { SubmissionsTable } from "@/components/submissions-table";
 import { TablePagination } from "@/components/table-pagination";
 import { useForms } from "@/hooks/useForms";
 import { usePlots } from "@/hooks/usePlots";
 import { useSubmissions } from "@/hooks/useSubmissions";
+import { useFilterOptions } from "@/hooks/useFilterOptions";
 import { useExport } from "@/hooks/useExport";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const stats = [];
 
 const DashboardPage = () => {
-  const { activeForm } = useForms();
+  const { forms, activeForm, setActiveForm } = useForms();
   const { startExport, isExporting } = useExport();
 
   const [activeTab, setActiveTab] = useState("all");
   const [search, setSearch] = useState("");
+  const [region, setRegion] = useState("");
+  const [subRegion, setSubRegion] = useState("");
+  const [datePreset, setDatePreset] = useState("");
+  const [dynamicValues, setDynamicValues] = useState({});
 
-  const { data, count, isLoading, page, totalPages, setPage } = useSubmissions({
-    assetUid: activeForm?.asset_uid,
-    status: activeTab,
+  const { regions, sub_regions, dynamic_filters } = useFilterOptions({
+    formId: activeForm?.asset_uid,
+    region,
   });
+
+  const { start: startDate, end: endDate } = useMemo(
+    () => getDateRange(datePreset),
+    [datePreset],
+  );
+
+  const { data, questions, count, isLoading, page, totalPages, setPage } =
+    useSubmissions({
+      assetUid: activeForm?.asset_uid,
+      status: activeTab,
+      search,
+      region,
+      subRegion,
+      startDate,
+      endDate,
+      dynamicFilters: dynamicValues,
+    });
   const { plots } = usePlots({ formId: activeForm?.asset_uid });
 
-  const filteredData = useMemo(() => {
-    if (!search) return data;
-    return data.filter((row) => {
-      const plotName = row?.plot_name || row?.instance_name || "";
-      return plotName?.toLowerCase()?.includes(search.toLowerCase());
-    });
-  }, [data, search]);
+  const handleReset = useCallback(() => {
+    setRegion("");
+    setSubRegion("");
+    setDatePreset("");
+    setDynamicValues({});
+    setSearch("");
+    setActiveTab("all");
+  }, []);
 
   const handleExport = () => {
     startExport({
       formId: activeForm?.asset_uid,
       status: activeTab,
       search,
+      region,
+      subRegion,
+      start_date: startDate,
+      end_date: endDate,
+      dynamic_filters: dynamicValues,
     });
   };
+
+  function handleFormChange(assetUid) {
+    const form = forms.find((f) => f.asset_uid === assetUid);
+    if (form) {
+      setActiveForm(form);
+      handleReset();
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -58,13 +101,45 @@ const DashboardPage = () => {
       </div>
 
       {/* Filters */}
-      <FilterBar />
+      <FilterBar
+        regions={regions}
+        sub_regions={sub_regions}
+        dynamicFilters={dynamic_filters}
+        region={region}
+        subRegion={subRegion}
+        datePreset={datePreset}
+        dynamicValues={dynamicValues}
+        onRegionChange={(v) => {
+          setRegion(v);
+          setSubRegion("");
+        }}
+        onSubRegionChange={setSubRegion}
+        onDatePresetChange={setDatePreset}
+        onDynamicFilterChange={(name, val) =>
+          setDynamicValues((prev) => ({ ...prev, [name]: val }))
+        }
+        onReset={handleReset}
+      />
 
       {/* Form Section Header */}
       {activeForm && (
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
-            <h2 className="text-lg font-semibold">{activeForm.name}</h2>
+            <Select
+              value={activeForm?.asset_uid || ""}
+              onValueChange={handleFormChange}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Form" />
+              </SelectTrigger>
+              <SelectContent>
+                {forms.map((form) => (
+                  <SelectItem key={form.asset_uid} value={form.asset_uid}>
+                    {form.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Badge variant="secondary">{count} Data points</Badge>
           </div>
           <Button
@@ -113,9 +188,10 @@ const DashboardPage = () => {
 
       {/* Submissions Table */}
       <SubmissionsTable
-        data={filteredData}
+        data={data}
         isLoading={isLoading}
         plots={plots}
+        questions={questions}
       />
 
       {/* Pagination */}

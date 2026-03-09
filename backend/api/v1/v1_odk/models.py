@@ -64,6 +64,16 @@ class FormMetadata(models.Model):
             "plot name. Values joined with spaces."
         ),
     )
+    filter_fields = models.JSONField(
+        null=True,
+        blank=True,
+        help_text=(
+            "List of field names from raw_data "
+            "to use as filter dropdowns. Only "
+            "select_one/select_multiple types "
+            "are supported."
+        ),
+    )
 
     class Meta:
         db_table = "form_metadata"

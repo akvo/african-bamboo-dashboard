@@ -30,7 +30,7 @@ SAMPLE_SURVEY = [
     {
         "name": "woreda",
         "type": "select_one",
-        "select_from_list_name": "woredas",
+        "select_from_list_name": "sub_regions",
         "label": ["Woreda"],
         "$xpath": "woreda",
     },
@@ -61,7 +61,7 @@ SAMPLE_CHOICES = [
         "label": ["SNNPR"],
     },
     {
-        "list_name": "woredas",
+        "list_name": "sub_regions",
         "name": "W01",
         "label": ["Jimma"],
     },

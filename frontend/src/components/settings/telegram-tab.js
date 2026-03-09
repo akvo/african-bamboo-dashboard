@@ -156,8 +156,8 @@ export default function TelegramTab() {
               >
                 @BotFather
               </a>{" "}
-              on Telegram, send <code>/newbot</code>, and paste the token.
-              Then click refresh to load groups.
+              on Telegram, send <code>/newbot</code>, and paste the token. Then
+              click refresh to load groups.
             </p>
           </div>
 

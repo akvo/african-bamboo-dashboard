@@ -1,28 +1,44 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import api from "@/lib/api";
 
-export function useSubmissions({ assetUid, status, limit = 10 } = {}) {
+export function useSubmissions({
+  assetUid,
+  status,
+  search,
+  region,
+  subRegion,
+  startDate,
+  endDate,
+  dynamicFilters,
+  limit = 10,
+} = {}) {
   const [data, setData] = useState([]);
+  const [questions, setQuestions] = useState([]);
   const [count, setCount] = useState(0);
   const [offset, setOffset] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
-  const prevAssetUid = useRef(assetUid);
-  const prevStatus = useRef(status);
+
+  // Serialize dynamicFilters for stable dependency
+  const dynamicKey = useMemo(
+    () => JSON.stringify(dynamicFilters || {}),
+    [dynamicFilters],
+  );
+
+  // Reset offset when any filter changes
+  const filterKey = `${assetUid}-${status}-${search}-${region}-${subRegion}-${startDate}-${endDate}-${dynamicKey}`;
+  const prevFilterKey = useRef(filterKey);
+  useEffect(() => {
+    if (prevFilterKey.current !== filterKey) {
+      prevFilterKey.current = filterKey;
+      setOffset(0);
+    }
+  }, [filterKey]);
 
   const totalPages = Math.ceil(count / limit);
   const page = Math.floor(offset / limit) + 1;
-
-  // Reset offset when the form or status changes
-  useEffect(() => {
-    if (prevAssetUid.current !== assetUid || prevStatus.current !== status) {
-      prevAssetUid.current = assetUid;
-      prevStatus.current = status;
-      setOffset(0);
-    }
-  }, [assetUid, status]);
 
   const fetchSubmissions = useCallback(async () => {
     if (!assetUid) return;
@@ -30,18 +46,38 @@ export function useSubmissions({ assetUid, status, limit = 10 } = {}) {
     setError(null);
     try {
       const params = { asset_uid: assetUid, limit, offset };
-      if (status && status !== "all") {
-        params.status = status;
+      if (status && status !== "all") params.status = status;
+      if (search) params.search = search;
+      if (region) params.region = region;
+      if (subRegion) params.sub_region = subRegion;
+      if (startDate) params.start_date = startDate;
+      if (endDate) params.end_date = endDate;
+      // Dynamic filters: filter__<name>=<value>
+      const parsed = JSON.parse(dynamicKey);
+      for (const [key, val] of Object.entries(parsed)) {
+        if (val) params[`filter__${key}`] = val;
       }
       const res = await api.get("/v1/odk/submissions/", { params });
       setData(res.data.results);
+      setQuestions(res.data.questions || []);
       setCount(res.data.count);
     } catch (err) {
       setError(err.response?.data?.message || "Failed to fetch submissions");
     } finally {
       setIsLoading(false);
     }
-  }, [assetUid, status, limit, offset]);
+  }, [
+    assetUid,
+    status,
+    search,
+    region,
+    subRegion,
+    startDate,
+    endDate,
+    dynamicKey,
+    limit,
+    offset,
+  ]);
 
   useEffect(() => {
     fetchSubmissions();
@@ -56,6 +92,7 @@ export function useSubmissions({ assetUid, status, limit = 10 } = {}) {
 
   return {
     data,
+    questions,
     count,
     isLoading,
     error,

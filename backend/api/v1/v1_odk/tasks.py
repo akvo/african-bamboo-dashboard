@@ -1,5 +1,7 @@
 import logging
+from pathlib import Path
 
+from django.conf import settings
 from django.utils import timezone
 
 from django_q.tasks import async_task
@@ -8,6 +10,7 @@ from api.v1.v1_init.helpers import (
     get_telegram_config,
 )
 from api.v1.v1_odk.constants import (
+    ATTACHMENTS_FOLDER,
     ApprovalStatusTypes,
     SyncStatus,
 )
@@ -25,6 +28,7 @@ from api.v1.v1_odk.models import (
     FormMetadata,
     Plot,
     RejectionAudit,
+    Submission,
 )
 from api.v1.v1_odk.serializers import (
     build_option_lookup,
@@ -98,6 +102,45 @@ def generate_export_file(job_id):
             qs = qs.filter(
                 plot_name__icontains=search
             )
+
+        # Region / sub-region filters
+        region = filters.get("region")
+        if region:
+            qs = qs.filter(region=region)
+        sub_region = filters.get("sub_region")
+        if sub_region:
+            qs = qs.filter(sub_region=sub_region)
+
+        # Date range filters
+        start_date = filters.get("start_date")
+        if start_date:
+            qs = qs.filter(
+                submission__submission_time__gte=(
+                    int(start_date)
+                )
+            )
+        end_date = filters.get("end_date")
+        if end_date:
+            qs = qs.filter(
+                submission__submission_time__lte=(
+                    int(end_date)
+                )
+            )
+
+        # Dynamic raw_data filters
+        dynamic = filters.get(
+            "dynamic_filters", {}
+        )
+        allowed = form.filter_fields or []
+        for field, val in dynamic.items():
+            if field in allowed:
+                qs = qs.filter(
+                    **{
+                        "submission__"
+                        "raw_data__"
+                        f"{field}": val
+                    }
+                )
 
         # Exclude plots without geometry
         qs = qs.filter(
@@ -343,7 +386,7 @@ def _resolve_plot_location(submission, plot):
 
     region_spec = form.region_field or "region"
     sub_region_spec = (
-        form.sub_region_field or "woreda"
+        form.sub_region_field or "sub_region"
     )
 
     region = _resolve_field_spec(
@@ -515,3 +558,116 @@ def send_telegram_rejection_notification(
                 "telegram_message_id",
             ]
         )
+
+
+def download_submission_attachments(
+    kobo_url,
+    kobo_username,
+    kobo_password_enc,
+    submission_uuid,
+):
+    """Download image attachments from Kobo
+    and store them locally.
+
+    Files are saved to:
+    storage/attachments/{submission_uuid}/
+    {att_uid}.{ext}
+    """
+    try:
+        sub = Submission.objects.get(
+            uuid=submission_uuid
+        )
+    except Submission.DoesNotExist:
+        logger.error(
+            "Submission %s not found",
+            submission_uuid,
+        )
+        return
+
+    raw = sub.raw_data or {}
+    attachments = raw.get("_attachments", [])
+    if not attachments:
+        return
+
+    image_atts = [
+        a
+        for a in attachments
+        if a.get("mimetype", "").startswith(
+            "image/"
+        )
+        and a.get("download_medium_url")
+        and a.get("uid")
+    ]
+    if not image_atts:
+        return
+
+    password = decrypt(kobo_password_enc)
+    client = KoboClient(
+        kobo_url, kobo_username, password
+    )
+
+    dest_dir = (
+        Path(settings.STORAGE_PATH)
+        / ATTACHMENTS_FOLDER
+        / str(submission_uuid)
+    )
+    dest_dir.mkdir(parents=True, exist_ok=True)
+
+    for att in image_atts:
+        att_uid = att["uid"]
+        basename = att.get(
+            "media_file_basename", "img.jpg"
+        )
+        ext = basename.rsplit(".", 1)[-1] or "jpg"
+        dest_file = dest_dir / f"{att_uid}.{ext}"
+        if dest_file.exists():
+            continue
+
+        urls = [
+            att.get("download_medium_url"),
+            att.get("download_small_url"),
+            att.get("download_url"),
+        ]
+        urls = [u for u in urls if u]
+
+        downloaded = False
+        for url in urls:
+            try:
+                resp = client.session.get(
+                    url,
+                    timeout=client.timeout,
+                    stream=True,
+                )
+                resp.raise_for_status()
+                with open(dest_file, "wb") as f:
+                    for chunk in (
+                        resp.iter_content(
+                            chunk_size=8192
+                        )
+                    ):
+                        f.write(chunk)
+                logger.info(
+                    "Downloaded attachment %s "
+                    "for submission %s from %s",
+                    att_uid,
+                    submission_uuid,
+                    url,
+                )
+                downloaded = True
+                break
+            except Exception:
+                logger.warning(
+                    "Failed %s for "
+                    "attachment %s, "
+                    "trying next URL",
+                    url,
+                    att_uid,
+                )
+        if not downloaded:
+            logger.error(
+                "All URLs failed for "
+                "attachment %s "
+                "submission %s",
+                att_uid,
+                submission_uuid,
+            )

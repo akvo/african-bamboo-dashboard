@@ -47,7 +47,7 @@ SHP_FIELDS = [
     ("PLOT_NAME", "C", 254, 0),
     ("ENUMERATOR", "C", 254, 0),
     ("REGION", "C", 254, 0),
-    ("WOREDA", "C", 254, 0),
+    ("SUB_REGION", "C", 254, 0),
     ("VAL_STATUS", "C", 20, 0),
     ("NEEDS_RECL", "C", 10, 0),
     ("REJ_REASON", "C", 254, 0),
@@ -165,8 +165,8 @@ def resolve_plot_attributes(
 
     form = plot.form
     region_spec = form.region_field or "region"
-    woreda_spec = (
-        form.sub_region_field or "woreda"
+    sub_region_spec = (
+        form.sub_region_field or "sub_region"
     )
 
     plot_name = plot.plot_name or instance_name
@@ -200,10 +200,10 @@ def resolve_plot_attributes(
             )
             or ""
         )[:254],
-        "WOREDA": (
+        "SUB_REGION": (
             _resolve_field_spec(
                 raw,
-                woreda_spec,
+                sub_region_spec,
                 option_map,
                 type_map,
             )
@@ -330,7 +330,7 @@ def generate_shapefile(
                 attrs["PLOT_NAME"],
                 attrs["ENUMERATOR"],
                 attrs["REGION"],
-                attrs["WOREDA"],
+                attrs["SUB_REGION"],
                 attrs["VAL_STATUS"],
                 attrs["NEEDS_RECL"],
                 attrs["REJ_REASON"],

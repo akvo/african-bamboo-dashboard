@@ -215,7 +215,6 @@ class ResolvedDataDetailTest(TestCase, OdkTestHelperMixin):
         types = [q["type"] for q in questions]
         self.assertNotIn("geoshape", types)
         self.assertNotIn("geotrace", types)
-        self.assertNotIn("image", types)
 
     def test_questions_exclude_mapped_fields(self):
         resp = self.client.get(
@@ -224,7 +223,7 @@ class ResolvedDataDetailTest(TestCase, OdkTestHelperMixin):
         )
         questions = resp.json()["questions"]
         names = [q["name"] for q in questions]
-        # region and woreda are mapped fields
+        # region and sub_region are mapped fields
         self.assertNotIn("region", names)
         self.assertNotIn("woreda", names)
 
@@ -301,7 +300,7 @@ class ResolvedDataListTest(TestCase, OdkTestHelperMixin):
             **self.auth,
         )
         results = resp.json()["results"]
-        self.assertEqual(results[0]["woreda"], "Jimma")
+        self.assertEqual(results[0]["sub_region"], "Jimma")
 
     def test_list_enumerator_resolved(self):
         resp = self.client.get(
@@ -406,6 +405,6 @@ class MultiFieldResolvedTest(
         results = resp.json()["results"]
         # woreda_specify is empty, skipped
         self.assertEqual(
-            results[0]["woreda"],
+            results[0]["sub_region"],
             "Jimma - K01",
         )

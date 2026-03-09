@@ -335,3 +335,24 @@ When a plot is rejected, the system can send notifications to Telegram groups af
 - After successful Kobo sync, a Telegram notification is queued automatically
 - Messages are sent to both supervisor and enumerator groups
 - If `TELEGRAM_ENABLED=False` (default), no notifications are sent
+
+## Image Attachments
+
+During sync, image attachments from KoboToolbox submissions are downloaded and stored locally in `storage/attachments/{submission_uuid}/`. This avoids requiring Kobo credentials for every image request.
+
+### How it works
+
+1. **Sync** triggers an async task (`download_submission_attachments`) for each submission with image attachments
+2. Images are saved to `storage/attachments/{submission_uuid}/{att_uid}.{ext}`
+3. The API returns signed URLs (`/storage/attachments/...?key=STORAGE_SECRET`) in submission `resolved_data`
+4. **Nginx** serves files from `/storage/attachments/` directly, requiring a `key` query parameter
+
+### Configuration
+
+Set `STORAGE_SECRET` in `.env` to control the key used for signed URLs. If not set, it defaults to `SECRET_KEY`.
+
+```env
+STORAGE_SECRET=your_secret_here
+```
+
+The nginx config (`nginx/conf.d/default.conf`) serves `/storage/attachments/` with a key check and 7-day cache headers.

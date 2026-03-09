@@ -82,7 +82,13 @@ class FormMetadataSerializer(serializers.ModelSerializer):
 
 
 class SubmissionListSerializer(serializers.ModelSerializer):
-    """Lightweight list — excludes raw_data."""
+    """Lightweight list serializer.
+
+    Returns only question-level resolved values
+    (filtered by context['question_names']) and
+    sanitised attachment metadata — never the full
+    raw_data payload.
+    """
 
     form = serializers.CharField(source="form.asset_uid", read_only=True)
     region = serializers.SerializerMethodField()
@@ -117,8 +123,13 @@ class SubmissionListSerializer(serializers.ModelSerializer):
         type_map = self.context.get(
             "type_map", {}
         )
+        question_names = self.context.get(
+            "question_names"
+        )
         raw = obj.raw_data or {}
-        resolved = dict(raw)
+
+        # Resolve select options
+        resolved = {}
         for key, val in raw.items():
             if key in option_map and val is not None:
                 resolved[key] = resolve_value(
@@ -126,6 +137,17 @@ class SubmissionListSerializer(serializers.ModelSerializer):
                     option_map[key],
                     type_map.get(key),
                 )
+            else:
+                resolved[key] = val
+
+        # Filter to only question-level keys
+        if question_names is not None:
+            resolved = {
+                k: v
+                for k, v in resolved.items()
+                if k in question_names
+            }
+
         # Enrich attachments with local URLs
         attachments = raw.get(
             "_attachments", []
@@ -134,7 +156,6 @@ class SubmissionListSerializer(serializers.ModelSerializer):
             key = settings.STORAGE_SECRET
             enriched = []
             for att in attachments:
-                att_copy = dict(att)
                 uid = att.get("uid")
                 basename = att.get(
                     "media_file_basename",
@@ -144,18 +165,23 @@ class SubmissionListSerializer(serializers.ModelSerializer):
                     basename.rsplit(".", 1)[-1]
                     or "jpg"
                 )
+                sanitised = {
+                    "question_xpath": att.get(
+                        "question_xpath"
+                    ),
+                }
                 if uid:
                     encoded_key = quote(
                         key, safe=""
                     )
-                    att_copy["local_url"] = (
+                    sanitised["local_url"] = (
                         f"/storage"
                         f"/{ATTACHMENTS_FOLDER}"
                         f"/{obj.uuid}"
                         f"/{uid}.{ext}"
                         f"?key={encoded_key}"
                     )
-                enriched.append(att_copy)
+                enriched.append(sanitised)
             resolved["_attachments"] = enriched
         return resolved
 
@@ -490,7 +516,7 @@ class PlotSerializer(serializers.ModelSerializer):
 
     def get_sub_region(self, obj):
         field_spec = (
-            obj.form.sub_region_field or "woreda"
+            obj.form.sub_region_field or "sub_region"
         )
         return self._resolve_plot_fields(
             obj, field_spec

@@ -412,6 +412,14 @@ class SubmissionViewSet(
                     )
                     ctx["option_lookup"] = om
                     ctx["type_map"] = tm
+                    ctx["question_names"] = {
+                        q["name"]
+                        for q in (
+                            self._get_form_questions(
+                                asset_uid
+                            )
+                        )
+                    }
                 except FormMetadata.DoesNotExist:
                     pass
         return ctx

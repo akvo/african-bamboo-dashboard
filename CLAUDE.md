@@ -87,6 +87,7 @@ When writing backend code, always:
 2. Run `black . && isort . && flake8` mentally before finalizing code — the CI will fail on any violation.
 3. Use double quotes for strings (Black default).
 4. Sort imports with isort (stdlib → third-party → local), one import per line for `from` imports when they exceed 80 chars.
+5. **All imports at the top of the file** — never use inline/local imports inside functions or methods. Always place `from` and `import` statements at the module level.
 
 ### Backend Test Naming Convention
 

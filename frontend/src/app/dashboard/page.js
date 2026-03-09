@@ -42,14 +42,6 @@ const DashboardPage = () => {
     region,
   });
 
-  function handleFormChange(assetUid) {
-    const form = forms.find((f) => f.asset_uid === assetUid);
-    if (form) {
-      setActiveForm(form);
-      onReset?.();
-    }
-  }
-
   const { start: startDate, end: endDate } = useMemo(
     () => getDateRange(datePreset),
     [datePreset],
@@ -89,6 +81,14 @@ const DashboardPage = () => {
       dynamic_filters: dynamicValues,
     });
   };
+
+  function handleFormChange(assetUid) {
+    const form = forms.find((f) => f.asset_uid === assetUid);
+    if (form) {
+      setActiveForm(form);
+      handleReset();
+    }
+  }
 
   return (
     <div className="space-y-6">

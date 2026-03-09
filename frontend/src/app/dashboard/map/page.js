@@ -225,14 +225,22 @@ export default function MapPage() {
               datePreset={mapState.datePreset}
               dynamicValues={mapState.dynamicValues}
               onRegionChange={(v) => {
+                mapState.setSelectedPlotId(null);
                 mapState.setRegion(v);
                 mapState.setSubRegion("");
               }}
-              onSubRegionChange={mapState.setSubRegion}
-              onDatePresetChange={mapState.setDatePreset}
-              onDynamicFilterChange={(name, val) =>
-                mapState.setDynamicValues((prev) => ({ ...prev, [name]: val }))
-              }
+              onSubRegionChange={(v) => {
+                mapState.setSelectedPlotId(null);
+                mapState.setSubRegion(v);
+              }}
+              onDatePresetChange={(v) => {
+                mapState.setSelectedPlotId(null);
+                mapState.setDatePreset(v);
+              }}
+              onDynamicFilterChange={(name, val) => {
+                mapState.setSelectedPlotId(null);
+                mapState.setDynamicValues((prev) => ({ ...prev, [name]: val }));
+              }}
               onReset={mapState.handleResetFilters}
             />
           </div>

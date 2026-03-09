@@ -122,6 +122,7 @@ export function MapStateProvider({ children }) {
   }, []);
 
   const handleResetFilters = useCallback(() => {
+    setSelectedPlotId(null);
     setActiveTab("all");
     setSortBy("priority");
     setSearch("");

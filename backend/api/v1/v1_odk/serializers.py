@@ -1,6 +1,11 @@
+from urllib.parse import quote
+
+from django.conf import settings
 from rest_framework import serializers
 
 from api.v1.v1_odk.constants import (
+    ATTACHMENTS_FOLDER,
+    EXCLUDED_QUESTION_TYPES,
     ApprovalStatusTypes,
     RejectionCategory,
 )
@@ -69,6 +74,7 @@ class FormMetadataSerializer(serializers.ModelSerializer):
             "region_field",
             "sub_region_field",
             "plot_name_field",
+            "filter_fields",
         ]
 
     def get_submission_count(self, obj):
@@ -80,9 +86,12 @@ class SubmissionListSerializer(serializers.ModelSerializer):
 
     form = serializers.CharField(source="form.asset_uid", read_only=True)
     region = serializers.SerializerMethodField()
-    woreda = serializers.SerializerMethodField()
+    sub_region = serializers.SerializerMethodField()
     enumerator = serializers.SerializerMethodField()
     plot_name = serializers.CharField(source="plot.plot_name", read_only=True)
+    resolved_data = (
+        serializers.SerializerMethodField()
+    )
 
     class Meta:
         model = Submission
@@ -95,10 +104,60 @@ class SubmissionListSerializer(serializers.ModelSerializer):
             "instance_name",
             "enumerator",
             "region",
-            "woreda",
+            "sub_region",
             "approval_status",
             "plot_name",
+            "resolved_data",
         ]
+
+    def get_resolved_data(self, obj):
+        option_map = self.context.get(
+            "option_lookup", {}
+        )
+        type_map = self.context.get(
+            "type_map", {}
+        )
+        raw = obj.raw_data or {}
+        resolved = dict(raw)
+        for key, val in raw.items():
+            if key in option_map and val is not None:
+                resolved[key] = resolve_value(
+                    val,
+                    option_map[key],
+                    type_map.get(key),
+                )
+        # Enrich attachments with local URLs
+        attachments = raw.get(
+            "_attachments", []
+        )
+        if attachments:
+            key = settings.STORAGE_SECRET
+            enriched = []
+            for att in attachments:
+                att_copy = dict(att)
+                uid = att.get("uid")
+                basename = att.get(
+                    "media_file_basename",
+                    "img.jpg",
+                )
+                ext = (
+                    basename.rsplit(".", 1)[-1]
+                    or "jpg"
+                )
+                if uid:
+                    encoded_key = quote(
+                        key, safe=""
+                    )
+                    att_copy["local_url"] = (
+                        f"/storage"
+                        f"/{ATTACHMENTS_FOLDER}"
+                        f"/{obj.uuid}"
+                        f"/{uid}.{ext}"
+                        f"?key={encoded_key}"
+                    )
+                enriched.append(att_copy)
+            resolved["_attachments"] = enriched
+        return resolved
 
     def _resolve_field(self, obj, field_name):
         raw = obj.raw_data or {}
@@ -144,10 +203,10 @@ class SubmissionListSerializer(serializers.ModelSerializer):
         field_spec = form.region_field or "region"
         return self._resolve_fields(obj, field_spec)
 
-    def get_woreda(self, obj):
+    def get_sub_region(self, obj):
         form = obj.form
         field_spec = (
-            form.sub_region_field or "woreda"
+            form.sub_region_field or "sub_region"
         )
         return self._resolve_fields(obj, field_spec)
 
@@ -206,16 +265,6 @@ class SubmissionDetailSerializer(
         serializers.SerializerMethodField()
     )
 
-    EXCLUDED_QUESTION_TYPES = {
-        "geoshape",
-        "geotrace",
-        "geopoint",
-        "image",
-        "file",
-        "audio",
-        "video",
-    }
-
     class Meta:
         model = Submission
         fields = "__all__"
@@ -262,7 +311,7 @@ class SubmissionDetailSerializer(
         qs = (
             FormQuestion.objects.filter(form=form)
             .exclude(
-                type__in=self.EXCLUDED_QUESTION_TYPES
+                type__in=EXCLUDED_QUESTION_TYPES
             )
             .order_by("pk")
         )

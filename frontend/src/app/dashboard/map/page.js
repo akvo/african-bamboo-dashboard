@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useForms } from "@/hooks/useForms";
 import { useMapState } from "@/hooks/useMapState";
+import { useFilterOptions } from "@/hooks/useFilterOptions";
 import { toWktPolygon } from "@/lib/wkt-parser";
 import { calculateBbox } from "@/lib/plot-utils";
 import api from "@/lib/api";
@@ -12,7 +13,7 @@ import { DEFAULT_BASEMAP } from "@/lib/basemap-config";
 import { CheckCircle2, XCircle, Save } from "lucide-react";
 
 import MapContainerDynamic from "@/components/map/map-container-dynamic";
-import MapFilterBar from "@/components/map/map-filter-bar";
+import { FilterBar } from "@/components/filter-bar";
 import PlotListPanel from "@/components/map/plot-list-panel";
 import PlotDetailPanel from "@/components/map/plot-detail-panel";
 import ConfirmDialog from "@/components/map/confirm-dialog";
@@ -21,10 +22,14 @@ import ToastNotification from "@/components/map/toast-notification";
 export default function MapPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const { isChanged, setIsChanged } = useForms();
-
+  const { activeForm, isChanged, setIsChanged } = useForms();
   const mapState = useMapState();
   const { plots, count, isLoading, refetch } = mapState;
+
+  const { regions, sub_regions, dynamic_filters } = useFilterOptions({
+    formId: activeForm?.asset_uid,
+    region: mapState.region,
+  });
 
   const initialPlotApplied = useRef(false);
 
@@ -167,60 +172,85 @@ export default function MapPage() {
   }, [mapState, refetch]);
 
   return (
-    <div className="-m-6 flex h-[calc(100%+3rem)] overflow-hidden">
-      {/* Left Panel */}
-      <div className="hidden md:flex w-1/2 max-w-[400px] shrink-0 flex-col overflow-hidden border-r border-border bg-card">
-        {isLoading ? (
-          <div className="space-y-3 p-4">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <Skeleton key={i} className="h-14 w-full" />
-            ))}
-          </div>
-        ) : mapState.selectedPlotId ? (
-          <PlotDetailPanel
-            plot={mapState.selectedPlot}
-            onBack={() => {
-              mapState.handleBackToList();
-              if (searchParams.get("plot")) {
-                router.replace("/dashboard/map", { scroll: false });
-              }
-            }}
-            onApprove={() => mapState.setApprovalDialogOpen(true)}
-            onReject={() => mapState.setRejectionDialogOpen(true)}
-            onRevertToPending={handleRevertToPending}
-            onStartEditing={mapState.handleStartEditing}
-          />
-        ) : (
-          <PlotListPanel
-            plots={plots}
-            count={count}
-            activeTab={mapState.activeTab}
-            sortBy={mapState.sortBy}
-            selectedPlotId={mapState.selectedPlotId}
-            onTabChange={mapState.setActiveTab}
-            onSortChange={mapState.setSortBy}
-            onSelectPlot={mapState.handleSelectPlot}
-          />
-        )}
-      </div>
+    <div className="-m-6 flex h-[calc(100%+3rem)] flex-col overflow-hidden">
+      <div className="flex min-h-0 flex-1">
+        {/* Left Panel */}
+        <div className="hidden md:flex w-1/2 max-w-[400px] shrink-0 flex-col overflow-hidden border-r border-border bg-card">
+          {isLoading ? (
+            <div className="space-y-3 p-4">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <Skeleton key={i} className="h-14 w-full" />
+              ))}
+            </div>
+          ) : mapState.selectedPlotId ? (
+            <PlotDetailPanel
+              plot={mapState.selectedPlot}
+              onBack={() => {
+                mapState.handleBackToList();
+                if (searchParams.get("plot")) {
+                  router.replace("/dashboard/map", { scroll: false });
+                }
+              }}
+              onApprove={() => mapState.setApprovalDialogOpen(true)}
+              onReject={() => mapState.setRejectionDialogOpen(true)}
+              onRevertToPending={handleRevertToPending}
+              onStartEditing={mapState.handleStartEditing}
+            />
+          ) : (
+            <PlotListPanel
+              plots={plots}
+              count={count}
+              activeTab={mapState.activeTab}
+              sortBy={mapState.sortBy}
+              search={mapState.search}
+              selectedPlotId={mapState.selectedPlotId}
+              onTabChange={mapState.setActiveTab}
+              onSortChange={mapState.setSortBy}
+              onSearchChange={mapState.setSearch}
+              onSelectPlot={mapState.handleSelectPlot}
+            />
+          )}
+        </div>
 
-      {/* Map Area */}
-      <div className="relative flex-1">
-        <MapFilterBar basemap={basemap} onBasemapChange={setBasemap} />
-        <MapContainerDynamic
-          plots={plots}
-          selectedPlot={mapState.selectedPlot}
-          editingPlotId={mapState.editingPlotId}
-          editedGeo={editedGeo}
-          setEditedGeo={setEditedGeo}
-          onSelectPlot={mapState.handleSelectPlot}
-          onSaveEdit={handleSaveClick}
-          onCancelEdit={handleCancelEdit}
-          onReset={handleResetPolygon}
-          isResetting={isResetting}
-          basemap={basemap}
-          onNotify={mapState.setToastMessage}
-        />
+        {/* Map Area */}
+        <div className="relative flex-1">
+          {/* Filters */}
+          <div className="w-full min-h-[57px] border-b border-border px-4 py-2">
+            <FilterBar
+              regions={regions}
+              sub_regions={sub_regions}
+              dynamicFilters={dynamic_filters}
+              region={mapState.region}
+              subRegion={mapState.subRegion}
+              datePreset={mapState.datePreset}
+              dynamicValues={mapState.dynamicValues}
+              onRegionChange={(v) => {
+                mapState.setRegion(v);
+                mapState.setSubRegion("");
+              }}
+              onSubRegionChange={mapState.setSubRegion}
+              onDatePresetChange={mapState.setDatePreset}
+              onDynamicFilterChange={(name, val) =>
+                mapState.setDynamicValues((prev) => ({ ...prev, [name]: val }))
+              }
+              onReset={mapState.handleResetFilters}
+            />
+          </div>
+          <MapContainerDynamic
+            plots={plots}
+            selectedPlot={mapState.selectedPlot}
+            editingPlotId={mapState.editingPlotId}
+            editedGeo={editedGeo}
+            setEditedGeo={setEditedGeo}
+            onSelectPlot={mapState.handleSelectPlot}
+            onSaveEdit={handleSaveClick}
+            onCancelEdit={handleCancelEdit}
+            onReset={handleResetPolygon}
+            isResetting={isResetting}
+            basemap={basemap}
+            onNotify={mapState.setToastMessage}
+          />
+        </div>
       </div>
 
       {/* Dialogs */}

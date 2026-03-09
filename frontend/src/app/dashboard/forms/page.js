@@ -66,6 +66,7 @@ export default function FormsPage() {
   const [regionFields, setRegionFields] = useState([]);
   const [subRegionFields, setSubRegionFields] = useState([]);
   const [plotNameFields, setPlotNameFields] = useState([]);
+  const [filterFields, setFilterFields] = useState([]);
 
   async function handleRegister(e) {
     e.preventDefault();
@@ -171,6 +172,9 @@ export default function FormsPage() {
             .filter(Boolean)
         : [],
     );
+    setFilterFields(
+      Array.isArray(form.filter_fields) ? form.filter_fields : [],
+    );
 
     // Fetch form fields
     setIsLoadingFields(true);
@@ -199,6 +203,7 @@ export default function FormsPage() {
         region_field: regionFields.join(",") || null,
         sub_region_field: subRegionFields.join(",") || null,
         plot_name_field: plotNameFields.join(","),
+        filter_fields: filterFields.length > 0 ? filterFields : null,
       });
       setMappingStatus({
         type: "success",
@@ -248,6 +253,17 @@ export default function FormsPage() {
         : [...prev, fullPath],
     );
   }
+
+  function toggleFilterField(name) {
+    setFilterFields((prev) =>
+      prev.includes(name) ? prev.filter((f) => f !== name) : [...prev, name],
+    );
+  }
+
+  // Only select_one/select_multiple fields can be filter fields
+  const selectFields = formFields.filter(
+    (f) => f.type === "select_one" || f.type === "select_multiple",
+  );
 
   // Sort fields: geoshape/geotrace first for polygon selector
   const sortedFieldsForPolygon = [...formFields].sort((a, b) => {
@@ -652,6 +668,60 @@ export default function FormsPage() {
                     Multiple fields will be joined with spaces
                   </p>
                 </div>
+
+                {/* Filter fields - select_one/select_multiple only */}
+                {selectFields.length > 0 && (
+                  <div className="space-y-2">
+                    <Label>Filter fields</Label>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className="w-full justify-between h-auto min-h-[2.25rem] px-3 py-2"
+                        >
+                          <div className="flex flex-wrap gap-1">
+                            {filterFields.length === 0 ? (
+                              <span className="text-muted-foreground">
+                                Select filter fields...
+                              </span>
+                            ) : (
+                              filterFields.map((name) => {
+                                const field = formFields.find(
+                                  (f) =>
+                                    f.name === name || f.full_path === name,
+                                );
+                                return (
+                                  <Badge key={name} variant="secondary">
+                                    {field?.label || name}
+                                  </Badge>
+                                );
+                              })
+                            )}
+                          </div>
+                          <ChevronDown className="size-4 opacity-50 shrink-0" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
+                        {selectFields.map((field) => (
+                          <DropdownMenuCheckboxItem
+                            key={field.name}
+                            checked={filterFields.includes(field.name)}
+                            onCheckedChange={() =>
+                              toggleFilterField(field.name)
+                            }
+                          >
+                            {field.label} ({field.type})
+                          </DropdownMenuCheckboxItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                    <p className="text-xs text-muted-foreground">
+                      Only select_one/select_multiple questions are shown.
+                      Selected fields will appear as filter dropdowns on
+                      dashboard and map pages.
+                    </p>
+                  </div>
+                )}
               </>
             )}
 

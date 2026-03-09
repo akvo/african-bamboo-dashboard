@@ -2,6 +2,7 @@ import time
 from datetime import datetime
 from datetime import timezone as tz
 
+from django.db.models import Q
 from drf_spectacular.utils import extend_schema
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -26,6 +27,7 @@ from api.v1.v1_jobs.serializers import (
     JobSerializer,
 )
 from api.v1.v1_odk.constants import (
+    EXCLUDED_QUESTION_TYPES,
     ApprovalStatusTypes,
 )
 from api.v1.v1_odk.funcs import (
@@ -39,6 +41,7 @@ from api.v1.v1_odk.funcs import (
 )
 from api.v1.v1_odk.models import (
     FormMetadata,
+    FormQuestion,
     Plot,
     RejectionAudit,
     Submission,
@@ -309,6 +312,26 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
             if plot.flagged_for_review:
                 plots_flagged += 1
 
+            # Queue attachment download
+            has_images = any(
+                a.get("mimetype", "").startswith(
+                    "image/"
+                )
+                for a in item.get(
+                    "_attachments", []
+                )
+            )
+            if has_images:
+                async_task(
+                    "api.v1.v1_odk.tasks"
+                    ".download_submission"
+                    "_attachments",
+                    request.user.kobo_url,
+                    request.user.kobo_username,
+                    request.user.kobo_password,
+                    str(sub.uuid),
+                )
+
         if results:
             latest = max(
                 r["_submission_time"]
@@ -393,6 +416,56 @@ class SubmissionViewSet(
                     pass
         return ctx
 
+    def _get_form_questions(self, asset_uid):
+        try:
+            form = FormMetadata.objects.get(
+                asset_uid=asset_uid
+            )
+        except FormMetadata.DoesNotExist:
+            return []
+        mapped_fields = set()
+        for spec in [
+            form.region_field,
+            form.sub_region_field,
+            form.plot_name_field,
+        ]:
+            if spec:
+                for f in spec.split(","):
+                    stripped = f.strip()
+                    if stripped:
+                        mapped_fields.add(stripped)
+        qs = (
+            FormQuestion.objects.filter(form=form)
+            .exclude(
+                type__in=EXCLUDED_QUESTION_TYPES
+            )
+            .order_by("pk")
+        )
+        return [
+            {
+                "name": q.name,
+                "label": q.label,
+                "type": q.type,
+            }
+            for q in qs
+            if q.name not in mapped_fields
+        ]
+
+    def list(self, request, *args, **kwargs):
+        response = super().list(
+            request, *args, **kwargs
+        )
+        asset_uid = request.query_params.get(
+            "asset_uid"
+        )
+        if asset_uid:
+            response.data["questions"] = (
+                self._get_form_questions(asset_uid)
+            )
+        else:
+            response.data["questions"] = []
+        return response
+
     STATUS_MAP = {
         "approved": ApprovalStatusTypes.APPROVED,
         "rejected": ApprovalStatusTypes.REJECTED,
@@ -400,14 +473,13 @@ class SubmissionViewSet(
 
     def get_queryset(self):
         qs = super().get_queryset()
-        asset_uid = self.request.query_params.get(
-            "asset_uid"
-        )
+        params = self.request.query_params
+        asset_uid = params.get("asset_uid")
         if asset_uid:
-            qs = qs.filter(form__asset_uid=asset_uid)
-        status_param = (
-            self.request.query_params.get("status")
-        )
+            qs = qs.filter(
+                form__asset_uid=asset_uid
+            )
+        status_param = params.get("status")
         if status_param is not None:
             if status_param == "pending":
                 qs = qs.filter(
@@ -420,6 +492,70 @@ class SubmissionViewSet(
                             status_param
                         ]
                     )
+                )
+        region = params.get("region")
+        if region:
+            qs = qs.filter(plot__region=region)
+        sub_region = params.get("sub_region")
+        if sub_region:
+            qs = qs.filter(
+                plot__sub_region=sub_region
+            )
+        search = params.get("search")
+        if search:
+            qs = qs.filter(
+                Q(
+                    plot__plot_name__icontains=search
+                )
+                | Q(
+                    instance_name__icontains=search
+                )
+            )
+        start_date = params.get("start_date")
+        if start_date:
+            qs = qs.filter(
+                submission_time__gte=int(
+                    start_date
+                )
+            )
+        end_date = params.get("end_date")
+        if end_date:
+            qs = qs.filter(
+                submission_time__lte=int(end_date)
+            )
+        # Dynamic raw_data filters
+        if asset_uid:
+            qs = self._apply_dynamic_filters(
+                qs, params, asset_uid
+            )
+        return qs
+
+    def _apply_dynamic_filters(
+        self, qs, params, asset_uid
+    ):
+        filter_keys = [
+            k
+            for k in params
+            if k.startswith("filter__")
+        ]
+        if not filter_keys:
+            return qs
+        try:
+            form = FormMetadata.objects.get(
+                asset_uid=asset_uid
+            )
+        except FormMetadata.DoesNotExist:
+            return qs
+        allowed = form.filter_fields or []
+        for key in filter_keys:
+            field_name = key[len("filter__"):]
+            if field_name in allowed:
+                qs = qs.filter(
+                    **{
+                        f"raw_data__{field_name}": (
+                            params[key]
+                        )
+                    }
                 )
         return qs
 
@@ -566,12 +702,9 @@ class PlotViewSet(
             .get_queryset()
             .select_related("submission")
         )
-        form_id = self.request.query_params.get(
-            "form_id"
-        )
-        status_param = (
-            self.request.query_params.get("status")
-        )
+        params = self.request.query_params
+        form_id = params.get("form_id")
+        status_param = params.get("status")
         if form_id:
             qs = qs.filter(
                 form__asset_uid=form_id
@@ -593,15 +726,69 @@ class PlotViewSet(
                         ]
                     )
                 )
-        search = (
-            self.request.query_params.get(
-                "search"
-            )
-        )
+        search = params.get("search")
         if search:
             qs = qs.filter(
                 plot_name__icontains=search
             )
+        region = params.get("region")
+        if region:
+            qs = qs.filter(region=region)
+        sub_region = params.get("sub_region")
+        if sub_region:
+            qs = qs.filter(sub_region=sub_region)
+        start_date = params.get("start_date")
+        if start_date:
+            qs = qs.filter(
+                submission__submission_time__gte=(
+                    int(start_date)
+                )
+            )
+        end_date = params.get("end_date")
+        if end_date:
+            qs = qs.filter(
+                submission__submission_time__lte=(
+                    int(end_date)
+                )
+            )
+        sort = params.get("sort")
+        if sort == "name":
+            qs = qs.order_by("plot_name")
+        elif sort == "date":
+            qs = qs.order_by("-created_at")
+        # Dynamic raw_data filters
+        if form_id:
+            filter_keys = [
+                k
+                for k in params
+                if k.startswith("filter__")
+            ]
+            if filter_keys:
+                try:
+                    form = (
+                        FormMetadata.objects.get(
+                            asset_uid=form_id
+                        )
+                    )
+                    allowed = (
+                        form.filter_fields or []
+                    )
+                    for key in filter_keys:
+                        field = key[
+                            len("filter__"):
+                        ]
+                        if field in allowed:
+                            qs = qs.filter(
+                                **{
+                                    "submission__"
+                                    "raw_data__"
+                                    f"{field}": (
+                                        params[key]
+                                    )
+                                }
+                            )
+                except FormMetadata.DoesNotExist:
+                    pass
         return qs
 
     def perform_update(self, serializer):
@@ -692,6 +879,150 @@ class PlotViewSet(
 
     @extend_schema(
         tags=["Plots"],
+        summary="Filter options for dropdowns",
+    )
+    @action(detail=False, methods=["get"])
+    def filter_options(self, request):
+        """Return distinct regions, sub_regions, and
+        configured dynamic filter options."""
+        form_id = request.query_params.get(
+            "form_id"
+        )
+        if not form_id:
+            return Response(
+                {
+                    "detail": (
+                        "form_id is required"
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            form = FormMetadata.objects.get(
+                asset_uid=form_id
+            )
+        except FormMetadata.DoesNotExist:
+            return Response(
+                {"detail": "Form not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        qs = Plot.objects.filter(
+            form__asset_uid=form_id
+        )
+
+        # Build option lookups for region and
+        # sub_region fields to resolve raw codes
+        option_map, _ = build_option_lookup(form)
+
+        def _resolve_label(raw_val, field_spec):
+            """Resolve a raw joined value to
+            labels using option lookups."""
+            if not raw_val:
+                return raw_val
+            fields = [
+                f.strip()
+                for f in (field_spec or "").split(
+                    ","
+                )
+                if f.strip()
+            ]
+            parts = raw_val.split(" - ")
+            resolved = []
+            for i, part in enumerate(parts):
+                if i < len(fields):
+                    opts = option_map.get(
+                        fields[i], {}
+                    )
+                    resolved.append(
+                        opts.get(part, part)
+                    )
+                else:
+                    resolved.append(part)
+            return " - ".join(resolved)
+
+        raw_regions = list(
+            qs.exclude(region="")
+            .values_list("region", flat=True)
+            .distinct()
+            .order_by("region")
+        )
+        regions = [
+            {
+                "value": r,
+                "label": _resolve_label(
+                    r, form.region_field
+                ),
+            }
+            for r in raw_regions
+        ]
+
+        sub_region_qs = qs.exclude(sub_region="")
+        region = request.query_params.get(
+            "region"
+        )
+        if region:
+            sub_region_qs = sub_region_qs.filter(
+                region=region
+            )
+        raw_sub_regions = list(
+            sub_region_qs.values_list(
+                "sub_region", flat=True
+            )
+            .distinct()
+            .order_by("sub_region")
+        )
+        sub_regions = [
+            {
+                "value": w,
+                "label": _resolve_label(
+                    w, form.sub_region_field
+                ),
+            }
+            for w in raw_sub_regions
+        ]
+
+        dynamic_filters = []
+        filter_field_names = (
+            form.filter_fields or []
+        )
+        if filter_field_names:
+            questions = (
+                FormQuestion.objects.filter(
+                    form=form,
+                    name__in=filter_field_names,
+                ).prefetch_related("options")
+            )
+            for q in questions:
+                dynamic_filters.append(
+                    {
+                        "name": q.name,
+                        "label": q.label,
+                        "type": q.type,
+                        "options": [
+                            {
+                                "name": o.name,
+                                "label": o.label,
+                            }
+                            for o in (
+                                q.options.all()
+                            )
+                        ],
+                    }
+                )
+
+        return Response(
+            {
+                "regions": regions,
+                "sub_regions": sub_regions,
+                "dynamic_filters": (
+                    dynamic_filters
+                ),
+            }
+        )
+
+    @extend_schema(
+        tags=["Plots"],
         summary=(
             "Export plots as Shapefile or GeoJSON"
         ),
@@ -750,6 +1081,20 @@ class PlotViewSet(
         search = request.data.get("search")
         if search:
             filters["search"] = search
+        for f in [
+            "region",
+            "sub_region",
+            "start_date",
+            "end_date",
+        ]:
+            val = request.data.get(f)
+            if val:
+                filters[f] = val
+        dynamic = request.data.get(
+            "dynamic_filters"
+        )
+        if dynamic and isinstance(dynamic, dict):
+            filters["dynamic_filters"] = dynamic
 
         job = Jobs.objects.create(
             type=valid_formats[fmt],

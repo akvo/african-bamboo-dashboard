@@ -79,7 +79,7 @@ export default function PlotDetailPanel({
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
-      <div className="border-b border-border px-4 py-3">
+      <div className="w-full min-h-[57px] flex items-center border-b border-border px-4 py-3">
         <button
           type="button"
           onClick={onBack}
@@ -208,11 +208,7 @@ export default function PlotDetailPanel({
           >
             Approve
           </Button>
-          <Button
-            variant="destructive"
-            className="flex-1"
-            onClick={onReject}
-          >
+          <Button variant="destructive" className="flex-1" onClick={onReject}>
             Reject
           </Button>
         </div>

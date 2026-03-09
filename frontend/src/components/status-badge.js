@@ -7,7 +7,7 @@ const statusConfig = {
       "bg-status-approved/15 text-status-approved border-status-approved/30",
   },
   pending: {
-    label: "Pending",
+    label: "On Hold",
     className:
       "bg-status-pending/15 text-status-pending border-status-pending/30",
   },

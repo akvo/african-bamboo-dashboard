@@ -15,6 +15,8 @@ services:
       - ${STORAGE_PATH:-./storage}:/app/storage:delegated
   frontend:
     network_mode: service:mainnetwork
+    volumes:
+      - ${STORAGE_PATH:-./storage}/attachments:/app/public/storage/attachments:delegated
   pgadmin:
     image: dpage/pgadmin4:5.7
     environment:

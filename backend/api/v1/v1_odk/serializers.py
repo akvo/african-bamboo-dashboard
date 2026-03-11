@@ -585,6 +585,16 @@ class PlotSerializer(serializers.ModelSerializer):
     region = serializers.SerializerMethodField()
     sub_region = serializers.SerializerMethodField()
     enumerator = serializers.SerializerMethodField()
+    updated_by_name = CustomCharField(
+        source="submission.updated_by.name",
+        read_only=True,
+        default=None,
+    )
+    updated_at = serializers.DateTimeField(
+        source="submission.updated_at",
+        read_only=True,
+        allow_null=True,
+    )
 
     def get_instance_name(self, obj):
         if obj.submission:
@@ -671,6 +681,8 @@ class PlotSerializer(serializers.ModelSerializer):
             "approval_status",
             "flagged_for_review",
             "flagged_reason",
+            "updated_by_name",
+            "updated_at",
         ]
 
         read_only_fields = [
@@ -680,6 +692,8 @@ class PlotSerializer(serializers.ModelSerializer):
             "approval_status",
             "flagged_for_review",
             "flagged_reason",
+            "updated_by_name",
+            "updated_at",
         ]
 
 

@@ -9,7 +9,6 @@ import { useFilterOptions } from "@/hooks/useFilterOptions";
 import { toWktPolygon } from "@/lib/wkt-parser";
 import { calculateBbox } from "@/lib/plot-utils";
 import api from "@/lib/api";
-import { DEFAULT_BASEMAP } from "@/lib/basemap-config";
 import { CheckCircle2, XCircle, Save } from "lucide-react";
 
 import MapContainerDynamic from "@/components/map/map-container-dynamic";
@@ -17,6 +16,7 @@ import { FilterBar } from "@/components/filter-bar";
 import PlotListPanel from "@/components/map/plot-list-panel";
 import PlotDetailPanel from "@/components/map/plot-detail-panel";
 import ConfirmDialog from "@/components/map/confirm-dialog";
+import TitleDeedViewer from "@/components/map/title-deed-viewer";
 import ToastNotification from "@/components/map/toast-notification";
 
 export default function MapPage() {
@@ -43,8 +43,13 @@ export default function MapPage() {
 
   const [editedGeo, setEditedGeo] = useState(null);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
-  const [basemap, setBasemap] = useState(DEFAULT_BASEMAP);
   const [isResetting, setIsResetting] = useState(false);
+  const [titleDeedAttachments, setTitleDeedAttachments] = useState(null);
+
+  // Close title deed viewer when selected plot changes
+  useEffect(() => {
+    setTitleDeedAttachments(null);
+  }, [mapState.selectedPlotId]);
 
   useEffect(() => {
     if (isChanged) {
@@ -195,6 +200,7 @@ export default function MapPage() {
               onReject={() => mapState.setRejectionDialogOpen(true)}
               onRevertToPending={handleRevertToPending}
               onStartEditing={mapState.handleStartEditing}
+              onOpenTitleDeed={(atts) => setTitleDeedAttachments(atts)}
             />
           ) : (
             <PlotListPanel
@@ -255,8 +261,12 @@ export default function MapPage() {
             onCancelEdit={handleCancelEdit}
             onReset={handleResetPolygon}
             isResetting={isResetting}
-            basemap={basemap}
             onNotify={mapState.setToastMessage}
+          />
+          <TitleDeedViewer
+            open={titleDeedAttachments !== null}
+            onClose={() => setTitleDeedAttachments(null)}
+            attachments={titleDeedAttachments || []}
           />
         </div>
       </div>

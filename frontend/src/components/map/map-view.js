@@ -11,7 +11,8 @@ import {
   Popup,
   ZoomControl,
 } from "react-leaflet";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { Construction, Satellite } from "lucide-react";
 import { parseWktPolygon } from "@/lib/wkt-parser";
 import { getPlotStatus } from "@/lib/plot-utils";
 import basemaps, { DEFAULT_BASEMAP } from "@/lib/basemap-config";
@@ -52,9 +53,9 @@ export default function MapView({
   onCancelEdit,
   onReset,
   isResetting,
-  basemap = DEFAULT_BASEMAP,
   onNotify,
 }) {
+  const [basemap, setBasemap] = useState(DEFAULT_BASEMAP);
   const tile = useMemo(
     () => basemaps.find((b) => b.id === basemap) || basemaps[0],
     [basemap],
@@ -76,7 +77,7 @@ export default function MapView({
         center={DEFAULT_CENTER}
         zoom={DEFAULT_ZOOM}
         maxZoom={MAX_ZOOM}
-        className="h-full w-full"
+        className="h-full w-full [&_.leaflet-bottom.leaflet-right]:!bottom-[6%]"
         zoomControl={false}
         editable={true}
       >
@@ -128,6 +129,28 @@ export default function MapView({
           />
         )}
       </MapContainer>
+
+      <div className="absolute top-3 right-3 z-[1000] flex flex-col gap-1">
+        {basemaps.map((b) => (
+          <button
+            key={b.id}
+            type="button"
+            onClick={() => setBasemap(b.id)}
+            className={`cursor-pointer flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium shadow-sm transition-colors ${
+              basemap === b.id
+                ? "border-primary bg-primary text-primary-foreground"
+                : "border-border bg-background text-foreground hover:bg-accent"
+            }`}
+          >
+            {b.id === "satellite" ? (
+              <Satellite className="size-3.5" />
+            ) : (
+              <Construction className="size-3.5" />
+            )}
+            {b.label}
+          </button>
+        ))}
+      </div>
 
       {editingPlotId && (
         <MapEditToolbar

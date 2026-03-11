@@ -1,8 +1,17 @@
 "use client";
 
 import { useMemo } from "react";
-import { Calendar } from "lucide-react";
+import { Calendar, FunnelPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -29,7 +38,7 @@ function formatDateRange(preset) {
   const { start, end } = getDateRange(preset);
   if (!start || !end) return null;
   const fmt = (ms) =>
-    new Date(ms).toLocaleDateString("en-US", {
+    new Date(ms).toLocaleDateString("en-GB", {
       month: "short",
       day: "numeric",
       year: "numeric",
@@ -38,18 +47,18 @@ function formatDateRange(preset) {
 }
 
 export function FilterBar({
-  regions = [],
-  sub_regions = [],
-  dynamicFilters = [],
   region,
   subRegion,
   datePreset,
-  dynamicValues = {},
   onRegionChange,
   onSubRegionChange,
   onDatePresetChange,
   onDynamicFilterChange,
   onReset,
+  dynamicValues = {},
+  regions = [],
+  sub_regions = [],
+  dynamicFilters = [],
 }) {
   const dateLabel = useMemo(() => formatDateRange(datePreset), [datePreset]);
 
@@ -61,8 +70,8 @@ export function FilterBar({
 
   return (
     <div className="w-full flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-      <div className="w-full flex flex-wrap items-center gap-2">
-        {regions.length > 0 && (
+      <div className="flex items-center gap-2">
+        <div className="hidden 3xl:block">
           <Select value={region || ""} onValueChange={onRegionChange}>
             <SelectTrigger className="w-[160px]">
               <SelectValue placeholder="Region" />
@@ -75,9 +84,9 @@ export function FilterBar({
               ))}
             </SelectContent>
           </Select>
-        )}
+        </div>
 
-        {sub_regions.length > 0 && (
+        <div className="hidden 3xl:block">
           <Select value={subRegion || ""} onValueChange={onSubRegionChange}>
             <SelectTrigger className="w-[160px]">
               <SelectValue placeholder="Sub-region" />
@@ -90,29 +99,103 @@ export function FilterBar({
               ))}
             </SelectContent>
           </Select>
-        )}
+        </div>
 
-        {dynamicFilters.map((df) => (
-          <Select
-            key={df.name}
-            value={dynamicValues[df.name] || ""}
-            onValueChange={(val) => onDynamicFilterChange?.(df.name, val)}
-          >
-            <SelectTrigger className="w-[160px]">
-              <SelectValue placeholder={df.label} />
-            </SelectTrigger>
-            <SelectContent>
-              {df.options.map((opt) => (
-                <SelectItem key={opt.name} value={opt.name}>
-                  {opt.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        ))}
+        {dynamicFilters.length > 0 && (
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button
+                variant="outline"
+                size="icon"
+                className="rounded-sm p-3 size-8 flex items-center justify-center"
+              >
+                <span className="sr-only">Advanced filters</span>
+                <FunnelPlus className="size-4" />
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Advanced Filters</DialogTitle>
+                <DialogDescription>
+                  Narrow results using additional criteria.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="block 3xl:hidden">
+                  <label className="block text-sm font-medium mb-1">
+                    Region
+                  </label>
+                  <Select value={region || ""} onValueChange={onRegionChange}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select region" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {regions.map((r) => (
+                        <SelectItem key={r.value} value={r.value}>
+                          {r.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="block 3xl:hidden">
+                  <label className="block text-sm font-medium mb-1">
+                    Sub-region
+                  </label>
+                  <Select
+                    value={subRegion || ""}
+                    onValueChange={onSubRegionChange}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select sub-region" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {sub_regions.map((w) => (
+                        <SelectItem key={w.value} value={w.value}>
+                          {w.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {dynamicFilters.map((df) => (
+                  <div key={df.name}>
+                    <label className="block text-sm font-medium mb-1">
+                      {df.label}
+                    </label>
+                    <Select
+                      value={dynamicValues[df.name] || ""}
+                      onValueChange={(val) =>
+                        onDynamicFilterChange?.(df.name, val)
+                      }
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder={`Select ${df.label}`} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {df.options.map((opt) => (
+                          <SelectItem key={opt.name} value={opt.name}>
+                            {opt.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ))}
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={onReset}>
+                  Reset filters
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
 
-      <div className="w-fit flex items-center gap-2">
+      <div className="flex items-center justify-end gap-2">
         <Select value={datePreset || ""} onValueChange={onDatePresetChange}>
           <SelectTrigger className="w-[140px]">
             <SelectValue placeholder="Date range" />

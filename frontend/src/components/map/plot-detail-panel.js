@@ -146,8 +146,6 @@ export default function PlotDetailPanel({
       : "Several data issues detected"
     : null;
   const alertTooltip = plot.flagged_for_review ? plot.flagged_reason : null;
-
-  const hasPlotDetails = details?.region || details?.area || details?.woreda;
   const hasTimeline = resolved?.start || resolved?.end;
 
   const handleSeeTitleDeed =
@@ -188,19 +186,18 @@ export default function PlotDetailPanel({
         {!isLoadingSub && activeTab === "details" && (
           <div className="flex w-full flex-col gap-2 p-4">
             {/* Plot details summary */}
-            {hasPlotDetails && (
-              <div className="flex flex-col gap-3 rounded-md border border-card-foreground/10 p-3 bg-card">
-                <SectionHeader icon={Map} title="Plot details" />
-                <Separator className="bg-muted-foreground/20" />
-                <DataFieldRow
-                  fields={[
-                    { label: "Region", value: plot?.region },
-                    { label: "Sub-region", value: plot?.sub_region },
-                    { label: "Area (Ha)", value: details?.area },
-                  ]}
-                />
-              </div>
-            )}
+
+            <div className="flex flex-col gap-3 rounded-md border border-card-foreground/10 p-3 bg-card">
+              <SectionHeader icon={Map} title="Plot details" />
+              <Separator className="bg-muted-foreground/20" />
+              <DataFieldRow
+                fields={[
+                  { label: "Region", value: plot?.region },
+                  { label: "Sub-region", value: plot?.sub_region },
+                  { label: "Area (Ha)", value: details?.area },
+                ]}
+              />
+            </div>
 
             {/* Timeline */}
             {hasTimeline && (
@@ -254,18 +251,25 @@ export default function PlotDetailPanel({
               {/* Title deed link */}
 
               <Separator className="bg-muted-foreground/20" />
-              <button
-                type="button"
-                onClick={handleSeeTitleDeed}
-                className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
-              >
-                <ImageIcon className="size-4" />
-                <span className="flex-1 text-left">Title deed</span>
-                <span className="flex items-center gap-1">
-                  See data
-                  <ArrowRight className="size-3.5" />
-                </span>
-              </button>
+              {handleSeeTitleDeed ? (
+                <button
+                  type="button"
+                  onClick={handleSeeTitleDeed}
+                  className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  <ImageIcon className="size-4" />
+                  <span className="flex-1 text-left">Title deed</span>
+                  <span className="flex items-center gap-1">
+                    See data
+                    <ArrowRight className="size-3.5" />
+                  </span>
+                </button>
+              ) : (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground/50">
+                  <ImageIcon className="size-4" />
+                  <span>No title deed uploaded</span>
+                </div>
+              )}
             </PersonSection>
 
             {/* Open area mapping */}

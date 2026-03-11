@@ -18,8 +18,8 @@ import api from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
-import PlotHeaderCard from "../card/plot-header-card";
-import AttachmentCard from "../card/attachment-card";
+import PlotHeaderCard from "@/components/map/plot-header-card";
+import AttachmentCard from "@/components/map/attachment-card";
 
 function SectionHeader({ icon: Icon, title }) {
   return (

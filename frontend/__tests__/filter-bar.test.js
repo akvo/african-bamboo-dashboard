@@ -1,5 +1,5 @@
 import "@testing-library/jest-dom";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 
 import { FilterBar, getDateRange } from "@/components/filter-bar";
 
@@ -13,25 +13,24 @@ const mockSubRegions = [
   { value: "ET0412", label: "Gondar" },
 ];
 
+const mockDynamicFilters = [
+  {
+    name: "species",
+    label: "Species",
+    options: [
+      { name: "bamboo", label: "Bamboo" },
+      { name: "eucalyptus", label: "Eucalyptus" },
+    ],
+  },
+];
+
 describe("FilterBar", () => {
-  it("renders region dropdown when regions are provided", () => {
-    render(<FilterBar regions={mockRegions} />);
+  it("renders region and sub-region dropdowns", () => {
+    render(
+      <FilterBar regions={mockRegions} sub_regions={mockSubRegions} />,
+    );
     expect(screen.getByText("Region")).toBeInTheDocument();
-  });
-
-  it("does not render region dropdown when regions are empty", () => {
-    render(<FilterBar regions={[]} />);
-    expect(screen.queryByText("Region")).not.toBeInTheDocument();
-  });
-
-  it("renders sub-region dropdown when sub_regions are provided", () => {
-    render(<FilterBar sub_regions={mockSubRegions} />);
     expect(screen.getByText("Sub-region")).toBeInTheDocument();
-  });
-
-  it("does not render sub-region dropdown when sub_regions are empty", () => {
-    render(<FilterBar sub_regions={[]} />);
-    expect(screen.queryByText("Sub-region")).not.toBeInTheDocument();
   });
 
   it("renders date range selector", () => {
@@ -39,7 +38,7 @@ describe("FilterBar", () => {
     expect(screen.getByText("Date range")).toBeInTheDocument();
   });
 
-  it("renders reset button when filters are active", () => {
+  it("renders reset button when region filter is active", () => {
     render(<FilterBar region="ET04" />);
     expect(
       screen.getByRole("button", { name: /reset/i }),
@@ -60,19 +59,60 @@ describe("FilterBar", () => {
     ).toBeInTheDocument();
   });
 
-  it("renders dynamic filter dropdowns", () => {
-    const dynamicFilters = [
-      {
-        name: "species",
-        label: "Species",
-        options: [
-          { name: "bamboo", label: "Bamboo" },
-          { name: "eucalyptus", label: "Eucalyptus" },
-        ],
-      },
-    ];
-    render(<FilterBar dynamicFilters={dynamicFilters} />);
+  it("does not render advanced filters button when no filters available", () => {
+    render(<FilterBar />);
+    expect(
+      screen.queryByRole("button", { name: /advanced filters/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders advanced filters button when dynamic filters are provided", () => {
+    render(<FilterBar dynamicFilters={mockDynamicFilters} />);
+    expect(
+      screen.getByRole("button", { name: /advanced filters/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("renders advanced filters button when only regions are provided", () => {
+    render(<FilterBar regions={mockRegions} />);
+    expect(
+      screen.getByRole("button", { name: /advanced filters/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("renders advanced filters button when only sub-regions are provided", () => {
+    render(<FilterBar sub_regions={mockSubRegions} />);
+    expect(
+      screen.getByRole("button", { name: /advanced filters/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("does not render region dropdown when regions array is empty", () => {
+    render(<FilterBar regions={[]} sub_regions={mockSubRegions} />);
+    expect(screen.queryByText("Region")).not.toBeInTheDocument();
+  });
+
+  it("does not render sub-region dropdown when sub_regions array is empty", () => {
+    render(<FilterBar regions={mockRegions} sub_regions={[]} />);
+    expect(screen.queryByText("Sub-region")).not.toBeInTheDocument();
+  });
+
+  it("shows dynamic filters and region/sub-region in dialog", () => {
+    render(
+      <FilterBar
+        regions={mockRegions}
+        sub_regions={mockSubRegions}
+        dynamicFilters={mockDynamicFilters}
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: /advanced filters/i }),
+    );
+    expect(screen.getByText("Advanced Filters")).toBeInTheDocument();
     expect(screen.getByText("Species")).toBeInTheDocument();
+    // Region and sub-region are also shown inside the dialog
+    expect(screen.getByText("Select region")).toBeInTheDocument();
+    expect(screen.getByText("Select sub-region")).toBeInTheDocument();
   });
 });
 

@@ -4,6 +4,8 @@ from django.test.utils import override_settings
 
 from api.v1.v1_odk.models import (
     ApprovalStatus,
+    FieldMapping,
+    FieldSettings,
     FormMetadata,
     FormOption,
     FormQuestion,
@@ -449,3 +451,144 @@ class RejectionAuditModelTest(TestCase):
                 submission=self.submission
             ).exists()
         )
+
+
+@override_settings(USE_TZ=False, TEST_ENV=True)
+class FieldSettingsModelTest(TestCase):
+    def test_create_field_settings(self):
+        fs = FieldSettings.objects.create(
+            name="title_deed_number",
+        )
+        self.assertEqual(fs.name, "title_deed_number")
+
+    def test_name_uniqueness(self):
+        FieldSettings.objects.create(
+            name="title_deed_number",
+        )
+        with self.assertRaises(IntegrityError):
+            FieldSettings.objects.create(
+                name="title_deed_number",
+            )
+
+
+@override_settings(USE_TZ=False, TEST_ENV=True)
+class FieldMappingModelTest(TestCase):
+    def setUp(self):
+        self.form = FormMetadata.objects.create(
+            asset_uid="fm1",
+            name="Test Form",
+        )
+        self.question = FormQuestion.objects.create(
+            form=self.form,
+            name="deed_no",
+            label="Deed Number",
+            type="text",
+        )
+        self.field = FieldSettings.objects.create(
+            name="title_deed_number",
+        )
+
+    def test_create_field_mapping(self):
+        mapping = FieldMapping.objects.create(
+            field=self.field,
+            form=self.form,
+            form_question=self.question,
+        )
+        self.assertEqual(mapping.field, self.field)
+        self.assertEqual(mapping.form, self.form)
+        self.assertEqual(
+            mapping.form_question, self.question
+        )
+
+    def test_unique_together_field_form(self):
+        FieldMapping.objects.create(
+            field=self.field,
+            form=self.form,
+            form_question=self.question,
+        )
+        q2 = FormQuestion.objects.create(
+            form=self.form,
+            name="deed_no_2",
+            label="Deed Number 2",
+            type="text",
+        )
+        with self.assertRaises(IntegrityError):
+            FieldMapping.objects.create(
+                field=self.field,
+                form=self.form,
+                form_question=q2,
+            )
+
+    def test_cascade_delete_field_settings(self):
+        FieldMapping.objects.create(
+            field=self.field,
+            form=self.form,
+            form_question=self.question,
+        )
+        self.field.delete()
+        self.assertFalse(
+            FieldMapping.objects.filter(
+                form=self.form
+            ).exists()
+        )
+
+    def test_cascade_delete_form_metadata(self):
+        FieldMapping.objects.create(
+            field=self.field,
+            form=self.form,
+            form_question=self.question,
+        )
+        self.form.delete()
+        self.assertFalse(
+            FieldMapping.objects.filter(
+                field=self.field
+            ).exists()
+        )
+
+
+@override_settings(USE_TZ=False, TEST_ENV=True)
+class SubmissionUpdatedFieldsTest(TestCase):
+    def setUp(self):
+        self.form = FormMetadata.objects.create(
+            asset_uid="form-upd",
+            name="Test Form",
+        )
+
+    def test_updated_by_defaults_to_none(self):
+        sub = Submission.objects.create(
+            uuid="uuid-upd-001",
+            form=self.form,
+            kobo_id="200",
+            submission_time=1700000000000,
+            raw_data={"q": "a"},
+        )
+        self.assertIsNone(sub.updated_by)
+
+    def test_updated_at_defaults_to_none(self):
+        sub = Submission.objects.create(
+            uuid="uuid-upd-002",
+            form=self.form,
+            kobo_id="201",
+            submission_time=1700000000000,
+            raw_data={"q": "a"},
+        )
+        self.assertIsNone(sub.updated_at)
+
+
+@override_settings(USE_TZ=False, TEST_ENV=True)
+class PlotAreaHaDefaultTest(TestCase):
+    def setUp(self):
+        self.form = FormMetadata.objects.create(
+            asset_uid="form-area",
+            name="Test Form",
+        )
+
+    def test_area_ha_defaults_to_none(self):
+        plot = Plot.objects.create(
+            plot_name="Farmer Area",
+            form=self.form,
+            region="R",
+            sub_region="SR",
+            created_at=1700000000000,
+        )
+        self.assertIsNone(plot.area_ha)

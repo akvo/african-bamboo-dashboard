@@ -3,6 +3,7 @@ import logging
 from django_q.tasks import async_task
 
 from api.v1.v1_odk.models import (
+    FieldMapping,
     FormOption,
     FormQuestion,
     Plot,
@@ -46,10 +47,22 @@ def sync_form_questions(form, content):
     KoboToolbox asset content into FormQuestion
     and FormOption records.
 
-    Deletes existing questions (cascades to options)
-    then bulk-creates from the asset content.
+    Preserves FieldMapping records by saving
+    and restoring them across the question
+    rebuild.
     """
-    FormQuestion.objects.filter(form=form).delete()
+    # Save existing field mappings before delete
+    saved_mappings = list(
+        FieldMapping.objects.filter(
+            form=form
+        ).values_list(
+            "field_id", "form_question__name"
+        )
+    )
+
+    FormQuestion.objects.filter(
+        form=form
+    ).delete()
 
     survey = content.get("survey", [])
     choices = content.get("choices", [])
@@ -142,6 +155,29 @@ def sync_form_questions(form, content):
 
     if options:
         FormOption.objects.bulk_create(options)
+
+    # Restore field mappings by matching
+    # question names to new question PKs
+    if saved_mappings:
+        q_name_to_pk = {
+            q.name: q.pk for q in created_qs
+        }
+        restored = []
+        for field_id, q_name in saved_mappings:
+            new_pk = q_name_to_pk.get(q_name)
+            if new_pk is not None:
+                restored.append(
+                    FieldMapping(
+                        field_id=field_id,
+                        form=form,
+                        form_question_id=new_pk,
+                    )
+                )
+        if restored:
+            FieldMapping.objects.bulk_create(
+                restored,
+                ignore_conflicts=True,
+            )
 
     return len(created_qs)
 

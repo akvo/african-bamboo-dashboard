@@ -3,6 +3,7 @@ from datetime import datetime
 from datetime import timezone as tz
 
 from django.db.models import Q
+from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -41,6 +42,8 @@ from api.v1.v1_odk.funcs import (
     validate_and_check_plot,
 )
 from api.v1.v1_odk.models import (
+    FieldMapping,
+    FieldSettings,
     FormMetadata,
     FormQuestion,
     Plot,
@@ -48,6 +51,8 @@ from api.v1.v1_odk.models import (
     Submission,
 )
 from api.v1.v1_odk.serializers import (
+    FieldMappingSerializer,
+    FieldSettingsSerializer,
     FormMetadataSerializer,
     PlotOverlapQuerySerializer,
     PlotSerializer,
@@ -57,9 +62,15 @@ from api.v1.v1_odk.serializers import (
     SyncTriggerSerializer,
     build_option_lookup,
 )
+from api.v1.v1_odk.utils.area_calc import (
+    calculate_area_ha,
+)
 from utils.encryption import decrypt
 from utils.kobo_client import KoboClient
-from utils.polygon import extract_plot_data
+from utils.polygon import (
+    extract_plot_data,
+    wkt_to_odk_geoshape,
+)
 
 
 def _parse_date_param(params, name):
@@ -192,6 +203,31 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
         return Response({"fields": fields})
 
     @extend_schema(
+        tags=["ODK"],
+        summary="List local form questions with IDs",
+    )
+    @action(detail=True, methods=["get"])
+    def form_questions(
+        self, request, asset_uid=None
+    ):
+        """Return FormQuestion records stored in DB
+        for a given form, including their IDs."""
+        form = self.get_object()
+        qs = FormQuestion.objects.filter(
+            form=form
+        ).order_by("pk")
+        data = [
+            {
+                "id": q.pk,
+                "name": q.name,
+                "label": q.label,
+                "type": q.type,
+            }
+            for q in qs
+        ]
+        return Response(data)
+
+    @extend_schema(
         request=SyncTriggerSerializer,
         tags=["ODK"],
         summary="Trigger sync from KoboToolbox",
@@ -291,6 +327,12 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
             # Auto-generate plot
             plot_data = extract_plot_data(item, form)
             now_ms = int(time.time() * 1000)
+            # Compute area from raw polygon
+            raw_polygon = plot_data.get(
+                "raw_polygon_string"
+            )
+            area = calculate_area_ha(raw_polygon)
+
             defaults = {
                 "form": form,
                 "plot_name": (
@@ -322,6 +364,7 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
                 "sub_region": (
                     plot_data["sub_region"]
                 ),
+                "area_ha": area,
                 "created_at": now_ms,
             }
             # Only set flag fields when geometry
@@ -618,7 +661,10 @@ class SubmissionViewSet(
                 "reason_text", ""
             )
         )
-        instance = serializer.save()
+        instance = serializer.save(
+            updated_by=self.request.user,
+            updated_at=timezone.now(),
+        )
         approval = instance.approval_status
 
         # Re-check polygon & overlaps on revert
@@ -846,6 +892,15 @@ class PlotViewSet(
             "polygon_wkt"
             in serializer.validated_data
         ):
+            odk_str = wkt_to_odk_geoshape(
+                instance.polygon_wkt
+            )
+            instance.area_ha = calculate_area_ha(
+                odk_str
+            )
+            instance.save(
+                update_fields=["area_ha"]
+            )
             validate_and_check_plot(instance)
             dispatch_kobo_geometry_sync(
                 self.request.user,
@@ -916,6 +971,12 @@ class PlotViewSet(
         plot.flagged_reason = plot_data[
             "flagged_reason"
         ]
+        raw_polygon = plot_data.get(
+            "raw_polygon_string"
+        )
+        plot.area_ha = calculate_area_ha(
+            raw_polygon
+        )
         plot.save()
         # Re-run overlap detection for valid
         # geometry
@@ -1167,4 +1228,146 @@ class PlotViewSet(
         return Response(
             JobSerializer(job).data,
             status=status.HTTP_201_CREATED,
+        )
+
+
+@extend_schema(tags=["Field Settings"])
+class FieldSettingsViewSet(
+    ListModelMixin,
+    GenericViewSet,
+):
+    """Read-only list of standardized fields."""
+
+    queryset = FieldSettings.objects.all().order_by(
+        "pk"
+    )
+    serializer_class = FieldSettingsSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = None
+
+
+@extend_schema(tags=["Field Mappings"])
+class FieldMappingViewSet(
+    ListModelMixin,
+    GenericViewSet,
+):
+    """List and bulk-upsert field mappings."""
+
+    queryset = FieldMapping.objects.all()
+    serializer_class = FieldMappingSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = None
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        form_id = (
+            self.request.query_params.get(
+                "form_id"
+            )
+        )
+        if form_id:
+            qs = qs.filter(
+                form__asset_uid=form_id
+            )
+        return qs.select_related(
+            "field", "form_question"
+        )
+
+    @extend_schema(
+        summary="Bulk upsert field mappings",
+    )
+    @action(
+        detail=False,
+        methods=["put"],
+        url_path=r"(?P<asset_uid>[^/.]+)",
+    )
+    def bulk_upsert(
+        self, request, asset_uid=None
+    ):
+        """Bulk upsert mappings for a form.
+
+        Body: { "field_name": question_id, ... }
+        Set question_id to null to delete.
+        """
+        try:
+            form = FormMetadata.objects.get(
+                asset_uid=asset_uid
+            )
+        except FormMetadata.DoesNotExist:
+            return Response(
+                {"detail": "Form not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        data = request.data
+        if not isinstance(data, dict):
+            return Response(
+                {
+                    "detail": (
+                        "Expected a JSON object"
+                    )
+                },
+                status=(
+                    status.HTTP_400_BAD_REQUEST
+                ),
+            )
+
+        errors = {}
+        for field_name, q_id in data.items():
+            try:
+                field_setting = (
+                    FieldSettings.objects.get(
+                        name=field_name
+                    )
+                )
+            except FieldSettings.DoesNotExist:
+                errors[field_name] = (
+                    "Unknown field setting"
+                )
+                continue
+
+            if q_id is None:
+                FieldMapping.objects.filter(
+                    field=field_setting,
+                    form=form,
+                ).delete()
+                continue
+
+            try:
+                question = (
+                    FormQuestion.objects.get(
+                        pk=q_id, form=form
+                    )
+                )
+            except FormQuestion.DoesNotExist:
+                errors[field_name] = (
+                    f"Question {q_id} not found"
+                )
+                continue
+
+            FieldMapping.objects.update_or_create(
+                field=field_setting,
+                form=form,
+                defaults={
+                    "form_question": question,
+                },
+            )
+
+        if errors:
+            return Response(
+                {"errors": errors},
+                status=(
+                    status.HTTP_400_BAD_REQUEST
+                ),
+            )
+
+        mappings = FieldMapping.objects.filter(
+            form=form
+        ).select_related(
+            "field", "form_question"
+        )
+        return Response(
+            FieldMappingSerializer(
+                mappings, many=True
+            ).data
         )

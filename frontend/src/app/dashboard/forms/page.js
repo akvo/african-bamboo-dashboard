@@ -34,9 +34,13 @@ import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Plus, Loader2, RefreshCw, Settings, ChevronDown } from "lucide-react";
+import api from "@/lib/api";
 
 export default function FormsPage() {
   const {
@@ -61,12 +65,19 @@ export default function FormsPage() {
   const [isSavingMapping, setIsSavingMapping] = useState(false);
   const [mappingStatus, setMappingStatus] = useState(null);
 
-  // Field mapping values
+  // Field mapping values (Plot Structure tab)
   const [polygonFields, setPolygonFields] = useState([]);
   const [regionFields, setRegionFields] = useState([]);
   const [subRegionFields, setSubRegionFields] = useState([]);
   const [plotNameFields, setPlotNameFields] = useState([]);
   const [filterFields, setFilterFields] = useState([]);
+
+  // Detail Fields tab state
+  const [configTab, setConfigTab] = useState("structure");
+  const [fieldSettings, setFieldSettings] = useState([]);
+  const [formQuestions, setFormQuestions] = useState([]);
+  const [detailMappings, setDetailMappings] = useState({});
+  const [isLoadingDetailFields, setIsLoadingDetailFields] = useState(false);
 
   async function handleRegister(e) {
     e.preventDefault();
@@ -138,6 +149,7 @@ export default function FormsPage() {
     setConfigForm(form);
     setConfigDialogOpen(true);
     setMappingStatus(null);
+    setConfigTab("structure");
 
     // Pre-populate existing values
     setPolygonFields(
@@ -190,6 +202,31 @@ export default function FormsPage() {
     } finally {
       setIsLoadingFields(false);
     }
+
+    // Fetch field settings, form questions (with IDs), and existing detail mappings
+    setIsLoadingDetailFields(true);
+    try {
+      const [settingsRes, questionsRes, mappingsRes] = await Promise.all([
+        api.get("/v1/odk/field-settings/"),
+        api.get(`/v1/odk/forms/${form.asset_uid}/form_questions/`),
+        api.get(`/v1/odk/field-mappings/?form_id=${form.asset_uid}`),
+      ]);
+      setFieldSettings(settingsRes.data?.results || settingsRes.data || []);
+      setFormQuestions(questionsRes.data || []);
+      // Convert mappings array to { field_name: form_question_id }
+      const mappingsMap = {};
+      const mappingsData = mappingsRes.data?.results || mappingsRes.data || [];
+      for (const m of mappingsData) {
+        mappingsMap[m.field_name] = String(m.form_question_id);
+      }
+      setDetailMappings(mappingsMap);
+    } catch {
+      setFieldSettings([]);
+      setFormQuestions([]);
+      setDetailMappings({});
+    } finally {
+      setIsLoadingDetailFields(false);
+    }
   }
 
   async function handleSaveMapping() {
@@ -198,6 +235,7 @@ export default function FormsPage() {
     setIsSavingMapping(true);
     setMappingStatus(null);
     try {
+      // Save Plot Structure fields
       await updateForm(configForm.asset_uid, {
         polygon_field: polygonFields.join(","),
         region_field: regionFields.join(",") || null,
@@ -205,6 +243,19 @@ export default function FormsPage() {
         plot_name_field: plotNameFields.join(","),
         filter_fields: filterFields.length > 0 ? filterFields : null,
       });
+
+      // Save Detail Fields mappings
+      // Convert { field_name: "question_id" } to { field_name: int|null }
+      const detailPayload = {};
+      for (const fs of fieldSettings) {
+        const qId = detailMappings[fs.name];
+        detailPayload[fs.name] = qId ? parseInt(qId, 10) : null;
+      }
+      await api.put(
+        `/v1/odk/field-mappings/${configForm.asset_uid}/`,
+        detailPayload,
+      );
+
       setMappingStatus({
         type: "success",
         message: "Field mappings saved successfully.",
@@ -448,7 +499,7 @@ export default function FormsPage() {
 
       {/* Field Mapping Configuration Dialog */}
       <Dialog open={configDialogOpen} onOpenChange={setConfigDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-x-hidden overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               Configure Field Mappings — {configForm?.name}
@@ -459,276 +510,367 @@ export default function FormsPage() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-6 py-4">
-            {isLoadingFields ? (
-              <div className="space-y-4">
-                <Skeleton className="h-10 w-full" />
-                <Skeleton className="h-10 w-full" />
-                <Skeleton className="h-10 w-full" />
-                <Skeleton className="h-10 w-full" />
-              </div>
-            ) : formFields.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-6">
-                No fields found for this form.
+          <Tabs
+            value={configTab}
+            onValueChange={setConfigTab}
+            className="min-w-0 overflow-hidden py-4"
+          >
+            <TabsList className="w-full">
+              <TabsTrigger value="structure">Plot Structure</TabsTrigger>
+              <TabsTrigger value="detail-fields">Detail Fields</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="structure">
+              <p className="mb-4 text-xs text-muted-foreground">
+                Define how raw submissions are converted into plots — geometry
+                source, location hierarchy, naming, and available filters.
               </p>
-            ) : (
-              <>
-                {/* Polygon field(s) - Multi-select */}
-                <div className="space-y-2">
-                  <Label>Polygon field(s)</Label>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className="w-full justify-between h-auto min-h-[2.25rem] px-3 py-2"
-                      >
-                        <div className="flex flex-wrap gap-1">
-                          {polygonFields.length === 0 ? (
-                            <span className="text-muted-foreground">
-                              Select polygon fields...
-                            </span>
-                          ) : (
-                            polygonFields.map((fullPath) => {
-                              const field = formFields.find(
-                                (f) => f.full_path === fullPath,
-                              );
-                              return (
-                                <Badge key={fullPath} variant="secondary">
-                                  {field?.label || fullPath}
-                                </Badge>
-                              );
-                            })
-                          )}
-                        </div>
-                        <ChevronDown className="size-4 opacity-50 shrink-0" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
-                      {sortedFieldsForPolygon.map((field) => (
-                        <DropdownMenuCheckboxItem
-                          key={field.full_path}
-                          checked={polygonFields.includes(field.full_path)}
-                          onCheckedChange={() =>
-                            togglePolygonField(field.full_path)
-                          }
-                        >
-                          {field.label} ({field.type})
-                        </DropdownMenuCheckboxItem>
-                      ))}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                  <p className="text-xs text-muted-foreground">
-                    Geo fields (geoshape/geotrace) are shown first
-                  </p>
-                </div>
-
-                {/* Region field(s) - Multi-select */}
-                <div className="space-y-2">
-                  <Label>Region field(s)</Label>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className="w-full justify-between h-auto min-h-[2.25rem] px-3 py-2"
-                      >
-                        <div className="flex flex-wrap gap-1">
-                          {regionFields.length === 0 ? (
-                            <span className="text-muted-foreground">
-                              Select region fields...
-                            </span>
-                          ) : (
-                            regionFields.map((fullPath) => {
-                              const field = formFields.find(
-                                (f) => f.full_path === fullPath,
-                              );
-                              return (
-                                <Badge key={fullPath} variant="secondary">
-                                  {field?.label || fullPath}
-                                </Badge>
-                              );
-                            })
-                          )}
-                        </div>
-                        <ChevronDown className="size-4 opacity-50 shrink-0" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
-                      {formFields.map((field) => (
-                        <DropdownMenuCheckboxItem
-                          key={field.full_path}
-                          checked={regionFields.includes(field.full_path)}
-                          onCheckedChange={() =>
-                            toggleRegionField(field.full_path)
-                          }
-                        >
-                          {field.label} ({field.type})
-                        </DropdownMenuCheckboxItem>
-                      ))}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                  <p className="text-xs text-muted-foreground">
-                    Multiple fields will be joined with &quot; - &quot;
-                  </p>
-                </div>
-
-                {/* Sub-region field(s) - Multi-select */}
-                <div className="space-y-2">
-                  <Label>Sub-region field(s)</Label>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className="w-full justify-between h-auto min-h-[2.25rem] px-3 py-2"
-                      >
-                        <div className="flex flex-wrap gap-1">
-                          {subRegionFields.length === 0 ? (
-                            <span className="text-muted-foreground">
-                              Select sub-region fields...
-                            </span>
-                          ) : (
-                            subRegionFields.map((fullPath) => {
-                              const field = formFields.find(
-                                (f) => f.full_path === fullPath,
-                              );
-                              return (
-                                <Badge key={fullPath} variant="secondary">
-                                  {field?.label || fullPath}
-                                </Badge>
-                              );
-                            })
-                          )}
-                        </div>
-                        <ChevronDown className="size-4 opacity-50 shrink-0" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
-                      {formFields.map((field) => (
-                        <DropdownMenuCheckboxItem
-                          key={field.full_path}
-                          checked={subRegionFields.includes(field.full_path)}
-                          onCheckedChange={() =>
-                            toggleSubRegionField(field.full_path)
-                          }
-                        >
-                          {field.label} ({field.type})
-                        </DropdownMenuCheckboxItem>
-                      ))}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                  <p className="text-xs text-muted-foreground">
-                    Multiple fields will be joined with &quot; - &quot;
-                  </p>
-                </div>
-
-                {/* Plot name field(s) - Multi-select */}
-                <div className="space-y-2">
-                  <Label>Plot name field(s)</Label>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className="w-full justify-between h-auto min-h-[2.25rem] px-3 py-2"
-                      >
-                        <div className="flex flex-wrap gap-1">
-                          {plotNameFields.length === 0 ? (
-                            <span className="text-muted-foreground">
-                              Select plot name fields...
-                            </span>
-                          ) : (
-                            plotNameFields.map((fullPath) => {
-                              const field = formFields.find(
-                                (f) => f.full_path === fullPath,
-                              );
-                              return (
-                                <Badge key={fullPath} variant="secondary">
-                                  {field?.label || fullPath}
-                                </Badge>
-                              );
-                            })
-                          )}
-                        </div>
-                        <ChevronDown className="size-4 opacity-50 shrink-0" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
-                      {formFields.map((field) => (
-                        <DropdownMenuCheckboxItem
-                          key={field.full_path}
-                          checked={plotNameFields.includes(field.full_path)}
-                          onCheckedChange={() =>
-                            togglePlotNameField(field.full_path)
-                          }
-                        >
-                          {field.label} ({field.type})
-                        </DropdownMenuCheckboxItem>
-                      ))}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                  <p className="text-xs text-muted-foreground">
-                    Multiple fields will be joined with spaces
-                  </p>
-                </div>
-
-                {/* Filter fields - select_one/select_multiple only */}
-                {selectFields.length > 0 && (
-                  <div className="space-y-2">
-                    <Label>Filter fields</Label>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="outline"
-                          className="w-full justify-between h-auto min-h-[2.25rem] px-3 py-2"
-                        >
-                          <div className="flex flex-wrap gap-1">
-                            {filterFields.length === 0 ? (
-                              <span className="text-muted-foreground">
-                                Select filter fields...
-                              </span>
-                            ) : (
-                              filterFields.map((name) => {
-                                const field = formFields.find(
-                                  (f) =>
-                                    f.name === name || f.full_path === name,
-                                );
-                                return (
-                                  <Badge key={name} variant="secondary">
-                                    {field?.label || name}
-                                  </Badge>
-                                );
-                              })
-                            )}
-                          </div>
-                          <ChevronDown className="size-4 opacity-50 shrink-0" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
-                        {selectFields.map((field) => (
-                          <DropdownMenuCheckboxItem
-                            key={field.name}
-                            checked={filterFields.includes(field.name)}
-                            onCheckedChange={() =>
-                              toggleFilterField(field.name)
-                            }
-                          >
-                            {field.label} ({field.type})
-                          </DropdownMenuCheckboxItem>
-                        ))}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                    <p className="text-xs text-muted-foreground">
-                      Only select_one/select_multiple questions are shown.
-                      Selected fields will appear as filter dropdowns on
-                      dashboard and map pages.
-                    </p>
+              <div className="space-y-6">
+                {isLoadingFields ? (
+                  <div className="space-y-4">
+                    <Skeleton className="h-10 w-full" />
+                    <Skeleton className="h-10 w-full" />
+                    <Skeleton className="h-10 w-full" />
+                    <Skeleton className="h-10 w-full" />
                   </div>
+                ) : formFields.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-6">
+                    No fields found for this form.
+                  </p>
+                ) : (
+                  <>
+                    {/* Polygon field(s) - Multi-select */}
+                    <div className="space-y-2">
+                      <Label>Polygon field(s)</Label>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className="w-full justify-between h-auto min-h-[2.25rem] px-3 py-2"
+                          >
+                            <div className="flex flex-wrap gap-1">
+                              {polygonFields.length === 0 ? (
+                                <span className="text-muted-foreground">
+                                  Select polygon fields...
+                                </span>
+                              ) : (
+                                polygonFields.map((fullPath) => {
+                                  const field = formFields.find(
+                                    (f) => f.full_path === fullPath,
+                                  );
+                                  return (
+                                    <Badge key={fullPath} variant="secondary">
+                                      {field?.label || fullPath}
+                                    </Badge>
+                                  );
+                                })
+                              )}
+                            </div>
+                            <ChevronDown className="size-4 opacity-50 shrink-0" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
+                          {sortedFieldsForPolygon.map((field) => (
+                            <DropdownMenuCheckboxItem
+                              key={field.full_path}
+                              checked={polygonFields.includes(field.full_path)}
+                              onCheckedChange={() =>
+                                togglePolygonField(field.full_path)
+                              }
+                            >
+                              {field.label} ({field.type})
+                            </DropdownMenuCheckboxItem>
+                          ))}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                      <p className="text-xs text-muted-foreground">
+                        Geo fields (geoshape/geotrace) are shown first
+                      </p>
+                    </div>
+
+                    {/* Region field(s) - Multi-select */}
+                    <div className="space-y-2">
+                      <Label>Region field(s)</Label>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className="w-full justify-between h-auto min-h-[2.25rem] px-3 py-2"
+                          >
+                            <div className="flex flex-wrap gap-1">
+                              {regionFields.length === 0 ? (
+                                <span className="text-muted-foreground">
+                                  Select region fields...
+                                </span>
+                              ) : (
+                                regionFields.map((fullPath) => {
+                                  const field = formFields.find(
+                                    (f) => f.full_path === fullPath,
+                                  );
+                                  return (
+                                    <Badge key={fullPath} variant="secondary">
+                                      {field?.label || fullPath}
+                                    </Badge>
+                                  );
+                                })
+                              )}
+                            </div>
+                            <ChevronDown className="size-4 opacity-50 shrink-0" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
+                          {formFields.map((field) => (
+                            <DropdownMenuCheckboxItem
+                              key={field.full_path}
+                              checked={regionFields.includes(field.full_path)}
+                              onCheckedChange={() =>
+                                toggleRegionField(field.full_path)
+                              }
+                            >
+                              {field.label} ({field.type})
+                            </DropdownMenuCheckboxItem>
+                          ))}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                      <p className="text-xs text-muted-foreground">
+                        Multiple fields will be joined with &quot; - &quot;
+                      </p>
+                    </div>
+
+                    {/* Sub-region field(s) - Multi-select */}
+                    <div className="space-y-2">
+                      <Label>Sub-region field(s)</Label>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className="w-full justify-between h-auto min-h-[2.25rem] px-3 py-2"
+                          >
+                            <div className="flex flex-wrap gap-1">
+                              {subRegionFields.length === 0 ? (
+                                <span className="text-muted-foreground">
+                                  Select sub-region fields...
+                                </span>
+                              ) : (
+                                subRegionFields.map((fullPath) => {
+                                  const field = formFields.find(
+                                    (f) => f.full_path === fullPath,
+                                  );
+                                  return (
+                                    <Badge key={fullPath} variant="secondary">
+                                      {field?.label || fullPath}
+                                    </Badge>
+                                  );
+                                })
+                              )}
+                            </div>
+                            <ChevronDown className="size-4 opacity-50 shrink-0" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
+                          {formFields.map((field) => (
+                            <DropdownMenuCheckboxItem
+                              key={field.full_path}
+                              checked={subRegionFields.includes(
+                                field.full_path,
+                              )}
+                              onCheckedChange={() =>
+                                toggleSubRegionField(field.full_path)
+                              }
+                            >
+                              {field.label} ({field.type})
+                            </DropdownMenuCheckboxItem>
+                          ))}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                      <p className="text-xs text-muted-foreground">
+                        Multiple fields will be joined with &quot; - &quot;
+                      </p>
+                    </div>
+
+                    {/* Plot name field(s) - Multi-select */}
+                    <div className="space-y-2">
+                      <Label>Plot name field(s)</Label>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className="w-full justify-between h-auto min-h-[2.25rem] px-3 py-2"
+                          >
+                            <div className="flex flex-wrap gap-1">
+                              {plotNameFields.length === 0 ? (
+                                <span className="text-muted-foreground">
+                                  Select plot name fields...
+                                </span>
+                              ) : (
+                                plotNameFields.map((fullPath) => {
+                                  const field = formFields.find(
+                                    (f) => f.full_path === fullPath,
+                                  );
+                                  return (
+                                    <Badge key={fullPath} variant="secondary">
+                                      {field?.label || fullPath}
+                                    </Badge>
+                                  );
+                                })
+                              )}
+                            </div>
+                            <ChevronDown className="size-4 opacity-50 shrink-0" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
+                          {formFields.map((field) => (
+                            <DropdownMenuCheckboxItem
+                              key={field.full_path}
+                              checked={plotNameFields.includes(field.full_path)}
+                              onCheckedChange={() =>
+                                togglePlotNameField(field.full_path)
+                              }
+                            >
+                              {field.label} ({field.type})
+                            </DropdownMenuCheckboxItem>
+                          ))}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                      <p className="text-xs text-muted-foreground">
+                        Multiple fields will be joined with spaces
+                      </p>
+                    </div>
+
+                    {/* Filter fields - select_one/select_multiple only */}
+                    {selectFields.length > 0 && (
+                      <div className="space-y-2">
+                        <Label>Filter fields</Label>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="outline"
+                              className="w-full justify-between h-auto min-h-[2.25rem] px-3 py-2"
+                            >
+                              <div className="flex flex-wrap gap-1">
+                                {filterFields.length === 0 ? (
+                                  <span className="text-muted-foreground">
+                                    Select filter fields...
+                                  </span>
+                                ) : (
+                                  filterFields.map((name) => {
+                                    const field = formFields.find(
+                                      (f) =>
+                                        f.name === name || f.full_path === name,
+                                    );
+                                    return (
+                                      <Badge key={name} variant="secondary">
+                                        {field?.label || name}
+                                      </Badge>
+                                    );
+                                  })
+                                )}
+                              </div>
+                              <ChevronDown className="size-4 opacity-50 shrink-0" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
+                            {selectFields.map((field) => (
+                              <DropdownMenuCheckboxItem
+                                key={field.name}
+                                checked={filterFields.includes(field.name)}
+                                onCheckedChange={() =>
+                                  toggleFilterField(field.name)
+                                }
+                              >
+                                {field.label} ({field.type})
+                              </DropdownMenuCheckboxItem>
+                            ))}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                        <p className="text-xs text-muted-foreground">
+                          Only select_one/select_multiple questions are shown.
+                          Selected fields will appear as filter dropdowns on
+                          dashboard and map pages.
+                        </p>
+                      </div>
+                    )}
+                  </>
                 )}
-              </>
-            )}
+              </div>
+            </TabsContent>
+
+            <TabsContent value="detail-fields">
+              <p className="mb-4 text-xs text-muted-foreground">
+                Map form questions to standardized display fields shown in the
+                plot detail panel.
+              </p>
+              <div className="space-y-4">
+                {isLoadingDetailFields || isLoadingFields ? (
+                  <div className="space-y-3">
+                    {Array.from({ length: 5 }).map((_, i) => (
+                      <Skeleton key={i} className="h-10 w-full" />
+                    ))}
+                  </div>
+                ) : fieldSettings.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-6">
+                    No field settings available. Run the seed command first.
+                  </p>
+                ) : (
+                  fieldSettings.map((fs) => {
+                    const selectedId = detailMappings[fs.name];
+                    const selectedQ = selectedId
+                      ? formQuestions.find((q) => String(q.id) === selectedId)
+                      : null;
+                    return (
+                      <div key={fs.id} className="flex flex-col gap-1.5">
+                        <Label className="text-sm capitalize">
+                          {fs.name.replace(/_/g, " ")}
+                        </Label>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="outline"
+                              className="w-full min-w-0 justify-between h-auto min-h-[2.25rem] px-3 py-2"
+                            >
+                              <span className="min-w-0 truncate text-left">
+                                {selectedQ
+                                  ? `${selectedQ.label} (${selectedQ.name})`
+                                  : "Select question..."}
+                              </span>
+                              <ChevronDown className="size-4 opacity-50 shrink-0" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width] max-h-64 overflow-y-auto">
+                            <DropdownMenuRadioGroup
+                              value={selectedId || "none"}
+                              onValueChange={(val) =>
+                                setDetailMappings((prev) => ({
+                                  ...prev,
+                                  [fs.name]: val === "none" ? undefined : val,
+                                }))
+                              }
+                            >
+                              <DropdownMenuRadioItem value="none">
+                                None
+                              </DropdownMenuRadioItem>
+                              {formQuestions.map((q) => (
+                                <DropdownMenuRadioItem
+                                  key={q.id}
+                                  value={String(q.id)}
+                                >
+                                  {q.label} ({q.name})
+                                </DropdownMenuRadioItem>
+                              ))}
+                            </DropdownMenuRadioGroup>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </TabsContent>
 
             {mappingStatus && (
               <div
                 role="alert"
-                className={`rounded-md p-3 text-sm ${
+                className={`mt-4 rounded-md p-3 text-sm ${
                   mappingStatus.type === "success"
                     ? "bg-status-approved/10 text-status-approved"
                     : "bg-destructive/10 text-destructive"
@@ -737,7 +879,7 @@ export default function FormsPage() {
                 {mappingStatus.message}
               </div>
             )}
-          </div>
+          </Tabs>
 
           <DialogFooter>
             <Button

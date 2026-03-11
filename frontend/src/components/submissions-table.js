@@ -138,7 +138,9 @@ export function SubmissionsTable({
                   </TableCell>
                   <TableCell className="whitespace-nowrap text-muted-foreground">
                     {row.submission_time
-                      ? new Date(row.submission_time).toLocaleDateString()
+                      ? new Date(row.submission_time).toLocaleDateString(
+                          "en-GB",
+                        )
                       : "-"}
                   </TableCell>
                   <TableCell className="whitespace-nowrap">

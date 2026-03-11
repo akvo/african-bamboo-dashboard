@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Image from "next/image";
 import { Image as ImageIcon } from "lucide-react";
 
 const AttachmentCard = ({ filename, imageUrl, caption, onEdit }) => {
@@ -29,11 +28,11 @@ const AttachmentCard = ({ filename, imageUrl, caption, onEdit }) => {
       {/* Image preview */}
       {imageUrl && !imgError ? (
         <div className="relative aspect-video w-full bg-muted">
-          <Image
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
             src={imageUrl}
             alt={caption || filename || "Attachment"}
-            fill
-            className="object-cover"
+            className="absolute inset-0 size-full object-cover"
             onError={() => setImgError(true)}
           />
         </div>

@@ -393,6 +393,7 @@ def extract_plot_data(raw_data, form):
     result = {
         "polygon_wkt": None,
         "polygon_source_field": None,
+        "raw_polygon_string": None,
         "min_lat": None,
         "max_lat": None,
         "min_lon": None,
@@ -414,6 +415,7 @@ def extract_plot_data(raw_data, form):
         )
     )
     result["polygon_source_field"] = source_field
+    result["raw_polygon_string"] = polygon_str
     if not polygon_str:
         logger.warning(
             "No polygon data found in fields: %s",

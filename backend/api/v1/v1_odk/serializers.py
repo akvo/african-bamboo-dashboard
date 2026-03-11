@@ -1,3 +1,4 @@
+import math
 from urllib.parse import quote
 
 from django.conf import settings
@@ -10,6 +11,8 @@ from api.v1.v1_odk.constants import (
     RejectionCategory,
 )
 from api.v1.v1_odk.models import (
+    FieldMapping,
+    FieldSettings,
     FormMetadata,
     FormQuestion,
     Plot,
@@ -290,6 +293,21 @@ class SubmissionDetailSerializer(
     reviewer_notes = (
         serializers.SerializerMethodField()
     )
+    field_mapped_data = (
+        serializers.SerializerMethodField()
+    )
+    area_ha = (
+        serializers.SerializerMethodField()
+    )
+    attachments = (
+        serializers.SerializerMethodField()
+    )
+    rejection_reason = (
+        serializers.SerializerMethodField()
+    )
+    updated_by_name = (
+        serializers.SerializerMethodField()
+    )
 
     class Meta:
         model = Submission
@@ -304,6 +322,112 @@ class SubmissionDetailSerializer(
         if audit:
             return audit.reason_text
         return None
+
+    def get_rejection_reason(self, obj):
+        return self.get_reviewer_notes(obj)
+
+    def get_updated_by_name(self, obj):
+        if obj.updated_by:
+            return obj.updated_by.name
+        return None
+
+    def get_area_ha(self, obj):
+        plot = getattr(obj, "plot", None)
+        if plot and plot.area_ha is not None:
+            if math.isnan(plot.area_ha) or math.isinf(
+                plot.area_ha
+            ):
+                return None
+            return plot.area_ha
+        return None
+
+    def get_field_mapped_data(self, obj):
+        mappings = (
+            FieldMapping.objects.filter(
+                form=obj.form
+            )
+            .select_related(
+                "field", "form_question"
+            )
+            .prefetch_related(
+                "form_question__options"
+            )
+        )
+        if not mappings.exists():
+            return {}
+
+        raw = obj.raw_data or {}
+        result = {}
+        for mapping in mappings:
+            q = mapping.form_question
+            field_name = mapping.field.name
+            raw_value = raw.get(q.name)
+            resolved = raw_value
+
+            if (
+                raw_value is not None
+                and q.type.startswith("select_")
+            ):
+                opts = {
+                    o.name: o.label
+                    for o in q.options.all()
+                }
+                resolved = resolve_value(
+                    raw_value,
+                    opts,
+                    q.type,
+                )
+
+            result[field_name] = {
+                "value": resolved,
+                "raw_value": raw_value,
+                "label": q.label,
+            }
+        return result
+
+    def get_attachments(self, obj):
+        raw = obj.raw_data or {}
+        att_list = raw.get("_attachments", [])
+        if not att_list:
+            return []
+
+        # Build question name -> label lookup
+        q_labels = dict(
+            FormQuestion.objects.filter(
+                form=obj.form
+            ).values_list("name", "label")
+        )
+
+        key = settings.STORAGE_SECRET
+        encoded_key = quote(key, safe="")
+        result = []
+        for att in att_list:
+            uid = att.get("uid")
+            basename = att.get(
+                "media_file_basename", "img.jpg"
+            )
+            ext = (
+                basename.rsplit(".", 1)[-1]
+                or "jpg"
+            )
+            xpath = att.get("question_xpath")
+            item = {
+                "question_xpath": xpath,
+                "question_label": (
+                    q_labels.get(xpath, xpath)
+                ),
+                "media_file_basename": basename,
+            }
+            if uid:
+                item["local_url"] = (
+                    f"/storage"
+                    f"/{ATTACHMENTS_FOLDER}"
+                    f"/{obj.uuid}"
+                    f"/{uid}.{ext}"
+                    f"?key={encoded_key}"
+                )
+            result.append(item)
+        return result
 
     def get_resolved_data(self, obj):
         option_map, type_map = build_option_lookup(
@@ -573,3 +697,42 @@ class SyncTriggerSerializer(serializers.Serializer):
     """Input for triggering a form sync."""
 
     asset_uid = CustomCharField()
+
+
+class FieldSettingsSerializer(
+    serializers.ModelSerializer
+):
+    class Meta:
+        model = FieldSettings
+        fields = ["id", "name"]
+        read_only_fields = fields
+
+
+class FieldMappingSerializer(
+    serializers.ModelSerializer
+):
+    field_name = serializers.CharField(
+        source="field.name", read_only=True
+    )
+    form_question_id = serializers.IntegerField(
+        source="form_question.id", read_only=True
+    )
+    form_question_name = serializers.CharField(
+        source="form_question.name",
+        read_only=True,
+    )
+    form_question_label = serializers.CharField(
+        source="form_question.label",
+        read_only=True,
+    )
+
+    class Meta:
+        model = FieldMapping
+        fields = [
+            "id",
+            "field_name",
+            "form_question_id",
+            "form_question_name",
+            "form_question_label",
+        ]
+        read_only_fields = fields

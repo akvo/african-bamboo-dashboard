@@ -6,5 +6,13 @@ router = DefaultRouter()
 router.register(r"forms", views.FormMetadataViewSet)
 router.register(r"submissions", views.SubmissionViewSet)
 router.register(r"plots", views.PlotViewSet)
+router.register(
+    r"field-settings",
+    views.FieldSettingsViewSet,
+)
+router.register(
+    r"field-mappings",
+    views.FieldMappingViewSet,
+)
 
 urlpatterns = router.urls

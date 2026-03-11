@@ -126,6 +126,19 @@ class Submission(models.Model):
         db_index=True,
         help_text="NULL means pending",
     )
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="updated_submissions",
+        help_text="Last validator who acted",
+    )
+    updated_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Timestamp of last validator action",
+    )
 
     class Meta:
         db_table = "submissions"
@@ -182,6 +195,11 @@ class Plot(models.Model):
         null=True,
         blank=True,
         related_name="plot",
+    )
+    area_ha = models.FloatField(
+        null=True,
+        blank=True,
+        help_text="Pre-computed area in hectares",
     )
     flagged_for_review = models.BooleanField(
         null=True,
@@ -339,4 +357,49 @@ class FormOption(models.Model):
         return (
             f"{self.question.form.asset_uid} - "
             f"{self.question.name} - {self.name}"
+        )
+
+
+class FieldSettings(models.Model):
+    name = models.CharField(
+        max_length=125,
+        unique=True,
+        help_text="Standardized field name",
+    )
+
+    class Meta:
+        db_table = "field_settings"
+        verbose_name_plural = "field settings"
+
+    def __str__(self):
+        return self.name
+
+
+class FieldMapping(models.Model):
+    field = models.ForeignKey(
+        FieldSettings,
+        on_delete=models.CASCADE,
+        related_name="mappings",
+    )
+    form = models.ForeignKey(
+        FormMetadata,
+        on_delete=models.CASCADE,
+        related_name="field_mappings",
+    )
+    form_question = models.ForeignKey(
+        FormQuestion,
+        on_delete=models.CASCADE,
+        related_name="field_mappings",
+    )
+
+    class Meta:
+        db_table = "field_mappings"
+        verbose_name_plural = "field mappings"
+        unique_together = ("field", "form")
+
+    def __str__(self):
+        return (
+            f"{self.field.name} -> "
+            f"{self.form_question.name} "
+            f"({self.form.asset_uid})"
         )

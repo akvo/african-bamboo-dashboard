@@ -67,7 +67,10 @@ from api.v1.v1_odk.utils.area_calc import (
 )
 from utils.encryption import decrypt
 from utils.kobo_client import KoboClient
-from utils.polygon import extract_plot_data
+from utils.polygon import (
+    extract_plot_data,
+    wkt_to_odk_geoshape,
+)
 
 
 def _parse_date_param(params, name):
@@ -889,11 +892,6 @@ class PlotViewSet(
             "polygon_wkt"
             in serializer.validated_data
         ):
-            # Recompute area from new WKT
-            from utils.polygon import (
-                wkt_to_odk_geoshape,
-            )
-
             odk_str = wkt_to_odk_geoshape(
                 instance.polygon_wkt
             )

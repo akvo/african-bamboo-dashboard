@@ -342,7 +342,7 @@ class SubmissionDetailSerializer(
         return None
 
     def get_field_mapped_data(self, obj):
-        mappings = (
+        mappings = list(
             FieldMapping.objects.filter(
                 form=obj.form
             )
@@ -353,7 +353,7 @@ class SubmissionDetailSerializer(
                 "form_question__options"
             )
         )
-        if not mappings.exists():
+        if not mappings:
             return {}
 
         raw = obj.raw_data or {}

@@ -59,7 +59,7 @@ describe("FilterBar", () => {
     ).toBeInTheDocument();
   });
 
-  it("does not render advanced filters button when no dynamic filters", () => {
+  it("does not render advanced filters button when no filters available", () => {
     render(<FilterBar />);
     expect(
       screen.queryByRole("button", { name: /advanced filters/i }),
@@ -71,6 +71,30 @@ describe("FilterBar", () => {
     expect(
       screen.getByRole("button", { name: /advanced filters/i }),
     ).toBeInTheDocument();
+  });
+
+  it("renders advanced filters button when only regions are provided", () => {
+    render(<FilterBar regions={mockRegions} />);
+    expect(
+      screen.getByRole("button", { name: /advanced filters/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("renders advanced filters button when only sub-regions are provided", () => {
+    render(<FilterBar sub_regions={mockSubRegions} />);
+    expect(
+      screen.getByRole("button", { name: /advanced filters/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("does not render region dropdown when regions array is empty", () => {
+    render(<FilterBar regions={[]} sub_regions={mockSubRegions} />);
+    expect(screen.queryByText("Region")).not.toBeInTheDocument();
+  });
+
+  it("does not render sub-region dropdown when sub_regions array is empty", () => {
+    render(<FilterBar regions={mockRegions} sub_regions={[]} />);
+    expect(screen.queryByText("Sub-region")).not.toBeInTheDocument();
   });
 
   it("shows dynamic filters and region/sub-region in dialog", () => {

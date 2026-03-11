@@ -71,37 +71,43 @@ export function FilterBar({
   return (
     <div className="w-full flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
       <div className="flex items-center gap-2">
-        <div className="hidden 3xl:block">
-          <Select value={region || ""} onValueChange={onRegionChange}>
-            <SelectTrigger className="w-[160px]">
-              <SelectValue placeholder="Region" />
-            </SelectTrigger>
-            <SelectContent>
-              {regions.map((r) => (
-                <SelectItem key={r.value} value={r.value}>
-                  {r.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        {regions.length > 0 && (
+          <div className="hidden 3xl:block">
+            <Select value={region || ""} onValueChange={onRegionChange}>
+              <SelectTrigger className="w-[160px]">
+                <SelectValue placeholder="Region" />
+              </SelectTrigger>
+              <SelectContent>
+                {regions.map((r) => (
+                  <SelectItem key={r.value} value={r.value}>
+                    {r.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
 
-        <div className="hidden 3xl:block">
-          <Select value={subRegion || ""} onValueChange={onSubRegionChange}>
-            <SelectTrigger className="w-[160px]">
-              <SelectValue placeholder="Sub-region" />
-            </SelectTrigger>
-            <SelectContent>
-              {sub_regions.map((w) => (
-                <SelectItem key={w.value} value={w.value}>
-                  {w.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        {sub_regions.length > 0 && (
+          <div className="hidden 3xl:block">
+            <Select value={subRegion || ""} onValueChange={onSubRegionChange}>
+              <SelectTrigger className="w-[160px]">
+                <SelectValue placeholder="Sub-region" />
+              </SelectTrigger>
+              <SelectContent>
+                {sub_regions.map((w) => (
+                  <SelectItem key={w.value} value={w.value}>
+                    {w.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
 
-        {dynamicFilters.length > 0 && (
+        {(dynamicFilters.length > 0 ||
+          regions.length > 0 ||
+          sub_regions.length > 0) && (
           <Dialog>
             <DialogTrigger asChild>
               <Button
@@ -121,44 +127,51 @@ export function FilterBar({
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4">
-                <div className="block 3xl:hidden">
-                  <label className="block text-sm font-medium mb-1">
-                    Region
-                  </label>
-                  <Select value={region || ""} onValueChange={onRegionChange}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Select region" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {regions.map((r) => (
-                        <SelectItem key={r.value} value={r.value}>
-                          {r.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                {regions.length > 0 && (
+                  <div className="block 3xl:hidden">
+                    <label className="block text-sm font-medium mb-1">
+                      Region
+                    </label>
+                    <Select
+                      value={region || ""}
+                      onValueChange={onRegionChange}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Select region" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {regions.map((r) => (
+                          <SelectItem key={r.value} value={r.value}>
+                            {r.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
 
-                <div className="block 3xl:hidden">
-                  <label className="block text-sm font-medium mb-1">
-                    Sub-region
-                  </label>
-                  <Select
-                    value={subRegion || ""}
-                    onValueChange={onSubRegionChange}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Select sub-region" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {sub_regions.map((w) => (
-                        <SelectItem key={w.value} value={w.value}>
-                          {w.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                {sub_regions.length > 0 && (
+                  <div className="block 3xl:hidden">
+                    <label className="block text-sm font-medium mb-1">
+                      Sub-region
+                    </label>
+                    <Select
+                      value={subRegion || ""}
+                      onValueChange={onSubRegionChange}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Select sub-region" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {sub_regions.map((w) => (
+                          <SelectItem key={w.value} value={w.value}>
+                            {w.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
 
                 {dynamicFilters.map((df) => (
                   <div key={df.name}>

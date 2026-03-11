@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import Image from "next/image";
 import { X, ChevronLeft, ChevronRight, Image as ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -101,14 +100,15 @@ export default function TitleDeedViewer({ open, onClose, attachments = [] }) {
       {/* Image area */}
       <div className="relative min-h-0 flex-1">
         {current?.local_url && !imgError ? (
-          <Image
-            src={current.local_url}
-            alt={current.media_file_basename || "Title deed"}
-            fill
-            className="object-contain p-2"
-            onError={() => setImgError(true)}
-            sizes="50vw"
-          />
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={current.local_url}
+              alt={current.media_file_basename || "Title deed"}
+              className="absolute inset-0 size-full object-cover"
+              onError={() => setImgError(true)}
+            />
+          </>
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-3">
             <ImageIcon className="size-12 text-muted-foreground/40" />

@@ -547,6 +547,90 @@ class FieldMappingModelTest(TestCase):
 
 
 @override_settings(USE_TZ=False, TEST_ENV=True)
+class SubmissionUniqueFormKoboIdTest(TestCase):
+    def setUp(self):
+        self.form = FormMetadata.objects.create(
+            asset_uid="form-uniq",
+            name="Test Form",
+        )
+
+    def test_duplicate_kobo_id_same_form_raises(
+        self,
+    ):
+        Submission.objects.create(
+            uuid="uuid-dup-1",
+            form=self.form,
+            kobo_id="555",
+            submission_time=1700000000000,
+            raw_data={},
+        )
+        with self.assertRaises(IntegrityError):
+            Submission.objects.create(
+                uuid="uuid-dup-2",
+                form=self.form,
+                kobo_id="555",
+                submission_time=1700000000000,
+                raw_data={},
+            )
+
+    def test_same_kobo_id_different_form_allowed(
+        self,
+    ):
+        form2 = FormMetadata.objects.create(
+            asset_uid="form-uniq-2",
+            name="Test Form 2",
+        )
+        Submission.objects.create(
+            uuid="uuid-cross-1",
+            form=self.form,
+            kobo_id="777",
+            submission_time=1700000000000,
+            raw_data={},
+        )
+        sub2 = Submission.objects.create(
+            uuid="uuid-cross-2",
+            form=form2,
+            kobo_id="777",
+            submission_time=1700000000000,
+            raw_data={},
+        )
+        self.assertEqual(sub2.kobo_id, "777")
+
+    def test_update_or_create_deduplicates(self):
+        Submission.objects.create(
+            uuid="uuid-orig",
+            form=self.form,
+            kobo_id="888",
+            submission_time=1700000000000,
+            raw_data={"old": True},
+        )
+        sub, is_new = (
+            Submission.objects.update_or_create(
+                form=self.form,
+                kobo_id="888",
+                defaults={
+                    "uuid": "uuid-new",
+                    "submission_time": (
+                        1700000001000
+                    ),
+                    "raw_data": {"new": True},
+                },
+            )
+        )
+        self.assertFalse(is_new)
+        self.assertEqual(sub.uuid, "uuid-new")
+        self.assertEqual(
+            sub.raw_data, {"new": True}
+        )
+        self.assertEqual(
+            Submission.objects.filter(
+                form=self.form, kobo_id="888"
+            ).count(),
+            1,
+        )
+
+
+@override_settings(USE_TZ=False, TEST_ENV=True)
 class SubmissionUpdatedFieldsTest(TestCase):
     def setUp(self):
         self.form = FormMetadata.objects.create(

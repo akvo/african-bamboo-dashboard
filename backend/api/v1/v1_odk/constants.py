@@ -9,6 +9,12 @@ class ApprovalStatusTypes:
         REJECTED: "validation_status_not_approved",
     }
 
+    ReverseKoboStatusMap = {
+        "validation_status_on_hold": None,
+        "validation_status_approved": APPROVED,
+        "validation_status_not_approved": REJECTED,
+    }
+
 
 class SyncStatus:
     PENDING = "pending"

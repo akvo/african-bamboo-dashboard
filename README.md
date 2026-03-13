@@ -347,6 +347,23 @@ During sync, image attachments from KoboToolbox submissions are downloaded and s
 3. The API returns signed URLs (`/storage/attachments/...?key=STORAGE_SECRET`) in submission `resolved_data`
 4. **Nginx** serves files from `/storage/attachments/` directly, requiring a `key` query parameter
 
+### EXIF Orientation Fix
+
+Images uploaded via mobile devices often contain EXIF orientation metadata. During download, the system automatically applies EXIF transpose using Pillow so images display in the correct orientation.
+
+To fix existing attachments that were downloaded before this feature:
+
+```bash
+# Preview what would be fixed
+docker compose exec backend python manage.py fix_attachment_orientation --dry-run
+
+# Fix all existing attachments (applies EXIF transpose locally, then re-downloads from Kobo large URL)
+docker compose exec backend python manage.py fix_attachment_orientation
+
+# Fix a single submission
+docker compose exec backend python manage.py fix_attachment_orientation --submission-uuid <uuid>
+```
+
 ### Configuration
 
 Set `STORAGE_SECRET` in `.env` to control the key used for signed URLs. If not set, it defaults to `SECRET_KEY`.

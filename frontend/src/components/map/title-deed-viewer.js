@@ -1,22 +1,68 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { X, ChevronLeft, ChevronRight, Image as ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export default function TitleDeedViewer({ open, onClose, attachments = [] }) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [imgError, setImgError] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const imgRef = useRef(null);
+  const containerRef = useRef(null);
 
-  // Reset index and error when attachments change or viewer opens
+  // Reset index, error and position when attachments change or viewer opens
   useEffect(() => {
     setCurrentIndex(0);
     setImgError(false);
+    setPosition({ x: 0, y: 0 });
   }, [attachments, open]);
 
   useEffect(() => {
     setImgError(false);
+    setPosition({ x: 0, y: 0 });
   }, [currentIndex]);
+
+  const clampPosition = useCallback((x, y) => {
+    const img = imgRef.current;
+    const container = containerRef.current;
+    if (!img || !container) return { x, y };
+
+    const cRect = container.getBoundingClientRect();
+    const iRect = img.getBoundingClientRect();
+    const overflowX = Math.max(0, iRect.width - cRect.width);
+    const overflowY = Math.max(0, iRect.height - cRect.height);
+    return {
+      x: Math.max(-overflowX / 2, Math.min(overflowX / 2, x)),
+      y: Math.max(-overflowY / 2, Math.min(overflowY / 2, y)),
+    };
+  }, []);
+
+  const handlePointerDown = useCallback(
+    (e) => {
+      e.preventDefault();
+      setDragging(true);
+      setDragStart({ x: e.clientX - position.x, y: e.clientY - position.y });
+      e.currentTarget.setPointerCapture(e.pointerId);
+    },
+    [position],
+  );
+
+  const handlePointerMove = useCallback(
+    (e) => {
+      if (!dragging) return;
+      const newX = e.clientX - dragStart.x;
+      const newY = e.clientY - dragStart.y;
+      setPosition(clampPosition(newX, newY));
+    },
+    [dragging, dragStart, clampPosition],
+  );
+
+  const handlePointerUp = useCallback(() => {
+    setDragging(false);
+  }, []);
 
   // Keyboard navigation
   const handleKeyDown = useCallback(
@@ -47,7 +93,7 @@ export default function TitleDeedViewer({ open, onClose, attachments = [] }) {
   const hasMultiple = attachments.length > 1;
 
   return (
-    <div className="max-w-lg h-[400px] absolute bottom-16 left-0 inset-x-0 z-30 flex flex-col border-l border-border bg-card">
+    <div className="max-w-xl max-h-[calc(100vh-8rem)] absolute bottom-16 left-0 inset-x-0 z-30 flex flex-col border-l border-border bg-card overflow-hidden">
       {/* Header */}
       <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-2">
         <div className="flex min-w-0 items-center gap-2">
@@ -98,37 +144,47 @@ export default function TitleDeedViewer({ open, onClose, attachments = [] }) {
       </div>
 
       {/* Image area */}
-      <div className="relative min-h-0 flex-1">
-        {current?.local_url && !imgError ? (
-          <>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={current.local_url}
-              alt={current.media_file_basename || "Title deed"}
-              className="absolute inset-0 size-full object-cover"
-              onError={() => setImgError(true)}
-            />
-          </>
-        ) : (
-          <div className="flex h-full flex-col items-center justify-center gap-3">
-            <ImageIcon className="size-12 text-muted-foreground/40" />
-            <p className="text-sm text-muted-foreground">
-              {imgError
-                ? "Unable to load title deed image."
-                : "No title deed uploaded"}
-            </p>
-            {imgError && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setImgError(false)}
-              >
-                Retry
-              </Button>
-            )}
-          </div>
-        )}
-      </div>
+      {current?.local_url && !imgError ? (
+        <div
+          ref={containerRef}
+          className="relative flex-1 min-h-0 overflow-hidden"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            ref={imgRef}
+            src={current.local_url}
+            alt={current.media_file_basename || "Title deed"}
+            className="h-full w-full object-cover select-none"
+            style={{
+              transform: `translate(${position.x}px, ${position.y}px)`,
+              cursor: dragging ? "grabbing" : "grab",
+            }}
+            draggable={false}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onError={() => setImgError(true)}
+          />
+        </div>
+      ) : (
+        <div className="flex min-h-[200px] flex-col items-center justify-center gap-3">
+          <ImageIcon className="size-12 text-muted-foreground/40" />
+          <p className="text-sm text-muted-foreground">
+            {imgError
+              ? "Unable to load title deed image."
+              : "No title deed uploaded"}
+          </p>
+          {imgError && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setImgError(false)}
+            >
+              Retry
+            </Button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

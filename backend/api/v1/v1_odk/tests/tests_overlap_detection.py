@@ -267,7 +267,7 @@ class BuildOverlapReasonTest(TestCase):
         sub = Submission.objects.create(
             uuid=f"sub-{instance}",
             form=self.form,
-            kobo_id="1",
+            kobo_id=f"k-{instance}",
             submission_time=1700000000000,
             instance_name=instance,
             raw_data={},
@@ -518,12 +518,17 @@ class SyncOverlapDetectionTest(
             sub_bad,
         ]
 
-        resp = self.client.post(
-            "/api/v1/odk/forms/"
-            "overlap-sync/sync/",
-            content_type="application/json",
-            **self.auth,
-        )
+        with self.assertLogs(
+            "utils.polygon", level="WARNING"
+        ):
+            resp = self.client.post(
+                "/api/v1/odk/forms/"
+                "overlap-sync/sync/",
+                content_type=(
+                    "application/json"
+                ),
+                **self.auth,
+            )
         self.assertEqual(resp.status_code, 200)
 
         plot_a = Plot.objects.get(

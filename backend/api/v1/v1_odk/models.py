@@ -143,6 +143,7 @@ class Submission(models.Model):
     class Meta:
         db_table = "submissions"
         ordering = ["-submission_time"]
+        unique_together = ("form", "kobo_id")
 
     def __str__(self):
         return self.instance_name or self.uuid

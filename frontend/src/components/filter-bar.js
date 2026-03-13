@@ -132,10 +132,7 @@ export function FilterBar({
                     <label className="block text-sm font-medium mb-1">
                       Region
                     </label>
-                    <Select
-                      value={region || ""}
-                      onValueChange={onRegionChange}
-                    >
+                    <Select value={region || ""} onValueChange={onRegionChange}>
                       <SelectTrigger className="w-full">
                         <SelectValue placeholder="Select region" />
                       </SelectTrigger>

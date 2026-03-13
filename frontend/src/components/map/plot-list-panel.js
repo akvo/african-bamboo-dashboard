@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { MoreVertical, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -12,7 +12,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Button } from "@/components/ui/button";
 import { getPlotStatus } from "@/lib/plot-utils";
 import { useForms } from "@/hooks/useForms";
 import { useMapState } from "@/hooks/useMapState";
@@ -53,9 +52,6 @@ export default function PlotListPanel({
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
         <h2 className="text-sm font-semibold">{count} plots detected</h2>
-        <Button variant="ghost" size="icon-sm">
-          <MoreVertical className="size-4" />
-        </Button>
       </div>
 
       {/* Sort */}

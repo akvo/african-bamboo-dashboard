@@ -13,7 +13,6 @@ const PlotCardItem = ({
   lastCheckedBy,
   lastCheckedAt,
 }) => {
-  console.log("Rendering PlotCardItem for plot:", plot);
   if (!plot) {
     return null;
   }

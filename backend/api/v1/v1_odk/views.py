@@ -290,14 +290,27 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
                 ).timestamp()
                 * 1000
             )
+            # Map Kobo validation status
+            vs = item.get(
+                "_validation_status", {}
+            )
+            kobo_uid = (
+                vs.get("uid") if vs else None
+            )
+            approval = (
+                ApprovalStatusTypes
+                .ReverseKoboStatusMap
+                .get(kobo_uid)
+                if kobo_uid
+                else None
+            )
+
             sub, is_new = (
                 Submission.objects.update_or_create(
-                    uuid=item["_uuid"],
+                    form=form,
+                    kobo_id=str(item["_id"]),
                     defaults={
-                        "form": form,
-                        "kobo_id": str(
-                            item["_id"]
-                        ),
+                        "uuid": item["_uuid"],
                         "submission_time": (
                             sub_time_ms
                         ),
@@ -306,6 +319,9 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
                         ),
                         "instance_name": item.get(
                             "meta/instanceName"
+                        ),
+                        "approval_status": (
+                            approval
                         ),
                         "raw_data": item,
                         "system_data": {

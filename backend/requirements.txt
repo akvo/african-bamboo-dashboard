@@ -33,3 +33,4 @@ Shapely>=2.0.0
 pyproj>=3.6.0
 pyshp==3.0.3
 django-q2>=1.7.0
+Pillow>=10.0.0

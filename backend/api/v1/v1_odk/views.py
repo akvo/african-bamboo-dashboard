@@ -839,7 +839,8 @@ class PlotViewSet(
         search = params.get("search")
         if search:
             qs = qs.filter(
-                plot_name__icontains=search
+                Q(plot_name__icontains=search) |
+                Q(submission__instance_name__icontains=search)
             )
         region = params.get("region")
         if region:

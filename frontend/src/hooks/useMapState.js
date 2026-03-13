@@ -7,6 +7,7 @@ import {
   useCallback,
   useMemo,
   useEffect,
+  useRef,
 } from "react";
 import { useForms } from "@/hooks/useForms";
 import { getDateRange } from "@/components/filter-bar";
@@ -27,7 +28,19 @@ export function MapStateProvider({ children }) {
   const [rejectionDialogOpen, setRejectionDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("all");
   const [sortBy, setSortBy] = useState("priority");
+  const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
+  const searchTimeoutRef = useRef(null);
+
+  const handleSearchChange = useCallback((value) => {
+    setSearchInput(value);
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+    searchTimeoutRef.current = setTimeout(() => {
+      setSearch(value);
+    }, 500);
+  }, []);
   const [datePreset, setDatePreset] = useState("");
   const [region, setRegion] = useState("");
   const [subRegion, setSubRegion] = useState("");
@@ -125,7 +138,11 @@ export function MapStateProvider({ children }) {
     setSelectedPlotId(null);
     setActiveTab("all");
     setSortBy("priority");
+    setSearchInput("");
     setSearch("");
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
     setDatePreset("");
     setRegion("");
     setSubRegion("");
@@ -148,6 +165,7 @@ export function MapStateProvider({ children }) {
         activeTab,
         sortBy,
         search,
+        searchInput,
         datePreset,
         region,
         subRegion,
@@ -155,7 +173,7 @@ export function MapStateProvider({ children }) {
         toast,
         setActiveTab,
         setSortBy,
-        setSearch,
+        handleSearchChange,
         setDatePreset,
         setRegion,
         setSubRegion,

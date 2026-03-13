@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Skeleton } from "@/components/ui/skeleton";
 import { getPlotStatus } from "@/lib/plot-utils";
 import { useForms } from "@/hooks/useForms";
 import { useMapState } from "@/hooks/useMapState";
@@ -20,6 +21,7 @@ import PlotCardItem from "@/components/map/plot-card-item";
 export default function PlotListPanel({
   plots,
   count,
+  isLoading,
   activeTab,
   sortBy,
   search,
@@ -117,21 +119,26 @@ export default function PlotListPanel({
       {/* Plot list */}
       <ScrollArea className="min-h-0 flex-1 bg-muted">
         <div className="space-y-2 p-2">
-          {enrichedPlots.length === 0 && (
+          {isLoading ? (
+            Array.from({ length: 8 }).map((_, i) => (
+              <Skeleton key={i} className="h-14 w-full rounded-lg" />
+            ))
+          ) : enrichedPlots.length === 0 ? (
             <p className="px-3 py-8 text-center text-sm text-muted-foreground">
               No plots found
             </p>
+          ) : (
+            enrichedPlots.map((plot) => (
+              <PlotCardItem
+                key={plot.uuid}
+                plot={plot}
+                isSelected={plot.uuid === selectedPlotId}
+                onClick={() => onSelectPlot(plot.uuid)}
+                lastCheckedBy={plot.updated_by_name}
+                lastCheckedAt={plot.updated_at}
+              />
+            ))
           )}
-          {enrichedPlots.map((plot) => (
-            <PlotCardItem
-              key={plot.uuid}
-              plot={plot}
-              isSelected={plot.uuid === selectedPlotId}
-              onClick={() => onSelectPlot(plot.uuid)}
-              lastCheckedBy={plot.updated_by_name}
-              lastCheckedAt={plot.updated_at}
-            />
-          ))}
         </div>
       </ScrollArea>
     </div>

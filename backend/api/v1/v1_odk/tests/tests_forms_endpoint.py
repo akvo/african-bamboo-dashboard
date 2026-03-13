@@ -302,11 +302,14 @@ class FormMetadataViewTest(TestCase, OdkTestHelperMixin):
                 "boundary": "invalid data",
             },
         ]
-        resp = self.client.post(
-            "/api/v1/odk/forms/formA/sync/",
-            content_type="application/json",
-            **self.auth,
-        )
+        with self.assertLogs(
+            "utils.polygon", level="WARNING"
+        ):
+            resp = self.client.post(
+                "/api/v1/odk/forms/formA/sync/",
+                content_type="application/json",
+                **self.auth,
+            )
         data = resp.json()
         self.assertEqual(data["plots_created"], 1)
         plot = Plot.objects.get(submission__uuid="uuid-s3")

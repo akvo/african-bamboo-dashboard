@@ -1,5 +1,8 @@
 import logging
+from io import BytesIO
 from pathlib import Path
+
+from PIL import Image, ImageOps
 
 from django.conf import settings
 from django.utils import timezone
@@ -624,9 +627,10 @@ def download_submission_attachments(
             continue
 
         urls = [
+            att.get("download_url"),
+            att.get("download_large_url"),
             att.get("download_medium_url"),
             att.get("download_small_url"),
-            att.get("download_url"),
         ]
         urls = [u for u in urls if u]
 
@@ -636,16 +640,14 @@ def download_submission_attachments(
                 resp = client.session.get(
                     url,
                     timeout=client.timeout,
-                    stream=True,
                 )
                 resp.raise_for_status()
-                with open(dest_file, "wb") as f:
-                    for chunk in (
-                        resp.iter_content(
-                            chunk_size=8192
-                        )
-                    ):
-                        f.write(chunk)
+                img = Image.open(
+                    BytesIO(resp.content)
+                )
+                fmt = img.format
+                img = ImageOps.exif_transpose(img)
+                img.save(dest_file, format=fmt)
                 logger.info(
                     "Downloaded attachment %s "
                     "for submission %s from %s",

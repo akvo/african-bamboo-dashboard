@@ -1,7 +1,10 @@
 import logging
 import os
 import shutil
+from io import BytesIO
 from unittest.mock import MagicMock, patch
+
+from PIL import Image
 
 from django.test import TestCase, SimpleTestCase
 from django.test.utils import override_settings
@@ -385,7 +388,11 @@ class GenerateExportFileTest(TestCase):
         )
         job = self._create_job()
 
-        generate_export_file(job.pk)
+        with self.assertLogs(
+            "api.v1.v1_odk.tasks",
+            level="ERROR",
+        ):
+            generate_export_file(job.pk)
 
         job.refresh_from_db()
         self.assertEqual(
@@ -1024,9 +1031,11 @@ class DownloadSubmissionAttachmentsTest(
         )
         mock_client = MagicMock()
         mock_resp = MagicMock()
-        mock_resp.iter_content.return_value = [
-            b"fake image data"
-        ]
+        buf = BytesIO()
+        Image.new("RGB", (10, 10)).save(
+            buf, format="JPEG"
+        )
+        mock_resp.content = buf.getvalue()
         mock_client.session.get.return_value = (
             mock_resp
         )

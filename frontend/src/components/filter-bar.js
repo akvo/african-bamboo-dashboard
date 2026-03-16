@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { Calendar, FunnelPlus } from "lucide-react";
+import { Calendar, FunnelPlus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -62,11 +62,55 @@ export function FilterBar({
 }) {
   const dateLabel = useMemo(() => formatDateRange(datePreset), [datePreset]);
 
+  const activeChips = useMemo(() => {
+    const chips = [];
+    if (region) {
+      const match = regions.find((r) => r.value === region);
+      chips.push({
+        key: "region",
+        label: match?.label || region,
+        onClear: () => onRegionChange(""),
+      });
+    }
+    if (subRegion) {
+      const match = sub_regions.find((w) => w.value === subRegion);
+      chips.push({
+        key: "subRegion",
+        label: match?.label || subRegion,
+        onClear: () => onSubRegionChange(""),
+      });
+    }
+    for (const df of dynamicFilters) {
+      const val = dynamicValues[df.name];
+      if (val) {
+        const match = df.options.find((o) => o.name === val);
+        chips.push({
+          key: df.name,
+          label: `${df.label}: ${match?.label || val}`,
+          onClear: () => onDynamicFilterChange?.(df.name, ""),
+        });
+      }
+    }
+    return chips;
+  }, [
+    region,
+    subRegion,
+    dynamicValues,
+    regions,
+    sub_regions,
+    dynamicFilters,
+    onRegionChange,
+    onSubRegionChange,
+    onDynamicFilterChange,
+  ]);
+
   const hasActiveFilters =
     region ||
     subRegion ||
     datePreset ||
     Object.values(dynamicValues).some(Boolean);
+
+  const activeFilterCount = activeChips.length + (datePreset ? 1 : 0);
 
   return (
     <div className="w-full flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -113,10 +157,15 @@ export function FilterBar({
               <Button
                 variant="outline"
                 size="icon"
-                className="rounded-sm p-3 size-8 flex items-center justify-center"
+                className="relative rounded-sm p-3 size-8 flex items-center justify-center"
               >
                 <span className="sr-only">Advanced filters</span>
                 <FunnelPlus className="size-4" />
+                {activeFilterCount > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 flex size-4 items-center justify-center rounded-full bg-primary text-[10px] font-medium text-primary-foreground">
+                    {activeFilterCount}
+                  </span>
+                )}
               </Button>
             </DialogTrigger>
             <DialogContent>
@@ -132,10 +181,7 @@ export function FilterBar({
                     <label className="block text-sm font-medium mb-1">
                       Region
                     </label>
-                    <Select
-                      value={region || ""}
-                      onValueChange={onRegionChange}
-                    >
+                    <Select value={region || ""} onValueChange={onRegionChange}>
                       <SelectTrigger className="w-full">
                         <SelectValue placeholder="Select region" />
                       </SelectTrigger>
@@ -207,6 +253,28 @@ export function FilterBar({
           </Dialog>
         )}
       </div>
+
+      {activeChips.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {activeChips.map((chip) => (
+            <span
+              key={chip.key}
+              data-testid={`filter-chip-${chip.key}`}
+              className="inline-flex items-center gap-1 rounded-full border bg-muted px-2.5 py-0.5 text-xs font-medium"
+            >
+              {chip.label}
+              <button
+                type="button"
+                aria-label={`Remove ${chip.label} filter`}
+                className="ml-0.5 rounded-full p-0.5 hover:bg-muted-foreground/20"
+                onClick={chip.onClear}
+              >
+                <X className="size-3" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
 
       <div className="flex items-center justify-end gap-2">
         <Select value={datePreset || ""} onValueChange={onDatePresetChange}>

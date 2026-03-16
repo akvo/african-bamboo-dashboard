@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 
 export function TablePagination({ currentPage, totalPages, onPageChange }) {
   return (
-    <div className="flex items-center justify-between pt-4">
+    <div className="flex items-center justify-between">
       <Button
         variant="outline"
         size="sm"

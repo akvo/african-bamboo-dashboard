@@ -308,9 +308,13 @@ class TelegramNotificationTaskTest(TestCase):
         )
 
         # Should not raise
-        send_telegram_rejection_notification(
-            self.audit.pk
-        )
+        with self.assertLogs(
+            "api.v1.v1_odk.tasks",
+            level="ERROR",
+        ):
+            send_telegram_rejection_notification(
+                self.audit.pk
+            )
 
     @override_settings(
         TELEGRAM_ENABLED=True,
@@ -337,9 +341,13 @@ class TelegramNotificationTaskTest(TestCase):
             mock_client
         )
 
-        send_telegram_rejection_notification(
-            self.audit.pk
-        )
+        with self.assertLogs(
+            "api.v1.v1_odk.tasks",
+            level="ERROR",
+        ):
+            send_telegram_rejection_notification(
+                self.audit.pk
+            )
 
         self.audit.refresh_from_db()
         self.assertIsNotNone(

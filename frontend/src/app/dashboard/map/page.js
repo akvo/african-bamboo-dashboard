@@ -2,7 +2,6 @@
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { Skeleton } from "@/components/ui/skeleton";
 import { useForms } from "@/hooks/useForms";
 import { useMapState } from "@/hooks/useMapState";
 import { useFilterOptions } from "@/hooks/useFilterOptions";
@@ -181,13 +180,7 @@ export default function MapPage() {
       <div className="flex min-h-0 flex-1">
         {/* Left Panel */}
         <div className="hidden md:flex w-1/2 max-w-[400px] shrink-0 flex-col overflow-hidden border-r border-border bg-card">
-          {isLoading ? (
-            <div className="space-y-3 p-4">
-              {Array.from({ length: 8 }).map((_, i) => (
-                <Skeleton key={i} className="h-14 w-full" />
-              ))}
-            </div>
-          ) : mapState.selectedPlotId ? (
+          {mapState.selectedPlotId ? (
             <PlotDetailPanel
               plot={mapState.selectedPlot}
               onBack={() => {
@@ -206,13 +199,14 @@ export default function MapPage() {
             <PlotListPanel
               plots={plots}
               count={count}
+              isLoading={isLoading}
               activeTab={mapState.activeTab}
               sortBy={mapState.sortBy}
-              search={mapState.search}
+              search={mapState.searchInput}
               selectedPlotId={mapState.selectedPlotId}
               onTabChange={mapState.setActiveTab}
               onSortChange={mapState.setSortBy}
-              onSearchChange={mapState.setSearch}
+              onSearchChange={mapState.handleSearchChange}
               onSelectPlot={mapState.handleSelectPlot}
             />
           )}

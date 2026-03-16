@@ -1,24 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ImageIcon } from "lucide-react";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/status-badge";
+import {
+  DataTable,
+  TwoLineCell,
+  AttachmentCell,
+  TextCell,
+} from "@/components/table-view";
 
 const IMAGE_TYPES = new Set(["image"]);
 const EXCLUDED_QUESTION_NAMES = ["region", "region_specify"];
@@ -35,25 +31,6 @@ function getAttachmentUrl(attachments, questionName) {
   return att?.local_url || null;
 }
 
-function ImageCell({ url, label, instanceName, onPreview }) {
-  if (!url) {
-    return <span className="text-muted-foreground">-</span>;
-  }
-  return (
-    <button
-      type="button"
-      className="flex cursor-pointer items-center gap-1.5 text-sm text-primary hover:underline"
-      onClick={(e) => {
-        e.stopPropagation();
-        onPreview({ url, label, instanceName });
-      }}
-    >
-      <ImageIcon className="size-4 shrink-0" />
-      <span>View</span>
-    </button>
-  );
-}
-
 export function SubmissionsTable({
   data,
   isLoading,
@@ -62,127 +39,125 @@ export function SubmissionsTable({
 }) {
   const router = useRouter();
   const [preview, setPreview] = useState(null);
-  const plotBySubmission = new Map(
-    plots.map((p) => [p.submission_uuid, p.uuid]),
-  );
-  if (isLoading) {
-    return (
-      <div className="space-y-3">
-        {Array.from({ length: 5 }).map((_, i) => (
-          <Skeleton key={i} className="h-12 w-full" />
-        ))}
-      </div>
-    );
-  }
 
-  if (!data || data.length === 0) {
-    return (
-      <div className="py-12 text-center text-muted-foreground">
-        No submissions found.
-      </div>
-    );
-  }
+  const plotBySubmission = useMemo(
+    () => new Map(plots.map((p) => [p.submission_uuid, p.uuid])),
+    [plots],
+  );
+
+  const dynamicQuestions = useMemo(
+    () => questions.filter((q) => !EXCLUDED_QUESTION_NAMES.includes(q.name)),
+    [questions],
+  );
+
+  const columns = useMemo(() => {
+    const base = [
+      {
+        key: "plot_name",
+        header: "Plot ID",
+        sticky: true,
+        className: "max-w-[240px]",
+        cell: (row) => (
+          <TwoLineCell primary={row.plot_name} secondary={row.instance_name} />
+        ),
+      },
+      {
+        key: "status",
+        header: "Status",
+        cell: (row) => (
+          <StatusBadge status={getApprovalLabel(row.approval_status)} />
+        ),
+      },
+      {
+        key: "start_date",
+        header: "Start date",
+        cell: (row) => (
+          <TextCell>
+            {row.submission_time
+              ? new Date(row.submission_time).toLocaleDateString("en-GB")
+              : null}
+          </TextCell>
+        ),
+      },
+      {
+        key: "enumerator",
+        header: "Enumerator",
+        cell: (row) => (
+          <TextCell>{row.enumerator || row.submitted_by}</TextCell>
+        ),
+      },
+      {
+        key: "region",
+        header: "Region",
+        cell: (row) => <TextCell>{row.region}</TextCell>,
+      },
+      {
+        key: "sub_region",
+        header: "Sub-region",
+        cell: (row) => <TextCell>{row.sub_region}</TextCell>,
+      },
+    ];
+
+    const dynamic = dynamicQuestions.map((q) => ({
+      key: q.name,
+      header: q.label,
+      headerClassName: "max-w-[250px] truncate",
+      className: "max-w-[250px] truncate text-muted-foreground",
+      cell: (row) => {
+        const resolved = row.resolved_data || {};
+        const attachments = resolved._attachments;
+
+        if (IMAGE_TYPES.has(q.type)) {
+          const url = getAttachmentUrl(attachments, q.name);
+          return (
+            <AttachmentCell
+              url={url}
+              filename={resolved?.[q.name]}
+              onPreview={() =>
+                setPreview({
+                  url,
+                  label: q.label,
+                  instanceName: row.instance_name,
+                })
+              }
+            />
+          );
+        }
+        return (
+          <span
+            title={
+              resolved[q.name] != null ? String(resolved[q.name]) : undefined
+            }
+          >
+            {resolved?.[q.name] || "-"}
+          </span>
+        );
+      },
+    }));
+
+    return [...base, ...dynamic];
+  }, [dynamicQuestions]);
 
   return (
-    <>
-      <div className="overflow-x-auto rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="sticky left-0 z-10 bg-muted">
-                Plot name
-              </TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Start date</TableHead>
-              <TableHead>Enumerator</TableHead>
-              <TableHead>Region</TableHead>
-              <TableHead>Sub-region</TableHead>
-              {questions
-                .filter((q) => !EXCLUDED_QUESTION_NAMES.includes(q.name))
-                .map((q) => (
-                  <TableHead key={q.name} className="max-w-[250px] truncate">
-                    {q.label}
-                  </TableHead>
-                ))}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {data.map((row) => {
-              const plotUuid = plotBySubmission.get(row.uuid);
-              const resolved = row.resolved_data || {};
-              const attachments = resolved._attachments;
-              return (
-                <TableRow
-                  key={row.uuid}
-                  onClick={() => {
-                    if (plotUuid)
-                      router.push(`/dashboard/map?plot=${plotUuid}`);
-                  }}
-                  className={plotUuid ? "cursor-pointer" : "opacity-60"}
-                  title={
-                    plotUuid ? "View on map" : "No plot geometry available"
-                  }
-                >
-                  <TableCell className="sticky left-0 z-10 max-w-[240px] bg-background">
-                    <p className="truncate text-sm font-medium text-foreground">
-                      {row.plot_name}
-                    </p>
-                    <p className="truncate text-xs text-muted-foreground">
-                      {row.instance_name}
-                    </p>
-                  </TableCell>
-                  <TableCell>
-                    <StatusBadge
-                      status={getApprovalLabel(row.approval_status)}
-                    />
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap text-muted-foreground">
-                    {row.submission_time
-                      ? new Date(row.submission_time).toLocaleDateString(
-                          "en-GB",
-                        )
-                      : "-"}
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap">
-                    {row.enumerator || row.submitted_by || "-"}
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap">
-                    {row.region || "-"}
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap">
-                    {row.sub_region || "-"}
-                  </TableCell>
-                  {questions
-                    .filter((q) => !EXCLUDED_QUESTION_NAMES.includes(q.name))
-                    .map((q) => (
-                      <TableCell
-                        key={q.name}
-                        className="max-w-[250px] truncate text-muted-foreground"
-                        title={
-                          !IMAGE_TYPES.has(q.type) && resolved[q.name] != null
-                            ? String(resolved[q.name])
-                            : undefined
-                        }
-                      >
-                        {IMAGE_TYPES.has(q.type) ? (
-                          <ImageCell
-                            url={getAttachmentUrl(attachments, q.name)}
-                            label={q.label}
-                            instanceName={row.instance_name}
-                            onPreview={setPreview}
-                          />
-                        ) : (
-                          resolved?.[q.name] || "-"
-                        )}
-                      </TableCell>
-                    ))}
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
-      </div>
-
+    <DataTable
+      columns={columns}
+      data={data}
+      rowKey={(row) => row.uuid}
+      isLoading={isLoading}
+      emptyMessage="No submissions found."
+      onRowClick={(row) => {
+        const plotUuid = plotBySubmission.get(row.uuid);
+        if (plotUuid) router.push(`/dashboard/map?plot=${plotUuid}`);
+      }}
+      rowClassName={(row) =>
+        plotBySubmission.has(row.uuid) ? "cursor-pointer" : "opacity-60"
+      }
+      rowTitle={(row) =>
+        plotBySubmission.has(row.uuid)
+          ? "View on map"
+          : "No plot geometry available"
+      }
+    >
       <Dialog open={!!preview} onOpenChange={() => setPreview(null)}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
@@ -201,6 +176,6 @@ export function SubmissionsTable({
           )}
         </DialogContent>
       </Dialog>
-    </>
+    </DataTable>
   );
 }

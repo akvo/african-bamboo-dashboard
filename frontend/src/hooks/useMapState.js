@@ -41,6 +41,9 @@ export function MapStateProvider({ children }) {
       setSearch(value);
     }, 500);
   }, []);
+
+  useEffect(() => () => clearTimeout(searchTimeoutRef.current), []);
+
   const [datePreset, setDatePreset] = useState("");
   const [region, setRegion] = useState("");
   const [subRegion, setSubRegion] = useState("");

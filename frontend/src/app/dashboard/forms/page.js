@@ -61,6 +61,7 @@ export default function FormsPage() {
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
   const [configForm, setConfigForm] = useState(null);
   const [formFields, setFormFields] = useState([]);
+  const [filterSelectFields, setFilterSelectFields] = useState([]);
   const [isLoadingFields, setIsLoadingFields] = useState(false);
   const [isSavingMapping, setIsSavingMapping] = useState(false);
   const [mappingStatus, setMappingStatus] = useState(null);
@@ -188,17 +189,25 @@ export default function FormsPage() {
       Array.isArray(form.filter_fields) ? form.filter_fields : [],
     );
 
-    // Fetch form fields
+    // Fetch all fields and filter-eligible fields in parallel
     setIsLoadingFields(true);
     try {
-      const fields = await fetchFormFields(form.asset_uid);
-      setFormFields(fields || []);
+      const [allFields, filterFields_] = await Promise.all([
+        fetchFormFields(form.asset_uid),
+        fetchFormFields(form.asset_uid, { is_filter: true }),
+      ]);
+      setFormFields(allFields || []);
+      const selects = (filterFields_ || []).filter(
+        (f) => f.type === "select_one" || f.type === "select_multiple",
+      );
+      setFilterSelectFields(selects);
     } catch (err) {
       setMappingStatus({
         type: "error",
         message: err.response?.data?.detail || "Failed to fetch form fields.",
       });
       setFormFields([]);
+      setFilterSelectFields([]);
     } finally {
       setIsLoadingFields(false);
     }
@@ -310,11 +319,6 @@ export default function FormsPage() {
       prev.includes(name) ? prev.filter((f) => f !== name) : [...prev, name],
     );
   }
-
-  // Only select_one/select_multiple fields can be filter fields
-  const selectFields = formFields.filter(
-    (f) => f.type === "select_one" || f.type === "select_multiple",
-  );
 
   // Sort fields: geoshape/geotrace first for polygon selector
   const sortedFieldsForPolygon = [...formFields].sort((a, b) => {
@@ -738,7 +742,7 @@ export default function FormsPage() {
                     </div>
 
                     {/* Filter fields - select_one/select_multiple only */}
-                    {selectFields.length > 0 && (
+                    {filterSelectFields.length > 0 && (
                       <div className="space-y-2">
                         <Label>Additional Filter fields</Label>
                         <DropdownMenu>
@@ -770,7 +774,7 @@ export default function FormsPage() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
-                            {selectFields.map((field) => (
+                            {filterSelectFields.map((field) => (
                               <DropdownMenuCheckboxItem
                                 key={field.name}
                                 checked={filterFields.includes(field.name)}

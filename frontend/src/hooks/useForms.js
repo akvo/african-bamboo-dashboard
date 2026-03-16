@@ -72,8 +72,10 @@ export function FormsProvider({ children }) {
     [fetchForms],
   );
 
-  const fetchFormFields = useCallback(async (assetUid) => {
-    const res = await api.get(`/v1/odk/forms/${assetUid}/form_fields/`);
+  const fetchFormFields = useCallback(async (assetUid, params = {}) => {
+    const res = await api.get(`/v1/odk/forms/${assetUid}/form_fields/`, {
+      params,
+    });
     return res.data.fields;
   }, []);
 

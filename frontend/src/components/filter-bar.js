@@ -87,7 +87,11 @@ export function FilterBar({
   }, [startDate, endDate]);
 
   const activePreset =
-    presetValue && startDate && endDate ? presetValue : startDate || endDate ? "custom" : "";
+    presetValue && startDate && endDate
+      ? presetValue
+      : startDate || endDate
+        ? "custom"
+        : "";
 
   function handlePreset(preset) {
     const match = DATE_PRESETS.find((p) => p.value === preset);

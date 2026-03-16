@@ -159,20 +159,22 @@ export function SubmissionsTable({
       }
     >
       <Dialog open={!!preview} onOpenChange={() => setPreview(null)}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
+        <DialogContent className="sm:max-w-lg max-h-[90vh] flex flex-col">
+          <DialogHeader className="shrink-0">
             <DialogTitle>{preview?.label}</DialogTitle>
             <p className="text-sm text-muted-foreground">
               {preview?.instanceName}
             </p>
           </DialogHeader>
           {preview?.url && (
-            /* eslint-disable-next-line @next/next/no-img-element */
-            <img
-              src={preview.url}
-              alt={preview.label}
-              className="w-full rounded-md"
-            />
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={preview.url}
+                alt={preview.label}
+                className="w-full rounded-md object-contain"
+              />
+            </div>
           )}
         </DialogContent>
       </Dialog>

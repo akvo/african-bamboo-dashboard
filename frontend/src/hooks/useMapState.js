@@ -5,12 +5,10 @@ import {
   useContext,
   useState,
   useCallback,
-  useMemo,
   useEffect,
   useRef,
 } from "react";
 import { useForms } from "@/hooks/useForms";
-import { getDateRange } from "@/components/filter-bar";
 import api from "@/lib/api";
 
 const MapStateContext = createContext(null);
@@ -44,17 +42,16 @@ export function MapStateProvider({ children }) {
 
   useEffect(() => () => clearTimeout(searchTimeoutRef.current), []);
 
-  const [datePreset, setDatePreset] = useState("");
+  const [startDate, setStartDate] = useState(null);
+  const [endDate, setEndDate] = useState(null);
   const [region, setRegion] = useState("");
   const [subRegion, setSubRegion] = useState("");
   const [dynamicValues, setDynamicValues] = useState({});
   const [toast, setToast] = useState(null);
 
   const formId = activeForm?.asset_uid;
-  const { start: startDate, end: endDate } = useMemo(
-    () => getDateRange(datePreset),
-    [datePreset],
-  );
+  const startMs = startDate ? startDate.getTime() : null;
+  const endMs = endDate ? endDate.getTime() : null;
 
   const fetchPlots = useCallback(async () => {
     if (!formId) {
@@ -68,8 +65,8 @@ export function MapStateProvider({ children }) {
       if (activeTab && activeTab !== "all") params.status = activeTab;
       if (search) params.search = search;
       if (sortBy && sortBy !== "priority") params.sort = sortBy;
-      if (startDate) params.start_date = startDate;
-      if (endDate) params.end_date = endDate;
+      if (startMs) params.start_date = startMs;
+      if (endMs) params.end_date = endMs;
       if (region) params.region = region;
       if (subRegion) params.sub_region = subRegion;
       Object.entries(dynamicValues).forEach(([k, v]) => {
@@ -88,8 +85,8 @@ export function MapStateProvider({ children }) {
     activeTab,
     search,
     sortBy,
-    startDate,
-    endDate,
+    startMs,
+    endMs,
     region,
     subRegion,
     dynamicValues,
@@ -109,10 +106,7 @@ export function MapStateProvider({ children }) {
     }
   }, []);
 
-  const selectedPlot = useMemo(
-    () => plots.find((p) => p.uuid === selectedPlotId) || null,
-    [plots, selectedPlotId],
-  );
+  const selectedPlot = plots.find((p) => p.uuid === selectedPlotId) || null;
 
   const handleSelectPlot = useCallback(
     (plotUuid) => {
@@ -146,7 +140,8 @@ export function MapStateProvider({ children }) {
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current);
     }
-    setDatePreset("");
+    setStartDate(null);
+    setEndDate(null);
     setRegion("");
     setSubRegion("");
     setDynamicValues({});
@@ -169,7 +164,8 @@ export function MapStateProvider({ children }) {
         sortBy,
         search,
         searchInput,
-        datePreset,
+        startDate,
+        endDate,
         region,
         subRegion,
         dynamicValues,
@@ -177,7 +173,8 @@ export function MapStateProvider({ children }) {
         setActiveTab,
         setSortBy,
         handleSearchChange,
-        setDatePreset,
+        setStartDate,
+        setEndDate,
         setRegion,
         setSubRegion,
         setDynamicValues,

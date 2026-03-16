@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import { Download, Loader2, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DashboardHeader } from "@/components/dashboard-header";
 import { StatCard } from "@/components/stat-card";
-import { FilterBar, getDateRange } from "@/components/filter-bar";
+import { FilterBar } from "@/components/filter-bar";
 import { SubmissionsTable } from "@/components/submissions-table";
 import { TablePagination } from "@/components/table-pagination";
 import { useForms } from "@/hooks/useForms";
@@ -34,7 +34,8 @@ const DashboardPage = () => {
   const [search, setSearch] = useState("");
   const [region, setRegion] = useState("");
   const [subRegion, setSubRegion] = useState("");
-  const [datePreset, setDatePreset] = useState("");
+  const [startDate, setStartDate] = useState(null);
+  const [endDate, setEndDate] = useState(null);
   const [dynamicValues, setDynamicValues] = useState({});
 
   const { regions, sub_regions, dynamic_filters } = useFilterOptions({
@@ -42,10 +43,8 @@ const DashboardPage = () => {
     region,
   });
 
-  const { start: startDate, end: endDate } = useMemo(
-    () => getDateRange(datePreset),
-    [datePreset],
-  );
+  const startMs = startDate ? startDate.getTime() : null;
+  const endMs = endDate ? endDate.getTime() : null;
 
   const { data, questions, count, isLoading, page, totalPages, setPage } =
     useSubmissions({
@@ -54,8 +53,8 @@ const DashboardPage = () => {
       search,
       region,
       subRegion,
-      startDate,
-      endDate,
+      startDate: startMs,
+      endDate: endMs,
       dynamicFilters: dynamicValues,
     });
   const { plots } = usePlots({ formId: activeForm?.asset_uid });
@@ -63,7 +62,8 @@ const DashboardPage = () => {
   const handleReset = useCallback(() => {
     setRegion("");
     setSubRegion("");
-    setDatePreset("");
+    setStartDate(null);
+    setEndDate(null);
     setDynamicValues({});
     setSearch("");
     setActiveTab("all");
@@ -76,8 +76,8 @@ const DashboardPage = () => {
       search,
       region,
       subRegion,
-      start_date: startDate,
-      end_date: endDate,
+      start_date: startMs,
+      end_date: endMs,
       dynamic_filters: dynamicValues,
     });
   };
@@ -107,14 +107,18 @@ const DashboardPage = () => {
         dynamicFilters={dynamic_filters}
         region={region}
         subRegion={subRegion}
-        datePreset={datePreset}
+        startDate={startDate}
+        endDate={endDate}
         dynamicValues={dynamicValues}
         onRegionChange={(v) => {
           setRegion(v);
           setSubRegion("");
         }}
         onSubRegionChange={setSubRegion}
-        onDatePresetChange={setDatePreset}
+        onDateRangeChange={(from, to) => {
+          setStartDate(from);
+          setEndDate(to);
+        }}
         onDynamicFilterChange={(name, val) =>
           setDynamicValues((prev) => ({ ...prev, [name]: val }))
         }

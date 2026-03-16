@@ -222,7 +222,8 @@ export default function MapPage() {
               dynamicFilters={dynamic_filters}
               region={mapState.region}
               subRegion={mapState.subRegion}
-              datePreset={mapState.datePreset}
+              startDate={mapState.startDate}
+              endDate={mapState.endDate}
               dynamicValues={mapState.dynamicValues}
               onRegionChange={(v) => {
                 mapState.setSelectedPlotId(null);
@@ -233,9 +234,10 @@ export default function MapPage() {
                 mapState.setSelectedPlotId(null);
                 mapState.setSubRegion(v);
               }}
-              onDatePresetChange={(v) => {
+              onDateRangeChange={(from, to) => {
                 mapState.setSelectedPlotId(null);
-                mapState.setDatePreset(v);
+                mapState.setStartDate(from);
+                mapState.setEndDate(to);
               }}
               onDynamicFilterChange={(name, val) => {
                 mapState.setSelectedPlotId(null);

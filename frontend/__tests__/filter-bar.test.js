@@ -33,9 +33,10 @@ describe("FilterBar", () => {
     expect(screen.getByText("Sub-region")).toBeInTheDocument();
   });
 
-  it("renders date range picker button", () => {
+  it("renders date range controls", () => {
     render(<FilterBar />);
-    expect(screen.getByText("Pick a date range")).toBeInTheDocument();
+    expect(screen.getByText("Date range")).toBeInTheDocument();
+    expect(screen.getByText("Pick dates")).toBeInTheDocument();
   });
 
   it("renders reset button when region filter is active", () => {

@@ -73,6 +73,8 @@ export function FilterBar({
     Object.values(dynamicValues).some(Boolean);
 
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [presetValue, setPresetValue] = useState("");
 
   const activeFilterCount = activeChips.length;
 
@@ -84,16 +86,21 @@ export function FilterBar({
     return `Until ${fmt(endDate)}`;
   }, [startDate, endDate]);
 
+  const activePreset =
+    presetValue && startDate && endDate ? presetValue : startDate || endDate ? "custom" : "";
+
   function handlePreset(preset) {
     const match = DATE_PRESETS.find((p) => p.value === preset);
     if (!match) return;
     const end = new Date();
     const start = new Date();
     start.setDate(start.getDate() - match.days);
+    setPresetValue(preset);
     onDateRangeChange?.(start, end);
   }
 
   function handleCalendarSelect(range) {
+    setPresetValue("");
     onDateRangeChange?.(range?.from || null, range?.to || null);
   }
 
@@ -246,32 +253,43 @@ export function FilterBar({
       </div>
 
       <div className="flex items-center justify-end gap-2">
-        <Popover>
+        <Select
+          value={activePreset}
+          onValueChange={(val) => {
+            if (val === "custom") {
+              setCalendarOpen(true);
+              return;
+            }
+            handlePreset(val);
+          }}
+        >
+          <SelectTrigger className="w-[140px]">
+            <SelectValue placeholder="Date range" />
+          </SelectTrigger>
+          <SelectContent>
+            {DATE_PRESETS.map((p) => (
+              <SelectItem key={p.value} value={p.value}>
+                {p.label}
+              </SelectItem>
+            ))}
+            <SelectItem value="custom">Custom range</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
           <PopoverTrigger asChild>
             <Button
               variant="outline"
               className={cn(
-                "w-[260px] justify-start text-left font-normal",
+                "justify-start text-left font-normal",
                 !startDate && !endDate && "text-muted-foreground",
               )}
             >
               <CalendarIcon className="size-4" />
-              {dateLabel || "Pick a date range"}
+              {dateLabel || "Pick dates"}
             </Button>
           </PopoverTrigger>
           <PopoverContent className="w-auto p-0" align="end">
-            <div className="flex gap-1 border-b px-3 py-2">
-              {DATE_PRESETS.map((p) => (
-                <Button
-                  key={p.value}
-                  variant="ghost"
-                  size="xs"
-                  onClick={() => handlePreset(p.value)}
-                >
-                  {p.label}
-                </Button>
-              ))}
-            </div>
             <Calendar
               mode="range"
               selected={

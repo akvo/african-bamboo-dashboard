@@ -13,6 +13,7 @@ from api.v1.v1_odk.constants import (
     ATTACHMENTS_FOLDER,
 )
 from api.v1.v1_odk.models import Submission
+from api.v1.v1_users.models import SystemUser
 from utils.encryption import decrypt
 from utils.kobo_client import KoboClient
 
@@ -108,6 +109,7 @@ class Command(BaseCommand):
 
                 try:
                     img = Image.open(dest_file)
+                    fmt = img.format
                     transposed = (
                         ImageOps.exif_transpose(
                             img
@@ -115,7 +117,8 @@ class Command(BaseCommand):
                     )
                     if transposed is not img:
                         transposed.save(
-                            dest_file
+                            dest_file,
+                            format=fmt,
                         )
                         fixed += 1
                         self.stdout.write(
@@ -158,9 +161,6 @@ class Command(BaseCommand):
     def _redownload_from_large(self, qs):
         """Re-download attachments that were
         originally fetched from medium URL."""
-        from api.v1.v1_users.models import (
-            SystemUser,
-        )
 
         user = (
             SystemUser.objects.filter(
@@ -258,11 +258,15 @@ class Command(BaseCommand):
                                 resp.content
                             )
                         )
+                        fmt = img.format
                         img = (
                             ImageOps
                             .exif_transpose(img)
                         )
-                        img.save(dest_file)
+                        img.save(
+                            dest_file,
+                            format=fmt,
+                        )
                         redownloaded += 1
                         success = True
                         break

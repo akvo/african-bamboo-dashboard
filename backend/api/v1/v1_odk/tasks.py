@@ -645,8 +645,9 @@ def download_submission_attachments(
                 img = Image.open(
                     BytesIO(resp.content)
                 )
+                fmt = img.format
                 img = ImageOps.exif_transpose(img)
-                img.save(dest_file)
+                img.save(dest_file, format=fmt)
                 logger.info(
                     "Downloaded attachment %s "
                     "for submission %s from %s",

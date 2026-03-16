@@ -13,6 +13,8 @@ from api.v1.v1_odk.models import (
     FormMetadata,
     Submission,
 )
+from api.v1.v1_users.models import SystemUser
+from utils.encryption import encrypt
 
 
 def _make_jpeg_bytes(width=10, height=10):
@@ -249,11 +251,6 @@ class FixAttachmentOrientationTest(TestCase):
     def test_redownload_from_large_url(
         self, mock_cls
     ):
-        from api.v1.v1_users.models import (
-            SystemUser,
-        )
-        from utils.encryption import encrypt
-
         user = (
             SystemUser.objects.create_superuser(
                 email="kobo@test.local",

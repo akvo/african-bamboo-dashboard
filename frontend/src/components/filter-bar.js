@@ -1,8 +1,10 @@
 "use client";
 
-import { useMemo } from "react";
-import { Calendar, FunnelPlus } from "lucide-react";
+import { useMemo, useState } from "react";
+import { format } from "date-fns";
+import { Calendar as CalendarIcon, FunnelPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
 import {
   Dialog,
   DialogContent,
@@ -13,46 +15,33 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 
 const DATE_PRESETS = [
-  { value: "7days", label: "Last 7 days" },
-  { value: "30days", label: "Last 30 days" },
-  { value: "90days", label: "Last 90 days" },
+  { value: "7days", label: "Last 7 days", days: 7 },
+  { value: "30days", label: "Last 30 days", days: 30 },
+  { value: "90days", label: "Last 90 days", days: 90 },
 ];
-
-export function getDateRange(preset) {
-  if (!preset) return { start: null, end: null };
-  const now = Date.now();
-  const days = { "7days": 7, "30days": 30, "90days": 90 }[preset];
-  if (!days) return { start: null, end: null };
-  return { start: now - days * 86400000, end: now };
-}
-
-function formatDateRange(preset) {
-  const { start, end } = getDateRange(preset);
-  if (!start || !end) return null;
-  const fmt = (ms) =>
-    new Date(ms).toLocaleDateString("en-GB", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
-  return `${fmt(start)} - ${fmt(end)}`;
-}
 
 export function FilterBar({
   region,
   subRegion,
-  datePreset,
+  startDate,
+  endDate,
   onRegionChange,
   onSubRegionChange,
-  onDatePresetChange,
+  onDateRangeChange,
   onDynamicFilterChange,
   onReset,
   dynamicValues = {},
@@ -60,26 +49,8 @@ export function FilterBar({
   sub_regions = [],
   dynamicFilters = [],
 }) {
-  const dateLabel = useMemo(() => formatDateRange(datePreset), [datePreset]);
-
   const activeChips = useMemo(() => {
     const chips = [];
-    // if (region) {
-    //   const match = regions.find((r) => r.value === region);
-    //   chips.push({
-    //     key: "region",
-    //     label: match?.label || region,
-    //     onClear: () => onRegionChange(""),
-    //   });
-    // }
-    // if (subRegion) {
-    //   const match = sub_regions.find((w) => w.value === subRegion);
-    //   chips.push({
-    //     key: "subRegion",
-    //     label: match?.label || subRegion,
-    //     onClear: () => onSubRegionChange(""),
-    //   });
-    // }
     for (const df of dynamicFilters) {
       const val = dynamicValues[df.name];
       if (val) {
@@ -97,10 +68,34 @@ export function FilterBar({
   const hasActiveFilters =
     region ||
     subRegion ||
-    datePreset ||
+    startDate ||
+    endDate ||
     Object.values(dynamicValues).some(Boolean);
 
-  const activeFilterCount = activeChips.length + (datePreset ? 1 : 0);
+  const [dialogOpen, setDialogOpen] = useState(false);
+
+  const activeFilterCount = activeChips.length;
+
+  const dateLabel = useMemo(() => {
+    if (!startDate && !endDate) return null;
+    const fmt = (d) => format(d, "dd MMM yyyy");
+    if (startDate && endDate) return `${fmt(startDate)} - ${fmt(endDate)}`;
+    if (startDate) return `From ${fmt(startDate)}`;
+    return `Until ${fmt(endDate)}`;
+  }, [startDate, endDate]);
+
+  function handlePreset(preset) {
+    const match = DATE_PRESETS.find((p) => p.value === preset);
+    if (!match) return;
+    const end = new Date();
+    const start = new Date();
+    start.setDate(start.getDate() - match.days);
+    onDateRangeChange?.(start, end);
+  }
+
+  function handleCalendarSelect(range) {
+    onDateRangeChange?.(range?.from || null, range?.to || null);
+  }
 
   return (
     <div className="w-full flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -142,7 +137,7 @@ export function FilterBar({
         {(dynamicFilters.length > 0 ||
           regions.length > 0 ||
           sub_regions.length > 0) && (
-          <Dialog>
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
               <Button
                 variant="outline"
@@ -235,7 +230,13 @@ export function FilterBar({
                 ))}
               </div>
               <DialogFooter>
-                <Button variant="outline" onClick={onReset}>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    onReset?.();
+                    setDialogOpen(false);
+                  }}
+                >
                   Reset filters
                 </Button>
               </DialogFooter>
@@ -244,48 +245,47 @@ export function FilterBar({
         )}
       </div>
 
-      {/* {activeChips.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          {activeChips.map((chip) => (
-            <span
-              key={chip.key}
-              data-testid={`filter-chip-${chip.key}`}
-              className="inline-flex items-center gap-1 rounded-full border bg-muted px-2.5 py-0.5 text-xs font-medium"
-            >
-              {chip.label}
-              <button
-                type="button"
-                aria-label={`Remove ${chip.label} filter`}
-                className="ml-0.5 rounded-full p-0.5 hover:bg-muted-foreground/20"
-                onClick={chip.onClear}
-              >
-                <X className="size-3" />
-              </button>
-            </span>
-          ))}
-        </div>
-      )} */}
-
       <div className="flex items-center justify-end gap-2">
-        <Select value={datePreset || ""} onValueChange={onDatePresetChange}>
-          <SelectTrigger className="w-[140px]">
-            <SelectValue placeholder="Date range" />
-          </SelectTrigger>
-          <SelectContent>
-            {DATE_PRESETS.map((p) => (
-              <SelectItem key={p.value} value={p.value}>
-                {p.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        {dateLabel && (
-          <div className="flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm text-muted-foreground">
-            <Calendar className="size-4" />
-            <span>{dateLabel}</span>
-          </div>
-        )}
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              className={cn(
+                "w-[260px] justify-start text-left font-normal",
+                !startDate && !endDate && "text-muted-foreground",
+              )}
+            >
+              <CalendarIcon className="size-4" />
+              {dateLabel || "Pick a date range"}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="end">
+            <div className="flex gap-1 border-b px-3 py-2">
+              {DATE_PRESETS.map((p) => (
+                <Button
+                  key={p.value}
+                  variant="ghost"
+                  size="xs"
+                  onClick={() => handlePreset(p.value)}
+                >
+                  {p.label}
+                </Button>
+              ))}
+            </div>
+            <Calendar
+              mode="range"
+              selected={
+                startDate || endDate
+                  ? { from: startDate || undefined, to: endDate || undefined }
+                  : undefined
+              }
+              onSelect={handleCalendarSelect}
+              numberOfMonths={2}
+              defaultMonth={startDate || new Date()}
+              disabled={{ after: new Date() }}
+            />
+          </PopoverContent>
+        </Popover>
 
         {hasActiveFilters && (
           <Button variant="outline" size="sm" onClick={onReset}>

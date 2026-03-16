@@ -1,7 +1,7 @@
 import "@testing-library/jest-dom";
 import { fireEvent, render, screen } from "@testing-library/react";
 
-import { FilterBar, getDateRange } from "@/components/filter-bar";
+import { FilterBar } from "@/components/filter-bar";
 
 const mockRegions = [
   { value: "ET04", label: "Amhara" },
@@ -33,9 +33,9 @@ describe("FilterBar", () => {
     expect(screen.getByText("Sub-region")).toBeInTheDocument();
   });
 
-  it("renders date range selector", () => {
+  it("renders date range picker button", () => {
     render(<FilterBar />);
-    expect(screen.getByText("Date range")).toBeInTheDocument();
+    expect(screen.getByText("Pick a date range")).toBeInTheDocument();
   });
 
   it("renders reset button when region filter is active", () => {
@@ -52,11 +52,21 @@ describe("FilterBar", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("renders reset button when datePreset is active", () => {
-    render(<FilterBar datePreset="7days" />);
+  it("renders reset button when date range is active", () => {
+    render(<FilterBar startDate={new Date(2025, 0, 1)} endDate={new Date(2025, 0, 31)} />);
     expect(
       screen.getByRole("button", { name: /reset/i }),
     ).toBeInTheDocument();
+  });
+
+  it("displays formatted date range when dates are provided", () => {
+    render(
+      <FilterBar
+        startDate={new Date(2025, 0, 1)}
+        endDate={new Date(2025, 0, 31)}
+      />,
+    );
+    expect(screen.getByText("01 Jan 2025 - 31 Jan 2025")).toBeInTheDocument();
   });
 
   it("does not render advanced filters button when no filters available", () => {
@@ -97,67 +107,6 @@ describe("FilterBar", () => {
     expect(screen.queryByText("Sub-region")).not.toBeInTheDocument();
   });
 
-  // it("renders active filter chips when region is selected", () => {
-  //   render(<FilterBar region="ET04" regions={mockRegions} />);
-  //   const chip = screen.getByTestId("filter-chip-region");
-  //   expect(chip).toBeInTheDocument();
-  //   expect(chip).toHaveTextContent("Amhara");
-  // });
-
-  // it("clears region when chip dismiss is clicked", () => {
-  //   const onRegionChange = jest.fn();
-  //   render(
-  //     <FilterBar
-  //       region="ET04"
-  //       regions={mockRegions}
-  //       onRegionChange={onRegionChange}
-  //     />,
-  //   );
-  //   fireEvent.click(
-  //     screen.getByRole("button", { name: /remove amhara filter/i }),
-  //   );
-  //   expect(onRegionChange).toHaveBeenCalledWith("");
-  // });
-
-  // it("renders dynamic filter chip with label prefix", () => {
-  //   render(
-  //     <FilterBar
-  //       dynamicFilters={mockDynamicFilters}
-  //       dynamicValues={{ species: "bamboo" }}
-  //     />,
-  //   );
-  //   expect(screen.getByText("Species: Bamboo")).toBeInTheDocument();
-  // });
-
-  // it("clears dynamic filter when chip dismiss is clicked", () => {
-  //   const onDynamicFilterChange = jest.fn();
-  //   render(
-  //     <FilterBar
-  //       dynamicFilters={mockDynamicFilters}
-  //       dynamicValues={{ species: "bamboo" }}
-  //       onDynamicFilterChange={onDynamicFilterChange}
-  //     />,
-  //   );
-  //   fireEvent.click(
-  //     screen.getByRole("button", {
-  //       name: /remove species: bamboo filter/i,
-  //     }),
-  //   );
-  //   expect(onDynamicFilterChange).toHaveBeenCalledWith("species", "");
-  // });
-
-  // it("shows correct count badge on filter button", () => {
-  //   render(
-  //     <FilterBar
-  //       region="ET04"
-  //       regions={mockRegions}
-  //       datePreset="7days"
-  //     />,
-  //   );
-  //   // region chip + datePreset = 2
-  //   expect(screen.getByText("2")).toBeInTheDocument();
-  // });
-
   it("does not render chips when no filters are active", () => {
     render(<FilterBar regions={mockRegions} />);
     expect(
@@ -181,34 +130,5 @@ describe("FilterBar", () => {
     // Region and sub-region are also shown inside the dialog
     expect(screen.getByText("Select region")).toBeInTheDocument();
     expect(screen.getByText("Select sub-region")).toBeInTheDocument();
-  });
-});
-
-describe("getDateRange", () => {
-  it("returns null dates for no preset", () => {
-    const { start, end } = getDateRange(null);
-    expect(start).toBeNull();
-    expect(end).toBeNull();
-  });
-
-  it("returns a 7-day range", () => {
-    const { start, end } = getDateRange("7days");
-    expect(end - start).toBe(7 * 86400000);
-  });
-
-  it("returns a 30-day range", () => {
-    const { start, end } = getDateRange("30days");
-    expect(end - start).toBe(30 * 86400000);
-  });
-
-  it("returns a 90-day range", () => {
-    const { start, end } = getDateRange("90days");
-    expect(end - start).toBe(90 * 86400000);
-  });
-
-  it("returns null dates for unknown preset", () => {
-    const { start, end } = getDateRange("unknown");
-    expect(start).toBeNull();
-    expect(end).toBeNull();
   });
 });

@@ -17,6 +17,8 @@ from rest_framework.mixins import (
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiParameter
 
 from django_q.tasks import async_task
 
@@ -34,7 +36,6 @@ from api.v1.v1_odk.constants import (
 )
 from api.v1.v1_odk.funcs import (
     MAPPING_FIELDS,
-    SKIP_FIELD_TYPES,
     check_and_flag_overlaps,
     dispatch_kobo_geometry_sync,
     rederive_plots,
@@ -150,56 +151,57 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
     @extend_schema(
         tags=["ODK"],
         summary="List available form fields",
+        parameters=[
+            OpenApiParameter(
+                name="is_filter",
+                required=False,
+                default=False,
+                type=OpenApiTypes.BOOL,
+                location=OpenApiParameter.QUERY,
+            ),
+        ],
     )
     @action(detail=True, methods=["get"])
     def form_fields(self, request, asset_uid=None):
-        """Proxy KoboToolbox asset detail to list
-        available survey fields."""
-        self.get_object()  # 404 if form missing
-        client = self._make_kobo_client(request.user)
-        if client is None:
-            return Response(
-                {"message": "No Kobo credentials"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        """List locally-stored form questions.
 
-        try:
-            content = client.get_asset_detail(
-                asset_uid
-            )
-        except Exception as e:
-            return Response(
-                {"message": str(e)},
-                status=status.HTTP_502_BAD_GATEWAY,
-            )
+        Questions are populated during sync; no
+        Kobo API call is needed.
+        """
+        form = self.get_object()
+        qs = FormQuestion.objects.filter(
+            form=form
+        ).order_by("pk")
 
-        survey = content.get("survey", [])
-        fields = []
-        for item in survey:
-            field_type = item.get("type", "")
-            if field_type in SKIP_FIELD_TYPES:
-                continue
-            label_list = item.get("label", [])
-            label = (
-                " ".join(
-                    lbl
-                    for lbl in label_list if lbl
+        if (
+            request.query_params.get("is_filter")
+            == "true"
+        ):
+            excluded = set()
+            for spec in [
+                form.region_field,
+                form.sub_region_field,
+                form.plot_name_field,
+            ]:
+                if spec:
+                    for f in spec.split(","):
+                        s = f.strip()
+                        if s:
+                            excluded.add(s)
+            if excluded:
+                qs = qs.exclude(
+                    name__in=excluded
                 )
-                if label_list
-                else item.get("name", "")
-            )
-            fields.append(
-                {
-                    "name": item.get("name", ""),
-                    "type": field_type,
-                    "label": label,
-                    "full_path": item.get(
-                        "$xpath",
-                        item.get("name", ""),
-                    ),
-                }
-            )
 
+        fields = [
+            {
+                "name": q.name,
+                "type": q.type,
+                "label": q.label,
+                "full_path": q.name,
+            }
+            for q in qs
+        ]
         return Response({"fields": fields})
 
     @extend_schema(

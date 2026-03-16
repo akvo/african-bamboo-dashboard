@@ -3,7 +3,12 @@ from unittest.mock import patch
 from django.test import TestCase
 from django.test.utils import override_settings
 
-from api.v1.v1_odk.models import FormMetadata, Plot, Submission
+from api.v1.v1_odk.models import (
+    FormMetadata,
+    FormQuestion,
+    Plot,
+    Submission,
+)
 from api.v1.v1_odk.tests.mixins import OdkTestHelperMixin
 
 VALID_POLYGON = (
@@ -45,7 +50,9 @@ class FormMetadataViewTest(TestCase, OdkTestHelperMixin):
             **self.auth,
         )
         self.assertEqual(resp.status_code, 201)
-        self.assertTrue(FormMetadata.objects.filter(asset_uid="formB").exists())
+        self.assertTrue(
+            FormMetadata.objects.filter(asset_uid="formB").exists()
+        )
 
     def test_retrieve_form(self):
         resp = self.client.get(
@@ -109,68 +116,36 @@ class FormMetadataViewTest(TestCase, OdkTestHelperMixin):
             self.form.plot_name_field,
         )
 
-    @patch("api.v1.v1_odk.views.KoboClient")
-    def test_form_fields(self, mock_client_cls):
-        mock_client = mock_client_cls.return_value
-        mock_client.get_asset_detail.return_value = {
-            "survey": [
-                {
-                    "name": "start",
-                    "type": "start",
-                    "$xpath": "start",
-                },
-                {
-                    "name": "end",
-                    "type": "end",
-                    "$xpath": "end",
-                },
-                {
-                    "name": "calc1",
-                    "type": "calculate",
-                    "$xpath": "calc1",
-                },
-                {
-                    "name": "note1",
-                    "type": "note",
-                    "$xpath": "note1",
-                },
-                {
-                    "name": "grp",
-                    "type": "begin_group",
-                    "$xpath": "grp",
-                },
-                {
-                    "name": "region",
-                    "type": "select_one",
-                    "label": ["Region"],
-                    "$xpath": "region",
-                },
-                {
-                    "name": "First_Name",
-                    "type": "text",
-                    "label": ["First name"],
-                    "$xpath": ("consent_group/" "consented/" "First_Name"),
-                },
-                {
-                    "name": "boundary",
-                    "type": "geoshape",
-                    "label": [
-                        "Auto Boundary",
-                    ],
-                    "$xpath": (
-                        "consent_group/"
-                        "consented/"
-                        "boundary_mapping/"
-                        "boundary"
-                    ),
-                },
-                {
-                    "name": "grp",
-                    "type": "end_group",
-                    "$xpath": "grp",
-                },
-            ],
-        }
+    def test_form_fields(self):
+        """form_fields reads from local
+        FormQuestion records."""
+        FormQuestion.objects.create(
+            form=self.form,
+            name="region",
+            label="Region",
+            type="select_one",
+        )
+        FormQuestion.objects.create(
+            form=self.form,
+            name=(
+                "consent_group/"
+                "consented/"
+                "First_Name"
+            ),
+            label="First name",
+            type="text",
+        )
+        FormQuestion.objects.create(
+            form=self.form,
+            name=(
+                "consent_group/"
+                "consented/"
+                "boundary_mapping/"
+                "boundary"
+            ),
+            label="Auto Boundary",
+            type="geoshape",
+        )
         resp = self.client.get(
             "/api/v1/odk/forms/formA/form_fields/",
             **self.auth,
@@ -178,37 +153,90 @@ class FormMetadataViewTest(TestCase, OdkTestHelperMixin):
         self.assertEqual(resp.status_code, 200)
         fields = resp.json()["fields"]
         names = [f["name"] for f in fields]
-        # Skipped types filtered out
-        self.assertNotIn("start", names)
-        self.assertNotIn("end", names)
-        self.assertNotIn("calc1", names)
-        self.assertNotIn("note1", names)
-        self.assertNotIn("grp", names)
-        # Data fields included
         self.assertIn("region", names)
-        self.assertIn("First_Name", names)
-        self.assertIn("boundary", names)
+        self.assertIn(
+            "consent_group/"
+            "consented/"
+            "First_Name",
+            names,
+        )
         self.assertEqual(len(fields), 3)
-        # Check structure
         region = fields[0]
-        self.assertEqual(region["type"], "select_one")
-        self.assertEqual(region["label"], "Region")
-        self.assertEqual(region["full_path"], "region")
+        self.assertEqual(
+            region["type"], "select_one"
+        )
+        self.assertEqual(
+            region["label"], "Region"
+        )
+        self.assertEqual(
+            region["full_path"], "region"
+        )
         boundary = fields[2]
         self.assertIn(
             "boundary_mapping/boundary",
             boundary["full_path"],
         )
 
-    @patch("api.v1.v1_odk.views.KoboClient")
-    def test_form_fields_no_credentials(self, mock_client_cls):
-        self.user.kobo_url = ""
-        self.user.save()
+    def test_form_fields_empty_before_sync(self):
+        """Returns empty list when no questions
+        have been synced yet."""
         resp = self.client.get(
             "/api/v1/odk/forms/formA/form_fields/",
             **self.auth,
         )
-        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(
+            resp.json()["fields"], []
+        )
+
+    def test_form_fields_is_filter(self):
+        """is_filter=true excludes configured
+        mapping fields."""
+        self.form.region_field = "region"
+        self.form.plot_name_field = (
+            "consent_group/"
+            "consented/"
+            "First_Name"
+        )
+        self.form.save()
+        FormQuestion.objects.create(
+            form=self.form,
+            name="region",
+            label="Region",
+            type="select_one",
+        )
+        FormQuestion.objects.create(
+            form=self.form,
+            name=(
+                "consent_group/"
+                "consented/"
+                "First_Name"
+            ),
+            label="First name",
+            type="text",
+        )
+        FormQuestion.objects.create(
+            form=self.form,
+            name="other_field",
+            label="Other",
+            type="text",
+        )
+        resp = self.client.get(
+            "/api/v1/odk/forms/formA/form_fields/"
+            "?is_filter=true",
+            **self.auth,
+        )
+        self.assertEqual(resp.status_code, 200)
+        fields = resp.json()["fields"]
+        names = [f["name"] for f in fields]
+        self.assertNotIn("region", names)
+        self.assertNotIn(
+            "consent_group/"
+            "consented/"
+            "First_Name",
+            names,
+        )
+        self.assertEqual(names, ["other_field"])
 
     @patch("api.v1.v1_odk.views.KoboClient")
     def test_sync_action(self, mock_client_cls):

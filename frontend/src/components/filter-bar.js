@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { Calendar, FunnelPlus, X } from "lucide-react";
+import { Calendar, FunnelPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -64,22 +64,22 @@ export function FilterBar({
 
   const activeChips = useMemo(() => {
     const chips = [];
-    if (region) {
-      const match = regions.find((r) => r.value === region);
-      chips.push({
-        key: "region",
-        label: match?.label || region,
-        onClear: () => onRegionChange(""),
-      });
-    }
-    if (subRegion) {
-      const match = sub_regions.find((w) => w.value === subRegion);
-      chips.push({
-        key: "subRegion",
-        label: match?.label || subRegion,
-        onClear: () => onSubRegionChange(""),
-      });
-    }
+    // if (region) {
+    //   const match = regions.find((r) => r.value === region);
+    //   chips.push({
+    //     key: "region",
+    //     label: match?.label || region,
+    //     onClear: () => onRegionChange(""),
+    //   });
+    // }
+    // if (subRegion) {
+    //   const match = sub_regions.find((w) => w.value === subRegion);
+    //   chips.push({
+    //     key: "subRegion",
+    //     label: match?.label || subRegion,
+    //     onClear: () => onSubRegionChange(""),
+    //   });
+    // }
     for (const df of dynamicFilters) {
       const val = dynamicValues[df.name];
       if (val) {
@@ -92,17 +92,7 @@ export function FilterBar({
       }
     }
     return chips;
-  }, [
-    region,
-    subRegion,
-    dynamicValues,
-    regions,
-    sub_regions,
-    dynamicFilters,
-    onRegionChange,
-    onSubRegionChange,
-    onDynamicFilterChange,
-  ]);
+  }, [dynamicValues, dynamicFilters, onDynamicFilterChange]);
 
   const hasActiveFilters =
     region ||
@@ -254,7 +244,7 @@ export function FilterBar({
         )}
       </div>
 
-      {activeChips.length > 0 && (
+      {/* {activeChips.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5">
           {activeChips.map((chip) => (
             <span
@@ -274,7 +264,7 @@ export function FilterBar({
             </span>
           ))}
         </div>
-      )}
+      )} */}
 
       <div className="flex items-center justify-end gap-2">
         <Select value={datePreset || ""} onValueChange={onDatePresetChange}>

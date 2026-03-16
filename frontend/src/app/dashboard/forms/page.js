@@ -740,7 +740,7 @@ export default function FormsPage() {
                     {/* Filter fields - select_one/select_multiple only */}
                     {selectFields.length > 0 && (
                       <div className="space-y-2">
-                        <Label>Filter fields</Label>
+                        <Label>Additional Filter fields</Label>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button
@@ -784,9 +784,11 @@ export default function FormsPage() {
                           </DropdownMenuContent>
                         </DropdownMenu>
                         <p className="text-xs text-muted-foreground">
-                          Only select_one/select_multiple questions are shown.
-                          Selected fields will appear as filter dropdowns on
-                          dashboard and map pages.
+                          Additional fields to filter by in the plot list view.
+                          These will be added as separate filters alongside the
+                          region/sub-region filters, so best to choose fields
+                          with a limited number of options (e.g. select_one or
+                          select_multiple fields).
                         </p>
                       </div>
                     )}

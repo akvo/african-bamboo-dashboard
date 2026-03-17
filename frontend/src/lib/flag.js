@@ -63,12 +63,9 @@ function parseFlags(flaggedReason) {
   if (lower.includes("overlap")) type = FlagType.OVERLAP;
   else if (lower.includes("too few vertices"))
     type = FlagType.GEOMETRY_TOO_FEW_VERTICES;
-  else if (lower.includes("intersect"))
-    type = FlagType.GEOMETRY_SELF_INTERSECT;
-  else if (lower.includes("too small"))
-    type = FlagType.GEOMETRY_AREA_TOO_SMALL;
-  else if (lower.includes("no polygon data"))
-    type = FlagType.GEOMETRY_NO_DATA;
+  else if (lower.includes("intersect")) type = FlagType.GEOMETRY_SELF_INTERSECT;
+  else if (lower.includes("too small")) type = FlagType.GEOMETRY_AREA_TOO_SMALL;
+  else if (lower.includes("no polygon data")) type = FlagType.GEOMETRY_NO_DATA;
   else type = FlagType.GEOMETRY_PARSE_FAIL;
 
   return [{ type, severity: FlagSeverity.ERROR, note: trimmed }];

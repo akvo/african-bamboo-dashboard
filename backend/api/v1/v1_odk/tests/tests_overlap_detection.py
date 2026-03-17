@@ -3,6 +3,7 @@ from unittest.mock import patch
 from django.test import TestCase
 from django.test.utils import override_settings
 
+from api.v1.v1_odk.constants import FlagType
 from api.v1.v1_odk.models import (
     FormMetadata,
     Plot,
@@ -451,13 +452,19 @@ class SyncOverlapDetectionTest(
         )
         # Plot B is flagged for overlapping A
         self.assertTrue(plot_b.flagged_for_review)
-        self.assertIn(
-            "Abebe", plot_b.flagged_reason
+        self.assertTrue(
+            any(
+                f["type"] == FlagType.OVERLAP
+                for f in plot_b.flagged_reason
+            )
         )
         # Plot A is flagged as overlapping too
         self.assertTrue(plot_a.flagged_for_review)
-        self.assertIn(
-            "Kebede", plot_a.flagged_reason
+        self.assertTrue(
+            any(
+                f["type"] == FlagType.OVERLAP
+                for f in plot_a.flagged_reason
+            )
         )
 
     @patch("api.v1.v1_odk.views.KoboClient")
@@ -483,8 +490,6 @@ class SyncOverlapDetectionTest(
             **self.auth,
         )
         self.assertEqual(resp.status_code, 200)
-        data = resp.json()
-        self.assertEqual(data["plots_flagged"], 0)
 
         plot_a = Plot.objects.get(
             submission__uuid="uuid-a"
@@ -492,13 +497,21 @@ class SyncOverlapDetectionTest(
         plot_far = Plot.objects.get(
             submission__uuid="uuid-far"
         )
-        # Checked clean -> False
-        self.assertIs(
-            plot_a.flagged_for_review, False
-        )
-        self.assertIs(
-            plot_far.flagged_for_review, False
-        )
+        # No OVERLAP flags on either plot
+        flags_a = plot_a.flagged_reason or []
+        flags_far = plot_far.flagged_reason or []
+        overlap_a = [
+            f
+            for f in flags_a
+            if f.get("type") == FlagType.OVERLAP
+        ]
+        overlap_far = [
+            f
+            for f in flags_far
+            if f.get("type") == FlagType.OVERLAP
+        ]
+        self.assertEqual(overlap_a, [])
+        self.assertEqual(overlap_far, [])
 
     @patch("api.v1.v1_odk.views.KoboClient")
     def test_invalid_geom_not_checked(
@@ -541,10 +554,14 @@ class SyncOverlapDetectionTest(
         self.assertTrue(
             plot_bad.flagged_for_review
         )
-        # Good geom checked clean -> False
-        self.assertIs(
-            plot_a.flagged_for_review, False
-        )
+        # Good geom: no OVERLAP flags
+        flags_a = plot_a.flagged_reason or []
+        overlap_a = [
+            f
+            for f in flags_a
+            if f.get("type") == FlagType.OVERLAP
+        ]
+        self.assertEqual(overlap_a, [])
 
     @patch("api.v1.v1_odk.views.KoboClient")
     def test_resync_no_self_overlap(
@@ -583,7 +600,11 @@ class SyncOverlapDetectionTest(
         plot_a = Plot.objects.get(
             submission__uuid="uuid-a"
         )
-        # Re-checked clean -> False
-        self.assertIs(
-            plot_a.flagged_for_review, False
-        )
+        # No OVERLAP flags after resync
+        flags = plot_a.flagged_reason or []
+        overlap = [
+            f
+            for f in flags
+            if f.get("type") == FlagType.OVERLAP
+        ]
+        self.assertEqual(overlap, [])

@@ -3,8 +3,15 @@ from unittest.mock import patch
 from django.test import TestCase
 from django.test.utils import override_settings
 
-from api.v1.v1_odk.models import FormMetadata, Plot, Submission
-from api.v1.v1_odk.tests.mixins import OdkTestHelperMixin
+from api.v1.v1_odk.constants import FlagType
+from api.v1.v1_odk.models import (
+    FormMetadata,
+    Plot,
+    Submission,
+)
+from api.v1.v1_odk.tests.mixins import (
+    OdkTestHelperMixin,
+)
 
 VALID_GEOSHAPE = (
     "7.05 38.47 0 0;"
@@ -195,9 +202,15 @@ class PlotResetPolygonTest(TestCase, OdkTestHelperMixin):
         self.assertEqual(resp.status_code, 200)
         plot.refresh_from_db()
         self.assertTrue(plot.flagged_for_review)
-        self.assertEqual(
-            plot.flagged_reason,
-            "No polygon data found in submission.",
+        self.assertIsInstance(
+            plot.flagged_reason, list
+        )
+        self.assertTrue(
+            any(
+                f["type"]
+                == FlagType.GEOMETRY_NO_DATA
+                for f in plot.flagged_reason
+            )
         )
 
     def test_reset_requires_authentication(self):
@@ -270,8 +283,11 @@ class PlotResetPolygonTest(TestCase, OdkTestHelperMixin):
 
         plot.refresh_from_db()
         self.assertTrue(plot.flagged_for_review)
-        self.assertIn(
-            "Overlapping", plot.flagged_reason
+        self.assertTrue(
+            any(
+                f["type"] == FlagType.OVERLAP
+                for f in plot.flagged_reason
+            )
         )
 
     @patch("api.v1.v1_odk.funcs.async_task")

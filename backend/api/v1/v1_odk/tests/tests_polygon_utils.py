@@ -1,5 +1,6 @@
 from django.test import TestCase
 
+from api.v1.v1_odk.constants import FlagType
 from utils.polygon import (
     _build_joined_value,
     compute_bbox,
@@ -361,9 +362,14 @@ class ExtractPlotDataTest(TestCase):
             {"other": "value"}, form
         )
         self.assertTrue(result["flagged_for_review"])
-        self.assertEqual(
-            result["flagged_reason"],
-            "No polygon data found in submission.",
+        flags = result["flagged_reason"]
+        self.assertIsInstance(flags, list)
+        self.assertTrue(
+            any(
+                f["type"]
+                == FlagType.GEOMETRY_NO_DATA
+                for f in flags
+            )
         )
 
     def test_unparseable_polygon_flagged(self):
@@ -376,9 +382,14 @@ class ExtractPlotDataTest(TestCase):
             {"boundary": "not valid geo"}, form
         )
         self.assertTrue(result["flagged_for_review"])
-        self.assertEqual(
-            result["flagged_reason"],
-            "Failed to parse polygon geometry.",
+        flags = result["flagged_reason"]
+        self.assertIsInstance(flags, list)
+        self.assertTrue(
+            any(
+                f["type"]
+                == FlagType.GEOMETRY_PARSE_FAIL
+                for f in flags
+            )
         )
 
     def test_invalid_validation_flagged(self):
@@ -398,8 +409,14 @@ class ExtractPlotDataTest(TestCase):
         }
         result = extract_plot_data(raw, form)
         self.assertTrue(result["flagged_for_review"])
-        self.assertIn(
-            "vertices", result["flagged_reason"]
+        flags = result["flagged_reason"]
+        self.assertIsInstance(flags, list)
+        self.assertTrue(
+            any(
+                f["type"]
+                == FlagType.GEOMETRY_TOO_FEW_VERTICES
+                for f in flags
+            )
         )
 
     def test_valid_polygon_not_flagged(self):

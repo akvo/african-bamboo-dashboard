@@ -2,6 +2,7 @@
 
 import {
   AlertTriangle,
+  AlertCircle,
   Paperclip,
   EllipsisVertical,
   ChevronLeft,
@@ -9,21 +10,38 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StatusBadge } from "@/components/status-badge";
 import { cn } from "@/lib/utils";
+import { FlagMessages, splitFlags } from "@/lib/flag";
 
-function AlertBanner({ message, tooltip, className }) {
-  if (!message) return null;
+function FlagList({ flags }) {
+  if (!flags || flags.length === 0) return null;
   return (
-    <div
-      className={cn(
-        "flex items-center justify-center gap-1 rounded-md border border-status-rejected/30 bg-status-rejected/10 px-2 py-1",
-        className,
-      )}
-      title={tooltip || undefined}
-    >
-      <AlertTriangle className="size-4 shrink-0 text-status-rejected" />
-      <span className="text-xs font-medium text-status-rejected">
-        {message}
-      </span>
+    <div className="flex flex-col gap-1.5">
+      {flags.map((flag, i) => {
+        const isError = flag.severity === "error";
+        const Icon = isError ? AlertCircle : AlertTriangle;
+        const colorClass = isError
+          ? "text-status-rejected"
+          : "text-status-flagged";
+        const borderClass = isError
+          ? "border-status-rejected/30 bg-status-rejected/10"
+          : "border-status-flagged/30 bg-status-flagged/10";
+        const label = FlagMessages[flag.type] || flag.note || flag.type;
+        return (
+          <div
+            key={`${flag.type}-${i}`}
+            className={cn(
+              "flex items-start gap-1.5 rounded-md border px-2 py-1.5",
+              borderClass,
+            )}
+            title={flag.note || undefined}
+          >
+            <Icon className={cn("mt-0.5 size-3 shrink-0", colorClass)} />
+            <span className={cn("text-xs font-medium", colorClass)}>
+              {label}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -32,8 +50,7 @@ const PlotHeaderCard = ({
   plotId,
   plotName,
   status,
-  alertMessage,
-  alertTooltip,
+  flaggedReason,
   lastCheckedBy,
   lastCheckedAt,
   attachmentCount,
@@ -42,6 +59,9 @@ const PlotHeaderCard = ({
   activeTab,
   onTabChange,
 }) => {
+  const { errors, warnings } = splitFlags(flaggedReason);
+  const hasFlags = errors.length > 0 || warnings.length > 0;
+
   return (
     <div className="flex w-full flex-col bg-white">
       {/* Header */}
@@ -59,10 +79,8 @@ const PlotHeaderCard = ({
 
       {/* Content */}
       <div className="flex flex-col gap-4 px-4 pt-6">
-        {/* Alert banner */}
-        {alertMessage && alertTooltip && (
-          <AlertBanner message={alertMessage} tooltip={alertTooltip} />
-        )}
+        {/* Flag list */}
+        {hasFlags && <FlagList flags={[...errors, ...warnings]} />}
 
         {/* Status row */}
         {status && (

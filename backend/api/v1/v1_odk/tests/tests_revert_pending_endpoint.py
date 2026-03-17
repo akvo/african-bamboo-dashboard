@@ -3,6 +3,7 @@ from unittest.mock import patch
 from django.test import TestCase
 from django.test.utils import override_settings
 
+from api.v1.v1_odk.constants import FlagType
 from api.v1.v1_odk.models import (
     ApprovalStatus,
     FormMetadata,
@@ -138,8 +139,11 @@ class RevertToPendingRechecksPlotTest(
         plot_a.refresh_from_db()
         plot_b.refresh_from_db()
         self.assertTrue(plot_a.flagged_for_review)
-        self.assertIn(
-            "overlaps", plot_a.flagged_reason
+        self.assertTrue(
+            any(
+                f["type"] == FlagType.OVERLAP
+                for f in plot_a.flagged_reason
+            )
         )
         # The overlapping plot_b also gets flagged
         self.assertTrue(plot_b.flagged_for_review)
@@ -186,8 +190,12 @@ class RevertToPendingRechecksPlotTest(
 
         plot.refresh_from_db()
         self.assertTrue(plot.flagged_for_review)
-        self.assertIn(
-            "too small", plot.flagged_reason
+        self.assertTrue(
+            any(
+                f["type"]
+                == FlagType.GEOMETRY_AREA_TOO_SMALL
+                for f in plot.flagged_reason
+            )
         )
 
     @patch("api.v1.v1_odk.views.async_task")
@@ -214,9 +222,12 @@ class RevertToPendingRechecksPlotTest(
 
         plot.refresh_from_db()
         self.assertTrue(plot.flagged_for_review)
-        self.assertIn(
-            "No polygon data",
-            plot.flagged_reason,
+        self.assertTrue(
+            any(
+                f["type"]
+                == FlagType.GEOMETRY_NO_DATA
+                for f in plot.flagged_reason
+            )
         )
 
     @patch("api.v1.v1_odk.views.async_task")

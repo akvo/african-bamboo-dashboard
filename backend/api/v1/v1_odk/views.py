@@ -66,6 +66,9 @@ from api.v1.v1_odk.serializers import (
 from api.v1.v1_odk.utils.area_calc import (
     calculate_area_ha,
 )
+from api.v1.v1_odk.utils.warning_rules import (
+    evaluate_warnings,
+)
 from utils.encryption import decrypt
 from utils.kobo_client import KoboClient
 from utils.polygon import (
@@ -351,6 +354,22 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
             )
             area = calculate_area_ha(raw_polygon)
 
+            # Run warning rules for valid geometry
+            warnings = []
+            if plot_data["polygon_wkt"]:
+                warnings = evaluate_warnings(
+                    raw_polygon, area
+                )
+
+            # Merge geometry errors + warnings
+            all_flags = []
+            if plot_data["flagged_reason"]:
+                all_flags.extend(
+                    plot_data["flagged_reason"]
+                )
+            if warnings:
+                all_flags.extend(warnings)
+
             defaults = {
                 "form": form,
                 "plot_name": (
@@ -385,11 +404,17 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
                 "area_ha": area,
                 "created_at": now_ms,
             }
-            # Only set flag fields when geometry
-            # is invalid; preserve DB value for
-            # valid polygons so tri-state works
-            # (None=unchecked, False=clean).
-            if plot_data["flagged_for_review"]:
+            # Set flags: geometry errors and/or
+            # warnings; preserve tri-state when
+            # no flags at all.
+            if all_flags:
+                defaults["flagged_for_review"] = (
+                    True
+                )
+                defaults["flagged_reason"] = (
+                    all_flags
+                )
+            elif plot_data["flagged_for_review"]:
                 defaults["flagged_for_review"] = (
                     True
                 )

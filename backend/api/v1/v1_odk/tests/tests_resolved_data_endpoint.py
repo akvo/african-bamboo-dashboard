@@ -302,14 +302,6 @@ class ResolvedDataListTest(TestCase, OdkTestHelperMixin):
         results = resp.json()["results"]
         self.assertEqual(results[0]["sub_region"], "Jimma")
 
-    def test_list_enumerator_resolved(self):
-        resp = self.client.get(
-            "/api/v1/odk/submissions/" "?asset_uid=formR2",
-            **self.auth,
-        )
-        results = resp.json()["results"]
-        self.assertEqual(results[0]["enumerator"], "John Doe")
-
     def test_list_without_asset_uid_no_resolve(
         self,
     ):

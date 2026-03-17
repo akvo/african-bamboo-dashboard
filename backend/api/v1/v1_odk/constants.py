@@ -91,3 +91,13 @@ class WarningThresholds:
     AREA_MAX_HA = 20.0
     VERTICES_ROUGH_MIN = 6
     VERTICES_ROUGH_MAX = 10
+
+
+DEFAULT_FIELDS = [
+    "enumerator",
+    "farmer",
+    "father_name",
+    "grandfather_name",
+    "age_of_farmer",
+    "phone_number",
+]

@@ -1,13 +1,7 @@
 from django.core.management.base import BaseCommand
 
 from api.v1.v1_odk.models import FieldSettings
-
-DEFAULT_FIELDS = [
-    "enumerator",
-    "farmer",
-    "age_of_farmer",
-    "phone_number",
-]
+from api.v1.v1_odk.constants import DEFAULT_FIELDS
 
 
 class Command(BaseCommand):

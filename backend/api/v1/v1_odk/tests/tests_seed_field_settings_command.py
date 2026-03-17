@@ -2,6 +2,7 @@ from django.core.management import call_command
 from django.test import TestCase
 
 from api.v1.v1_odk.models import FieldSettings
+from api.v1.v1_odk.constants import DEFAULT_FIELDS
 
 
 class SeedFieldSettingsCommandTest(TestCase):
@@ -13,7 +14,7 @@ class SeedFieldSettingsCommandTest(TestCase):
         FieldSettings entries."""
         call_command("seed_field_settings")
         self.assertEqual(
-            FieldSettings.objects.count(), 4
+            FieldSettings.objects.count(), len(DEFAULT_FIELDS)
         )
         expected = [
             "enumerator",
@@ -35,5 +36,5 @@ class SeedFieldSettingsCommandTest(TestCase):
         call_command("seed_field_settings")
         call_command("seed_field_settings")
         self.assertEqual(
-            FieldSettings.objects.count(), 4
+            FieldSettings.objects.count(), len(DEFAULT_FIELDS)
         )

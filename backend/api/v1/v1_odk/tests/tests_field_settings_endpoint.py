@@ -5,6 +5,7 @@ from django.test.utils import override_settings
 from api.v1.v1_odk.tests.mixins import (
     OdkTestHelperMixin,
 )
+from api.v1.v1_odk.constants import DEFAULT_FIELDS
 
 
 @override_settings(USE_TZ=False, TEST_ENV=True)
@@ -31,7 +32,7 @@ class FieldSettingsEndpointTest(
         self.assertIn("farmer", names)
         self.assertIn("age_of_farmer", names)
         self.assertIn("phone_number", names)
-        self.assertEqual(len(data), 4)
+        self.assertEqual(len(data), len(DEFAULT_FIELDS))
 
     def test_list_is_read_only(self):
         """POST returns 405 Method Not Allowed."""

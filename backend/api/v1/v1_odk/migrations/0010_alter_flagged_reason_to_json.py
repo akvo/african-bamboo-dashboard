@@ -12,7 +12,7 @@ USING CASE
             'type',
             CASE
                 WHEN flagged_reason
-                    LIKE '%%overlaps with%%'
+                    ILIKE '%%overlap%%'
                     THEN 'OVERLAP'
                 WHEN flagged_reason
                     ILIKE '%%too few vertices%%'
@@ -24,10 +24,10 @@ USING CASE
                     ILIKE '%%too small%%'
                     THEN 'GEOMETRY_AREA_TOO_SMALL'
                 WHEN flagged_reason
-                    LIKE '%%No polygon data%%'
+                    ILIKE '%%no polygon data%%'
                     THEN 'GEOMETRY_NO_DATA'
                 WHEN flagged_reason
-                    LIKE '%%Failed to parse%%'
+                    ILIKE '%%failed to parse%%'
                     THEN 'GEOMETRY_PARSE_FAIL'
                 ELSE 'GEOMETRY_PARSE_FAIL'
             END,

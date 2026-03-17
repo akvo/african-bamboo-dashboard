@@ -22,7 +22,7 @@ def convert_flagged_reason(reason):
         return None
 
     lower = reason.lower()
-    if "overlaps with" in lower:
+    if "overlap" in lower:
         flag_type = FlagType.OVERLAP
     elif "too few vertices" in lower:
         flag_type = FlagType.GEOMETRY_TOO_FEW_VERTICES

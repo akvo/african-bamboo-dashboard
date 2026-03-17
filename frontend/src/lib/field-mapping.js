@@ -32,8 +32,8 @@ export function extractPlotDetails(submission) {
     },
     farmer: {
       name: getValue("farmer"),
-      phone: getValue("phone_number"),
-      age: getValue("age_of_farmer"),
+      fatherName: getValue("father_name"),
+      grandfatherName: getValue("grandfather_name"),
     },
     titleDeed: getValue("title_deed"),
     notes: submission?.rejection_reason,

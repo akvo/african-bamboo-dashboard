@@ -151,8 +151,7 @@ export default function PlotDetailPanel({
     <div className="flex h-full flex-col">
       {/* Header card with tabs */}
       <PlotHeaderCard
-        plotId={plot?.instance_name}
-        plotName={plot?.plot_name}
+        plotId={plot?.plot_id}
         status={status}
         flaggedReason={plot?.flagged_reason}
         lastCheckedBy={submission?.updated_by_name}
@@ -237,8 +236,11 @@ export default function PlotDetailPanel({
               title="Farmer"
               name={details?.farmer?.name}
               fields={[
-                { label: "Phone number", value: details?.farmer?.phone },
-                { label: "Age", value: details?.farmer?.age },
+                { label: "Father's name", value: details?.farmer?.fatherName },
+                {
+                  label: "Grandfather's name",
+                  value: details?.farmer?.grandfatherName,
+                },
               ]}
             >
               {/* Title deed link */}

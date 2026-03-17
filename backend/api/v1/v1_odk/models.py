@@ -211,11 +211,14 @@ class Plot(models.Model):
             "True = flagged for review."
         ),
     )
-    flagged_reason = models.CharField(
-        max_length=500,
+    flagged_reason = models.JSONField(
         null=True,
         blank=True,
-        help_text="Reason for flagging the plot for review",
+        default=None,
+        help_text=(
+            "List of flags: "
+            "[{type, severity, note}]"
+        ),
     )
 
     class Meta:

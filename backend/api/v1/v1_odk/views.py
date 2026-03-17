@@ -572,7 +572,8 @@ class SubmissionViewSet(
         qs = (
             FormQuestion.objects.filter(form=form)
             .exclude(
-                type__in=EXCLUDED_QUESTION_TYPES
+                Q(type__in=EXCLUDED_QUESTION_TYPES) |
+                Q(name__startswith="validate_")
             )
             .order_by("pk")
         )

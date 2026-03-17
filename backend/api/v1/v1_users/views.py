@@ -1,5 +1,4 @@
 from datetime import datetime
-from urllib.parse import urlparse
 
 from django.conf import settings
 from django.utils import timezone
@@ -44,20 +43,26 @@ def login(request, version):
 
     # Validate credentials against KoboToolbox API
     client = KoboClient(kobo_url, kobo_username, kobo_password)
-    if not client.verify_credentials():
+    user_detail = client.verify_credentials()
+    if not user_detail:
         return Response(
             {"message": ("Invalid KoboToolbox credentials")},
             status=status.HTTP_401_UNAUTHORIZED,
         )
 
     # Create or update SystemUser
-    host = urlparse(kobo_url).hostname
+    name = kobo_username
+    email = f"{kobo_username}@{kobo_url.split('//')[-1].split('/')[0]}"
+    if isinstance(user_detail, dict) and user_detail.get("name"):
+        name = user_detail["name"]
+    if isinstance(user_detail, dict) and user_detail.get("email"):
+        email = user_detail["email"]
     user, _ = SystemUser.objects.update_or_create(
         kobo_username=kobo_username,
         kobo_url=kobo_url,
         defaults={
-            "name": kobo_username,
-            "email": f"{kobo_username}@{host}.local",
+            "name": name,
+            "email": email,
             "kobo_password": encrypt(kobo_password),
         },
     )

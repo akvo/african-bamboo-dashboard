@@ -25,13 +25,16 @@ class KoboClient:
         """Validate credentials with a lightweight
         API call."""
         try:
-            url = f"{self.base_url}" "/api/v2/assets.json"
+            url = f"{self.base_url}/me"
             resp = self.session.get(
                 url,
                 params={"limit": 0},
                 timeout=self.timeout,
             )
-            return resp.status_code == 200
+            return {
+                "name": resp.json().get("extra_details", {}).get("name"),
+                "email": resp.json().get("email"),
+            }
         except requests.RequestException:
             return False
 

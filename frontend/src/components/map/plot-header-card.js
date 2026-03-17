@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import {
   AlertTriangle,
   AlertCircle,
@@ -7,42 +8,113 @@ import {
   EllipsisVertical,
   ChevronLeft,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StatusBadge } from "@/components/status-badge";
 import { cn } from "@/lib/utils";
 import { FlagMessages, splitFlags } from "@/lib/flag";
 
+function groupFlagsByType(flags) {
+  const groups = {};
+  for (const flag of flags) {
+    const key = flag.type;
+    if (!groups[key]) {
+      groups[key] = { type: key, severity: flag.severity, items: [] };
+    }
+    groups[key].items.push(flag);
+  }
+  return Object.values(groups);
+}
+
 function FlagList({ flags }) {
-  if (!flags || flags.length === 0) return null;
+  const [selectedGroup, setSelectedGroup] = useState(null);
+
+  if (!flags || flags.length === 0) {
+    return null;
+  }
+
+  const groups = groupFlagsByType(flags);
+
   return (
-    <div className="flex flex-col gap-1.5">
-      {flags.map((flag, i) => {
-        const isError = flag.severity === "error";
-        const Icon = isError ? AlertCircle : AlertTriangle;
-        const colorClass = isError
-          ? "text-status-rejected"
-          : "text-status-flagged";
-        const borderClass = isError
-          ? "border-status-rejected/30 bg-status-rejected/10"
-          : "border-status-flagged/30 bg-status-flagged/10";
-        const label = FlagMessages[flag.type] || flag.note || flag.type;
-        return (
-          <div
-            key={`${flag.type}-${i}`}
-            className={cn(
-              "flex items-start gap-1.5 rounded-md border px-2 py-1.5",
-              borderClass,
-            )}
-            title={flag.note || undefined}
-          >
-            <Icon className={cn("mt-0.5 size-3 shrink-0", colorClass)} />
-            <span className={cn("text-xs font-medium", colorClass)}>
-              {label}
-            </span>
-          </div>
-        );
-      })}
-    </div>
+    <>
+      <div className="flex flex-col gap-1.5">
+        {groups.map((group) => {
+          const isError = group.severity === "error";
+          const Icon = isError ? AlertCircle : AlertTriangle;
+          const colorClass = isError
+            ? "text-status-rejected"
+            : "text-status-flagged";
+          const borderClass = isError
+            ? "border-status-rejected/30 bg-status-rejected/10"
+            : "border-status-flagged/30 bg-status-flagged/10";
+          const label =
+            FlagMessages[group.type] || group.items[0]?.note || group.type;
+          const hasDetails = group.items.some((f) => f.note);
+          const count = group.items.length;
+
+          return (
+            <button
+              key={group.type}
+              type="button"
+              disabled={!hasDetails}
+              onClick={() => hasDetails && setSelectedGroup(group)}
+              className={cn(
+                "flex items-start gap-1.5 rounded-md border px-2 py-1.5 text-left",
+                borderClass,
+                hasDetails && "cursor-pointer hover:opacity-80",
+                !hasDetails && "cursor-default",
+              )}
+            >
+              <Icon className={cn("mt-0.5 size-3 shrink-0", colorClass)} />
+              <span className={cn("text-xs font-medium", colorClass)}>
+                {label}
+                {count > 1 && ` (${count})`}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      <Dialog
+        open={!!selectedGroup}
+        onOpenChange={(open) => !open && setSelectedGroup(null)}
+      >
+        {selectedGroup && (
+          <DialogContent className="max-h-[80vh] overflow-y-auto sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-sm">
+                {selectedGroup.severity === "error" ? (
+                  <AlertCircle className="size-4 text-status-rejected" />
+                ) : (
+                  <AlertTriangle className="size-4 text-status-flagged" />
+                )}
+                {FlagMessages[selectedGroup.type] || selectedGroup.type}
+              </DialogTitle>
+              <DialogDescription>
+                {selectedGroup.items.length} flag
+                {selectedGroup.items.length !== 1 && "s"} of this type
+              </DialogDescription>
+            </DialogHeader>
+            <ul className="flex flex-col gap-2">
+              {selectedGroup.items.map((flag, i) => (
+                <li
+                  key={i}
+                  className="rounded-md border border-border bg-muted/50 px-3 py-2 text-xs text-foreground"
+                >
+                  {flag.note || FlagMessages[flag.type] || flag.type}
+                </li>
+              ))}
+            </ul>
+          </DialogContent>
+        )}
+      </Dialog>
+    </>
   );
 }
 

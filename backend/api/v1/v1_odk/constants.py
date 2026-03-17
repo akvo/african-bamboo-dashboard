@@ -43,3 +43,51 @@ class RejectionCategory:
         (DUPLICATE, "Duplicate Submission"),
         (OTHER, "Other"),
     ]
+
+
+class FlagType:
+    """Validation flag type codes."""
+
+    # Geometry errors (existing)
+    GEOMETRY_NO_DATA = "GEOMETRY_NO_DATA"
+    GEOMETRY_PARSE_FAIL = "GEOMETRY_PARSE_FAIL"
+    GEOMETRY_TOO_FEW_VERTICES = (
+        "GEOMETRY_TOO_FEW_VERTICES"
+    )
+    GEOMETRY_SELF_INTERSECT = (
+        "GEOMETRY_SELF_INTERSECT"
+    )
+    GEOMETRY_AREA_TOO_SMALL = (
+        "GEOMETRY_AREA_TOO_SMALL"
+    )
+
+    # Overlap (existing)
+    OVERLAP = "OVERLAP"
+
+    # Warnings (new — W1–W5)
+    GPS_ACCURACY_LOW = "GPS_ACCURACY_LOW"
+    POINT_GAP_LARGE = "POINT_GAP_LARGE"
+    POINT_SPACING_UNEVEN = "POINT_SPACING_UNEVEN"
+    AREA_TOO_LARGE = "AREA_TOO_LARGE"
+    VERTICES_TOO_FEW_ROUGH = (
+        "VERTICES_TOO_FEW_ROUGH"
+    )
+
+
+class FlagSeverity:
+    ERROR = "error"
+    WARNING = "warning"
+
+
+class WarningThresholds:
+    """Configurable thresholds for warning rules.
+
+    Agreed with African Bamboo, January 2026.
+    """
+
+    GPS_ACCURACY_MAX_M = 15.0
+    POINT_GAP_MAX_M = 50.0
+    SPACING_CV_MAX = 0.5
+    AREA_MAX_HA = 20.0
+    VERTICES_ROUGH_MIN = 6
+    VERTICES_ROUGH_MAX = 10

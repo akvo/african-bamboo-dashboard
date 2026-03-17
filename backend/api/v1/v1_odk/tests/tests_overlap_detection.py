@@ -450,21 +450,33 @@ class SyncOverlapDetectionTest(
         plot_b = Plot.objects.get(
             submission__uuid="uuid-b"
         )
-        # Plot B is flagged for overlapping A
+        # Both plots flagged for overlap
         self.assertTrue(plot_b.flagged_for_review)
-        self.assertTrue(
-            any(
-                f["type"] == FlagType.OVERLAP
-                for f in plot_b.flagged_reason
-            )
-        )
-        # Plot A is flagged as overlapping too
         self.assertTrue(plot_a.flagged_for_review)
-        self.assertTrue(
-            any(
-                f["type"] == FlagType.OVERLAP
-                for f in plot_a.flagged_reason
-            )
+        # Each plot has exactly 1 OVERLAP flag
+        overlaps_a = [
+            f
+            for f in plot_a.flagged_reason
+            if f["type"] == FlagType.OVERLAP
+        ]
+        overlaps_b = [
+            f
+            for f in plot_b.flagged_reason
+            if f["type"] == FlagType.OVERLAP
+        ]
+        self.assertEqual(
+            len(overlaps_a),
+            1,
+            f"Expected 1 OVERLAP flag on A, "
+            f"got {len(overlaps_a)}: "
+            f"{overlaps_a}",
+        )
+        self.assertEqual(
+            len(overlaps_b),
+            1,
+            f"Expected 1 OVERLAP flag on B, "
+            f"got {len(overlaps_b)}: "
+            f"{overlaps_b}",
         )
 
     @patch("api.v1.v1_odk.views.KoboClient")

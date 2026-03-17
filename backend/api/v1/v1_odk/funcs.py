@@ -16,7 +16,6 @@ from utils.polygon import (
     _extract_first_nonempty,
     _geometry_error_type,
     _split_csv_fields,
-    build_overlap_reason,
     compute_bbox,
     extract_plot_data,
     find_overlapping_plots,
@@ -230,11 +229,27 @@ def _append_overlap_flag(flagged_reason, label):
     return existing + [_make_overlap_flag(note)]
 
 
+def _plot_label(plot):
+    """Build a display label for a plot."""
+    inst = (
+        plot.submission.instance_name
+        if plot.submission
+        else None
+    ) or str(plot.uuid)
+    if (
+        plot.plot_name
+        and plot.plot_name != inst
+    ):
+        return f"{plot.plot_name} ({inst})"
+    return inst
+
+
 def check_and_flag_overlaps(plot):
     """Run overlap detection for a single plot.
 
-    Additive: only manages OVERLAP flags,
-    preserves other flag types. Saves to DB.
+    Creates one OVERLAP flag per overlapping plot
+    so dedup works regardless of processing order.
+    Preserves other flag types. Saves to DB.
     Returns True if overlaps were found.
     """
     if not plot.polygon_wkt:
@@ -257,10 +272,15 @@ def check_and_flag_overlaps(plot):
     )
 
     if overlaps:
-        reason = build_overlap_reason(overlaps)
-        all_flags = non_overlap + [
-            _make_overlap_flag(reason)
+        # One flag per overlapping plot
+        overlap_flags = [
+            _make_overlap_flag(
+                f"Polygon overlaps with: "
+                f"{_plot_label(op)}"
+            )
+            for op in overlaps
         ]
+        all_flags = non_overlap + overlap_flags
         plot.flagged_for_review = True
         plot.flagged_reason = all_flags
         plot.save(
@@ -269,17 +289,7 @@ def check_and_flag_overlaps(plot):
                 "flagged_reason",
             ]
         )
-        inst = (
-            plot.submission.instance_name
-            if plot.submission
-            else None
-        ) or str(plot.uuid)
-        label = (
-            f"{plot.plot_name} ({inst})"
-            if plot.plot_name
-            and plot.plot_name != inst
-            else inst
-        )
+        label = _plot_label(plot)
         to_update = []
         for op in overlaps:
             op.flagged_for_review = True

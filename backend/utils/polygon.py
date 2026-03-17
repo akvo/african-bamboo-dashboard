@@ -1,10 +1,16 @@
 import logging
 import math
 import re
+
+from shapely import wkt as shapely_wkt
 from shapely.geometry import (
     Polygon as ShapelyPolygon,
 )
-from shapely import wkt as shapely_wkt
+
+from api.v1.v1_odk.constants import (
+    FlagSeverity,
+    FlagType,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -364,6 +370,18 @@ def append_overlap_reason(
     return combined
 
 
+def _geometry_error_type(error_msg):
+    """Map validate_polygon error to FlagType."""
+    msg = error_msg.lower()
+    if "too few vertices" in msg:
+        return FlagType.GEOMETRY_TOO_FEW_VERTICES
+    if "intersect" in msg:
+        return FlagType.GEOMETRY_SELF_INTERSECT
+    if "too small" in msg:
+        return FlagType.GEOMETRY_AREA_TOO_SMALL
+    return FlagType.GEOMETRY_PARSE_FAIL
+
+
 def extract_plot_data(raw_data, form):
     """Extract plot fields from submission raw_data.
 
@@ -422,9 +440,16 @@ def extract_plot_data(raw_data, form):
             polygon_fields,
         )
         result["flagged_for_review"] = True
-        result["flagged_reason"] = (
-            "No polygon data found in submission."
-        )
+        result["flagged_reason"] = [
+            {
+                "type": FlagType.GEOMETRY_NO_DATA,
+                "severity": FlagSeverity.ERROR,
+                "note": (
+                    "No polygon data found "
+                    "in submission."
+                ),
+            }
+        ]
         return result
 
     coords = parse_odk_geoshape(polygon_str)
@@ -435,9 +460,18 @@ def extract_plot_data(raw_data, form):
             polygon_fields,
         )
         result["flagged_for_review"] = True
-        result["flagged_reason"] = (
-            "Failed to parse polygon geometry."
-        )
+        result["flagged_reason"] = [
+            {
+                "type": (
+                    FlagType.GEOMETRY_PARSE_FAIL
+                ),
+                "severity": FlagSeverity.ERROR,
+                "note": (
+                    "Failed to parse "
+                    "polygon geometry."
+                ),
+            }
+        ]
         return result
 
     is_valid, error_msg = validate_polygon(coords)
@@ -446,7 +480,15 @@ def extract_plot_data(raw_data, form):
             "Invalid polygon: %s", error_msg
         )
         result["flagged_for_review"] = True
-        result["flagged_reason"] = error_msg
+        result["flagged_reason"] = [
+            {
+                "type": _geometry_error_type(
+                    error_msg
+                ),
+                "severity": FlagSeverity.ERROR,
+                "note": error_msg,
+            }
+        ]
         return result
 
     bbox = compute_bbox(coords)

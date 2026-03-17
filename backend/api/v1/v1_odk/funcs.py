@@ -2,6 +2,10 @@ import logging
 
 from django_q.tasks import async_task
 
+from api.v1.v1_odk.constants import (
+    FlagSeverity,
+    FlagType,
+)
 from api.v1.v1_odk.models import (
     FieldMapping,
     FormOption,
@@ -10,8 +14,8 @@ from api.v1.v1_odk.models import (
 )
 from utils.polygon import (
     _extract_first_nonempty,
+    _geometry_error_type,
     _split_csv_fields,
-    append_overlap_reason,
     build_overlap_reason,
     compute_bbox,
     extract_plot_data,
@@ -182,12 +186,54 @@ def sync_form_questions(form, content):
     return len(created_qs)
 
 
+def _non_overlap_flags(flagged_reason):
+    """Return flags excluding OVERLAP entries."""
+    if not flagged_reason:
+        return []
+    if not isinstance(flagged_reason, list):
+        return []
+    return [
+        f
+        for f in flagged_reason
+        if f.get("type") != FlagType.OVERLAP
+    ]
+
+
+def _make_overlap_flag(reason_text):
+    """Build an OVERLAP flag dict."""
+    return {
+        "type": FlagType.OVERLAP,
+        "severity": FlagSeverity.ERROR,
+        "note": reason_text,
+    }
+
+
+def _append_overlap_flag(flagged_reason, label):
+    """Add overlap flag to existing flags list.
+
+    Skips if label already in an OVERLAP note.
+    """
+    existing = (
+        flagged_reason
+        if isinstance(flagged_reason, list)
+        else []
+    )
+    for f in existing:
+        if (
+            f.get("type") == FlagType.OVERLAP
+            and label in f.get("note", "")
+        ):
+            return existing
+
+    note = f"Polygon overlaps with: {label}"
+    return existing + [_make_overlap_flag(note)]
+
+
 def check_and_flag_overlaps(plot):
     """Run overlap detection for a single plot.
 
-    Sets flagged_for_review and flagged_reason
-    based on overlap results. Also flags any
-    existing overlapping plots. Saves to DB.
+    Additive: only manages OVERLAP flags,
+    preserves other flag types. Saves to DB.
     Returns True if overlaps were found.
     """
     if not plot.polygon_wkt:
@@ -205,10 +251,17 @@ def check_and_flag_overlaps(plot):
         plot.form_id,
         exclude_pk=plot.pk,
     )
+    non_overlap = _non_overlap_flags(
+        plot.flagged_reason
+    )
+
     if overlaps:
         reason = build_overlap_reason(overlaps)
+        all_flags = non_overlap + [
+            _make_overlap_flag(reason)
+        ]
         plot.flagged_for_review = True
-        plot.flagged_reason = reason
+        plot.flagged_reason = all_flags
         plot.save(
             update_fields=[
                 "flagged_for_review",
@@ -220,14 +273,18 @@ def check_and_flag_overlaps(plot):
             if plot.submission
             else None
         ) or str(plot.uuid)
+        label = (
+            f"{plot.plot_name} ({inst})"
+            if plot.plot_name
+            and plot.plot_name != inst
+            else inst
+        )
         to_update = []
         for op in overlaps:
             op.flagged_for_review = True
             op.flagged_reason = (
-                append_overlap_reason(
-                    op.flagged_reason,
-                    plot.plot_name or inst,
-                    inst,
+                _append_overlap_flag(
+                    op.flagged_reason, label
                 )
             )
             to_update.append(op)
@@ -240,8 +297,10 @@ def check_and_flag_overlaps(plot):
         )
         return True
     else:
-        plot.flagged_for_review = False
-        plot.flagged_reason = None
+        plot.flagged_reason = (
+            non_overlap or None
+        )
+        plot.flagged_for_review = bool(non_overlap)
         plot.save(
             update_fields=[
                 "flagged_for_review",
@@ -251,6 +310,28 @@ def check_and_flag_overlaps(plot):
         return False
 
 
+def _warning_flags(flagged_reason):
+    """Return only warning-severity flags."""
+    if not flagged_reason:
+        return []
+    if not isinstance(flagged_reason, list):
+        return []
+    return [
+        f
+        for f in flagged_reason
+        if f.get("severity") == FlagSeverity.WARNING
+    ]
+
+
+def _make_error_flag(flag_type, note):
+    """Build an error-severity flag dict."""
+    return {
+        "type": flag_type,
+        "severity": FlagSeverity.ERROR,
+        "note": note,
+    }
+
+
 def validate_and_check_plot(plot):
     """Validate edited polygon and check overlaps.
 
@@ -258,13 +339,22 @@ def validate_and_check_plot(plot):
     geometry, updates bbox and flags, then runs
     overlap detection. Call after saving a plot
     with new polygon_wkt.
+
+    Preserves warning-severity flags from sync.
     """
+    warnings = _warning_flags(plot.flagged_reason)
+
     wkt = plot.polygon_wkt
     if not wkt:
+        flags = warnings + [
+            _make_error_flag(
+                FlagType.GEOMETRY_NO_DATA,
+                "No polygon data found "
+                "in submission.",
+            )
+        ]
         plot.flagged_for_review = True
-        plot.flagged_reason = (
-            "No polygon data found in submission."
-        )
+        plot.flagged_reason = flags
         plot.min_lat = None
         plot.max_lat = None
         plot.min_lon = None
@@ -283,10 +373,15 @@ def validate_and_check_plot(plot):
 
     coords = parse_wkt_polygon(wkt)
     if coords is None:
+        flags = warnings + [
+            _make_error_flag(
+                FlagType.GEOMETRY_PARSE_FAIL,
+                "Failed to parse "
+                "polygon geometry.",
+            )
+        ]
         plot.flagged_for_review = True
-        plot.flagged_reason = (
-            "Failed to parse polygon geometry."
-        )
+        plot.flagged_reason = flags
         plot.min_lat = None
         plot.max_lat = None
         plot.min_lon = None
@@ -305,8 +400,14 @@ def validate_and_check_plot(plot):
 
     is_valid, error_msg = validate_polygon(coords)
     if not is_valid:
+        flags = warnings + [
+            _make_error_flag(
+                _geometry_error_type(error_msg),
+                error_msg,
+            )
+        ]
         plot.flagged_for_review = True
-        plot.flagged_reason = error_msg
+        plot.flagged_reason = flags
         plot.min_lat = None
         plot.max_lat = None
         plot.min_lon = None
@@ -323,6 +424,12 @@ def validate_and_check_plot(plot):
         )
         return
 
+    # Valid geometry — set warnings only, then
+    # check_and_flag_overlaps will add OVERLAP
+    # flags if needed
+    plot.flagged_reason = warnings or None
+    plot.flagged_for_review = bool(warnings)
+
     bbox = compute_bbox(coords)
     plot.min_lat = bbox["min_lat"]
     plot.max_lat = bbox["max_lat"]
@@ -330,6 +437,8 @@ def validate_and_check_plot(plot):
     plot.max_lon = bbox["max_lon"]
     plot.save(
         update_fields=[
+            "flagged_for_review",
+            "flagged_reason",
             "min_lat",
             "max_lat",
             "min_lon",

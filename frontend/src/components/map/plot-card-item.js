@@ -35,15 +35,11 @@ const PlotCardItem = ({
     >
       {/* Header: Plot ID + Status badge */}
       <div className="flex w-full items-center justify-between px-3 py-2.5">
-        <div className="flex flex-col min-w-0 gap-1">
+        <div className="flex min-w-0 gap-1">
+          <span>Plot ID:&nbsp;</span>
           <span className="truncate text-sm font-bold text-foreground">
-            {plot.plot_name || plot.instance_name}
+            {plot.plot_id ? `#${plot.plot_id}` : plot.instance_name || "—"}
           </span>
-          {plot.plot_name && (
-            <span className="truncate text-sm text-muted-foreground">
-              {plot.instance_name}
-            </span>
-          )}
         </div>
         <StatusBadge status={status} />
       </div>

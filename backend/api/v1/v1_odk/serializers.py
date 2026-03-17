@@ -96,10 +96,16 @@ class SubmissionListSerializer(serializers.ModelSerializer):
     form = serializers.CharField(source="form.asset_uid", read_only=True)
     region = serializers.SerializerMethodField()
     sub_region = serializers.SerializerMethodField()
-    enumerator = serializers.SerializerMethodField()
-    plot_name = serializers.CharField(source="plot.plot_name", read_only=True)
     resolved_data = (
         serializers.SerializerMethodField()
+    )
+    start = serializers.CharField(source="raw_data.start", read_only=True)
+    end = serializers.CharField(source="raw_data.end", read_only=True)
+    reviewed_by = serializers.CharField(
+        source="updated_by.name", read_only=True, default=None
+    )
+    area_ha = serializers.CharField(
+        source="plot.area_ha", read_only=True, default=None
     )
 
     class Meta:
@@ -108,15 +114,15 @@ class SubmissionListSerializer(serializers.ModelSerializer):
             "uuid",
             "form",
             "kobo_id",
-            "submission_time",
-            "submitted_by",
+            "reviewed_by",
+            "start",
+            "end",
             "instance_name",
-            "enumerator",
             "region",
             "sub_region",
             "approval_status",
-            "plot_name",
             "resolved_data",
+            "area_ha",
         ]
 
     def get_resolved_data(self, obj):
@@ -238,9 +244,6 @@ class SubmissionListSerializer(serializers.ModelSerializer):
             form.sub_region_field or "sub_region"
         )
         return self._resolve_fields(obj, field_spec)
-
-    def get_enumerator(self, obj):
-        return self._resolve_field(obj, "enumerator_id")
 
 
 class RejectionAuditSerializer(
@@ -563,6 +566,9 @@ class SubmissionUpdateSerializer(
 
 
 class PlotSerializer(serializers.ModelSerializer):
+    plot_id = serializers.CharField(
+        source="submission.kobo_id", read_only=True
+    )
     submission_uuid = serializers.CharField(
         source="submission.uuid",
         read_only=True,
@@ -664,6 +670,7 @@ class PlotSerializer(serializers.ModelSerializer):
     class Meta:
         model = Plot
         fields = [
+            "plot_id",
             "uuid",
             "plot_name",
             "instance_name",
@@ -675,6 +682,7 @@ class PlotSerializer(serializers.ModelSerializer):
             "form_id",
             "region",
             "sub_region",
+            "area_ha",
             "enumerator",
             "created_at",
             "submission_uuid",
@@ -686,6 +694,8 @@ class PlotSerializer(serializers.ModelSerializer):
         ]
 
         read_only_fields = [
+            "plot_id",
+            "area_ha",
             "uuid",
             "created_at",
             "submission_uuid",

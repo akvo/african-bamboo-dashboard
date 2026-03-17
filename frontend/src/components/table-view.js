@@ -11,6 +11,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 
 /**
  * Reusable column-driven data table.
@@ -76,6 +77,9 @@ export function DataTable({
                       ? `sticky left-0 z-10 bg-muted ${col.headerClassName || ""}`
                       : col.headerClassName
                   }
+                  style={{
+                    fontSize: 12,
+                  }}
                 >
                   {col.header}
                 </TableHead>
@@ -160,9 +164,9 @@ export function AttachmentCell({ filename, url, onPreview }) {
   );
 }
 
-export function TextCell({ children }) {
+export function TextCell({ children, className = "text-muted-foreground" }) {
   return (
-    <span className="whitespace-nowrap text-sm text-muted-foreground">
+    <span className={cn("whitespace-nowrap text-sm", className)}>
       {children || "-"}
     </span>
   );

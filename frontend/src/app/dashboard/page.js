@@ -23,6 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useMapState } from "@/hooks/useMapState";
 
 const stats = [];
 
@@ -58,6 +59,7 @@ const DashboardPage = () => {
       dynamicFilters: dynamicValues,
     });
   const { plots } = usePlots({ formId: activeForm?.asset_uid });
+  const { setSelectedPlotId } = useMapState();
 
   const handleReset = useCallback(() => {
     setRegion("");
@@ -67,7 +69,8 @@ const DashboardPage = () => {
     setDynamicValues({});
     setSearch("");
     setActiveTab("all");
-  }, []);
+    setSelectedPlotId(null);
+  }, [setSelectedPlotId]);
 
   const handleExport = () => {
     startExport({

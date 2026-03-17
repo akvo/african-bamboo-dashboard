@@ -9,12 +9,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { StatusBadge } from "@/components/status-badge";
-import {
-  DataTable,
-  TwoLineCell,
-  AttachmentCell,
-  TextCell,
-} from "@/components/table-view";
+import { DataTable, AttachmentCell, TextCell } from "@/components/table-view";
 
 const IMAGE_TYPES = new Set(["image"]);
 const EXCLUDED_QUESTION_NAMES = ["region", "region_specify"];
@@ -53,12 +48,14 @@ export function SubmissionsTable({
   const columns = useMemo(() => {
     const base = [
       {
-        key: "plot_name",
+        key: "kobo_id",
         header: "Plot ID",
         sticky: true,
         className: "max-w-[240px]",
         cell: (row) => (
-          <TwoLineCell primary={row.plot_name} secondary={row.instance_name} />
+          <TextCell className="text-foreground font-bold">
+            {row.kobo_id ? `#${row.kobo_id}` : row.instance_name || "—"}
+          </TextCell>
         ),
       },
       {
@@ -69,21 +66,26 @@ export function SubmissionsTable({
         ),
       },
       {
-        key: "start_date",
+        key: "reviewed_by",
+        header: "Reviewed by",
+        cell: (row) => <TextCell>{row.reviewed_by || "-"}</TextCell>,
+      },
+      {
+        key: "start",
         header: "Start date",
         cell: (row) => (
           <TextCell>
-            {row.submission_time
-              ? new Date(row.submission_time).toLocaleDateString("en-GB")
-              : null}
+            {row.start ? new Date(row.start).toLocaleDateString("en-GB") : null}
           </TextCell>
         ),
       },
       {
-        key: "enumerator",
-        header: "Enumerator",
+        key: "end",
+        header: "End date",
         cell: (row) => (
-          <TextCell>{row.enumerator || row.submitted_by}</TextCell>
+          <TextCell>
+            {row.end ? new Date(row.end).toLocaleDateString("en-GB") : null}
+          </TextCell>
         ),
       },
       {
@@ -95,6 +97,13 @@ export function SubmissionsTable({
         key: "sub_region",
         header: "Sub-region",
         cell: (row) => <TextCell>{row.sub_region}</TextCell>,
+      },
+      {
+        key: "area_ha",
+        header: "Area (ha)",
+        cell: (row) => (
+          <TextCell>{row.area_ha != null ? row.area_ha : "-"}</TextCell>
+        ),
       },
     ];
 

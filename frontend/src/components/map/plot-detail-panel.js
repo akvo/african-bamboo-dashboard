@@ -140,12 +140,6 @@ export default function PlotDetailPanel({
     ? ((plot.min_lon + plot.max_lon) / 2).toFixed(6)
     : null;
 
-  const alertMessage = plot.flagged_for_review
-    ? plot.flagged_reason?.includes("Polygon overlaps with")
-      ? "Plot overlap detected"
-      : "Several data issues detected"
-    : null;
-  const alertTooltip = plot.flagged_for_review ? plot.flagged_reason : null;
   const hasTimeline = resolved?.start || resolved?.end;
 
   const handleSeeTitleDeed =
@@ -160,8 +154,7 @@ export default function PlotDetailPanel({
         plotId={plot?.instance_name}
         plotName={plot?.plot_name}
         status={status}
-        alertMessage={alertMessage}
-        alertTooltip={alertTooltip}
+        flaggedReason={plot?.flagged_reason}
         lastCheckedBy={submission?.updated_by_name}
         lastCheckedAt={
           submission?.updated_at

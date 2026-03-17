@@ -1,10 +1,11 @@
 "use client";
 
-import { ArrowRight, AlertTriangle } from "lucide-react";
+import { ArrowRight, AlertTriangle, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { StatusBadge } from "@/components/status-badge";
 import { getPlotStatus } from "@/lib/plot-utils";
 import { Separator } from "@/components/ui/separator";
+import { splitFlags } from "@/lib/flag";
 
 const PlotCardItem = ({
   plot,
@@ -18,12 +19,7 @@ const PlotCardItem = ({
   }
 
   const status = getPlotStatus(plot);
-
-  const alertMessage = plot.flagged_for_review
-    ? plot.flagged_reason?.includes("Polygon overlaps with")
-      ? "Plot overlap detected"
-      : "Several data issues detected"
-    : null;
+  const { errors, warnings } = splitFlags(plot.flagged_reason);
 
   return (
     <button
@@ -95,15 +91,29 @@ const PlotCardItem = ({
         </div>
       </div>
 
-      {/* Alert banner */}
-      {alertMessage && (
-        <div className="w-full px-3 pb-3">
-          <div className="flex items-center justify-center gap-1.5 rounded-md border border-status-flagged/30 bg-status-flagged/10 px-2 py-1.5">
-            <AlertTriangle className="size-3 shrink-0 text-status-flagged" />
-            <p className="text-xs font-medium text-status-flagged">
-              {alertMessage}
-            </p>
-          </div>
+      {/* Alert banners */}
+      {(errors.length > 0 || warnings.length > 0) && (
+        <div className="flex w-full flex-col gap-1.5 px-3 pb-3">
+          {errors.length > 0 && (
+            <div className="flex items-center justify-center gap-1.5 rounded-md border border-status-rejected/30 bg-status-rejected/10 px-2 py-1.5">
+              <AlertCircle className="size-3 shrink-0 text-status-rejected" />
+              <p className="text-xs font-medium text-status-rejected">
+                {errors.length === 1
+                  ? "1 data issue detected"
+                  : `${errors.length} data issues detected`}
+              </p>
+            </div>
+          )}
+          {warnings.length > 0 && (
+            <div className="flex items-center justify-center gap-1.5 rounded-md border border-status-flagged/30 bg-status-flagged/10 px-2 py-1.5">
+              <AlertTriangle className="size-3 shrink-0 text-status-flagged" />
+              <p className="text-xs font-medium text-status-flagged">
+                {warnings.length === 1
+                  ? "1 warning"
+                  : `${warnings.length} warnings`}
+              </p>
+            </div>
+          )}
         </div>
       )}
     </button>

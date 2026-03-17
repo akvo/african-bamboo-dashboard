@@ -13,7 +13,7 @@ Rules were confirmed with African Bamboo in January 2026.
 | W1 | GPS accuracy too low | Average > 15 m | Mean of per-point accuracy values from the geoshape |
 | W2 | Point gap too large | Any gap > 50 m | Haversine distance between consecutive polygon vertices |
 | W3 | Uneven point spacing | CV > 0.5 | Coefficient of Variation of all inter-point distances |
-| W4 | Plot area too large | > 20 ha | Area via Shoelace formula with latitude correction |
+| W4 | Plot area too large | > 20 ha | Pre-computed `Plot.area_ha` (UTM projection via Shapely + pyproj) |
 | W5 | Too few vertices | 6–10 vertices | Vertex count excluding the closing point |
 
 ### W1: GPS Accuracy
@@ -30,7 +30,7 @@ Computes all inter-point distances, then calculates the Coefficient of Variation
 
 ### W4: Area Too Large
 
-Calculates plot area using the Shoelace formula in degree-space, then converts to hectares using centroid latitude for the longitude correction factor. Plots exceeding 20 hectares are flagged.
+Uses the pre-computed `Plot.area_ha` value, which is calculated at sync time by projecting WGS84 coordinates to the appropriate UTM zone using Shapely and pyproj (`utils/area_calc.py`). Plots exceeding 20 hectares are flagged.
 
 ### W5: Low Vertex Count
 

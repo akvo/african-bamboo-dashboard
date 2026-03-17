@@ -211,21 +211,22 @@ def _make_overlap_flag(reason_text):
 def _append_overlap_flag(flagged_reason, label):
     """Add overlap flag to existing flags list.
 
-    Skips if label already in an OVERLAP note.
+    Skips if an OVERLAP flag with the exact same
+    note already exists.
     """
     existing = (
         flagged_reason
         if isinstance(flagged_reason, list)
         else []
     )
+    note = f"Polygon overlaps with: {label}"
     for f in existing:
         if (
             f.get("type") == FlagType.OVERLAP
-            and label in f.get("note", "")
+            and f.get("note") == note
         ):
             return existing
 
-    note = f"Polygon overlaps with: {label}"
     return existing + [_make_overlap_flag(note)]
 
 

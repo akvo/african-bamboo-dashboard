@@ -80,6 +80,11 @@ export default function FormsPage() {
   const [detailMappings, setDetailMappings] = useState({});
   const [isLoadingDetailFields, setIsLoadingDetailFields] = useState(false);
 
+  // Farmer Fields tab state
+  const [farmerUniqueFields, setFarmerUniqueFields] = useState([]);
+  const [farmerValuesFields, setFarmerValuesFields] = useState([]);
+  const [isLoadingFarmerMapping, setIsLoadingFarmerMapping] = useState(false);
+
   async function handleRegister(e) {
     e.preventDefault();
     if (!assetUid.trim() || !formName.trim()) return;
@@ -212,14 +217,17 @@ export default function FormsPage() {
       setIsLoadingFields(false);
     }
 
-    // Fetch field settings, form questions (with IDs), and existing detail mappings
+    // Fetch field settings, form questions, detail mappings, and farmer field mapping
     setIsLoadingDetailFields(true);
+    setIsLoadingFarmerMapping(true);
     try {
-      const [settingsRes, questionsRes, mappingsRes] = await Promise.all([
-        api.get("/v1/odk/field-settings/"),
-        api.get(`/v1/odk/forms/${form.asset_uid}/form_questions/`),
-        api.get(`/v1/odk/field-mappings/?form_id=${form.asset_uid}`),
-      ]);
+      const [settingsRes, questionsRes, mappingsRes, farmerRes] =
+        await Promise.all([
+          api.get("/v1/odk/field-settings/"),
+          api.get(`/v1/odk/forms/${form.asset_uid}/form_questions/`),
+          api.get(`/v1/odk/field-mappings/?form_id=${form.asset_uid}`),
+          api.get(`/v1/odk/forms/${form.asset_uid}/farmer-field-mapping/`),
+        ]);
       setFieldSettings(settingsRes.data?.results || settingsRes.data || []);
       setFormQuestions(questionsRes.data || []);
       // Convert mappings array to { field_name: form_question_id }
@@ -229,12 +237,17 @@ export default function FormsPage() {
         mappingsMap[m.field_name] = String(m.form_question_id);
       }
       setDetailMappings(mappingsMap);
+      setFarmerUniqueFields(farmerRes.data?.unique_fields || []);
+      setFarmerValuesFields(farmerRes.data?.values_fields || []);
     } catch {
       setFieldSettings([]);
       setFormQuestions([]);
       setDetailMappings({});
+      setFarmerUniqueFields([]);
+      setFarmerValuesFields([]);
     } finally {
       setIsLoadingDetailFields(false);
+      setIsLoadingFarmerMapping(false);
     }
   }
 
@@ -264,6 +277,20 @@ export default function FormsPage() {
         `/v1/odk/field-mappings/${configForm.asset_uid}/`,
         detailPayload,
       );
+
+      // Save Farmer Field Mapping
+      if (farmerUniqueFields.length > 0) {
+        await api.put(
+          `/v1/odk/forms/${configForm.asset_uid}/farmer-field-mapping/`,
+          {
+            unique_fields: farmerUniqueFields,
+            values_fields:
+              farmerValuesFields.length > 0
+                ? farmerValuesFields
+                : farmerUniqueFields,
+          },
+        );
+      }
 
       setMappingStatus({
         type: "success",
@@ -316,6 +343,18 @@ export default function FormsPage() {
 
   function toggleFilterField(name) {
     setFilterFields((prev) =>
+      prev.includes(name) ? prev.filter((f) => f !== name) : [...prev, name],
+    );
+  }
+
+  function toggleFarmerUniqueField(name) {
+    setFarmerUniqueFields((prev) =>
+      prev.includes(name) ? prev.filter((f) => f !== name) : [...prev, name],
+    );
+  }
+
+  function toggleFarmerValuesField(name) {
+    setFarmerValuesFields((prev) =>
       prev.includes(name) ? prev.filter((f) => f !== name) : [...prev, name],
     );
   }
@@ -522,6 +561,7 @@ export default function FormsPage() {
             <TabsList className="w-full">
               <TabsTrigger value="structure">Plot Structure</TabsTrigger>
               <TabsTrigger value="detail-fields">Detail Fields</TabsTrigger>
+              <TabsTrigger value="farmer-fields">Farmer Fields</TabsTrigger>
             </TabsList>
 
             <TabsContent value="structure">
@@ -869,6 +909,131 @@ export default function FormsPage() {
                       </div>
                     );
                   })
+                )}
+              </div>
+            </TabsContent>
+
+            <TabsContent value="farmer-fields">
+              <p className="mb-4 text-xs text-muted-foreground">
+                Define which form fields identify unique farmers and which
+                values to store. These are used during sync to deduplicate
+                farmers and populate the Farmer table in XLSX exports.
+              </p>
+              <div className="space-y-6">
+                {isLoadingFarmerMapping || isLoadingFields ? (
+                  <div className="space-y-4">
+                    <Skeleton className="h-10 w-full" />
+                    <Skeleton className="h-10 w-full" />
+                  </div>
+                ) : formFields.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-6">
+                    No fields found. Sync the form first to populate questions.
+                  </p>
+                ) : (
+                  <>
+                    {/* Unique fields - used for farmer deduplication */}
+                    <div className="space-y-2">
+                      <Label>Unique fields (identity)</Label>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className="w-full justify-between h-auto min-h-[2.25rem] px-3 py-2"
+                          >
+                            <div className="flex flex-wrap gap-1">
+                              {farmerUniqueFields.length === 0 ? (
+                                <span className="text-muted-foreground">
+                                  Select unique fields...
+                                </span>
+                              ) : (
+                                farmerUniqueFields.map((name) => {
+                                  const field = formFields.find(
+                                    (f) =>
+                                      f.name === name || f.full_path === name,
+                                  );
+                                  return (
+                                    <Badge key={name} variant="secondary">
+                                      {field?.label || name}
+                                    </Badge>
+                                  );
+                                })
+                              )}
+                            </div>
+                            <ChevronDown className="size-4 opacity-50 shrink-0" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width] max-h-64 overflow-y-auto">
+                          {formFields.map((field) => (
+                            <DropdownMenuCheckboxItem
+                              key={field.name}
+                              checked={farmerUniqueFields.includes(field.name)}
+                              onCheckedChange={() =>
+                                toggleFarmerUniqueField(field.name)
+                              }
+                            >
+                              {field.label} ({field.type})
+                            </DropdownMenuCheckboxItem>
+                          ))}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                      <p className="text-xs text-muted-foreground">
+                        Fields that uniquely identify a farmer (e.g. First Name
+                        + Father&apos;s Name + Grandfather&apos;s Name). Values
+                        are joined with &quot; - &quot; for deduplication.
+                      </p>
+                    </div>
+
+                    {/* Values fields - stored in farmer record */}
+                    <div className="space-y-2">
+                      <Label>Values fields (data to store)</Label>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className="w-full justify-between h-auto min-h-[2.25rem] px-3 py-2"
+                          >
+                            <div className="flex flex-wrap gap-1">
+                              {farmerValuesFields.length === 0 ? (
+                                <span className="text-muted-foreground">
+                                  Select values fields...
+                                </span>
+                              ) : (
+                                farmerValuesFields.map((name) => {
+                                  const field = formFields.find(
+                                    (f) =>
+                                      f.name === name || f.full_path === name,
+                                  );
+                                  return (
+                                    <Badge key={name} variant="secondary">
+                                      {field?.label || name}
+                                    </Badge>
+                                  );
+                                })
+                              )}
+                            </div>
+                            <ChevronDown className="size-4 opacity-50 shrink-0" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width] max-h-64 overflow-y-auto">
+                          {formFields.map((field) => (
+                            <DropdownMenuCheckboxItem
+                              key={field.name}
+                              checked={farmerValuesFields.includes(field.name)}
+                              onCheckedChange={() =>
+                                toggleFarmerValuesField(field.name)
+                              }
+                            >
+                              {field.label} ({field.type})
+                            </DropdownMenuCheckboxItem>
+                          ))}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                      <p className="text-xs text-muted-foreground">
+                        Fields to store as key-value pairs on the farmer record.
+                        If empty, defaults to the unique fields above.
+                      </p>
+                    </div>
+                  </>
                 )}
               </div>
             </TabsContent>

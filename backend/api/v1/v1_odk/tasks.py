@@ -43,6 +43,10 @@ from api.v1.v1_odk.serializers import (
     build_option_lookup,
     resolve_value,
 )
+from api.v1.v1_odk.constants import (
+    PREFIX_FARM_ID,
+    PREFIX_PLOT_ID,
+)
 from utils.encryption import decrypt
 from utils.kobo_client import KoboClient
 from utils.telegram_client import (
@@ -429,8 +433,16 @@ def _resolve_plot_location(submission, plot):
     # Fall back to stored plot values
     if not region:
         region = plot.region or None
+    else:
+        region = re.sub(
+            r"^not in list\s*-\s*", "", region
+        )
     if not sub_region:
         sub_region = plot.sub_region or None
+    else:
+        sub_region = re.sub(
+            r"^not in list\s*-\s*", "", sub_region
+        )
 
     if region and sub_region:
         return f"{region} - {sub_region}"
@@ -508,14 +520,16 @@ def send_telegram_rejection_notification(
     )
 
     esc = _escape_markdown
-    instance_id = esc(
-        plot.plot_name
-        or submission.instance_name
-        or "N/A"
-    )
+    plot_id = "N/A"
+    if submission.kobo_id:
+        plot_id = f"{PREFIX_PLOT_ID}{submission.kobo_id}"
+    farm_id = "N/A"
+    if plot.farmer and plot.farmer.uid:
+        farm_id = f"{PREFIX_FARM_ID}{plot.farmer.uid}"
     message = (
         f"*Plot Rejected*\n\n"
-        f"*Instance ID:* {instance_id}\n"
+        f"*Plot ID:* {esc(plot_id)}\n"
+        f"*Farm ID:* {esc(farm_id)}\n"
         f"*Location:* {esc(plot_location)}\n"
         f"*Reason:* {esc(reason)}\n"
         f"*Validated by:* "

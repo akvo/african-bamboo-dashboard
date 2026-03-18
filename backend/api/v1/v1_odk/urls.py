@@ -14,5 +14,14 @@ router.register(
     r"field-mappings",
     views.FieldMappingViewSet,
 )
+router.register(
+    r"farmers",
+    views.FarmerViewSet,
+)
+router.register(
+    r"enumerators",
+    views.EnumeratorViewSet,
+    basename="enumerator",
+)
 
 urlpatterns = router.urls

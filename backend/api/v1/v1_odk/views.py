@@ -48,6 +48,7 @@ from api.v1.v1_odk.funcs import (
     validate_and_check_plot,
 )
 from api.v1.v1_odk.models import (
+    Farmer,
     FarmerFieldMapping,
     FieldMapping,
     FieldSettings,
@@ -1593,4 +1594,182 @@ class FieldMappingViewSet(
             FieldMappingSerializer(
                 mappings, many=True
             ).data
+        )
+
+
+@extend_schema(tags=["Farmers"])
+class FarmerViewSet(
+    ListModelMixin,
+    GenericViewSet,
+):
+    """List farmers with search and plot count."""
+
+    queryset = Farmer.objects.all()
+    permission_classes = [IsAuthenticated]
+    serializer_class = None
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        search = (
+            self.request.query_params.get(
+                "search"
+            )
+        )
+        if search:
+            qs = qs.filter(
+                lookup_key__icontains=search
+            )
+        return qs.order_by("uid")
+
+    def list(self, request, *args, **kwargs):
+        qs = self.filter_queryset(
+            self.get_queryset()
+        )
+        page = self.paginate_queryset(qs)
+        items = page if page is not None else qs
+        data = []
+        for f in items:
+            vals = f.values or {}
+            plot_count = f.plots.count()
+            data.append(
+                {
+                    "id": f.pk,
+                    "uid": f.uid,
+                    "farmer_id": f"AB{f.uid}",
+                    "name": f.lookup_key,
+                    "values": vals,
+                    "plot_count": plot_count,
+                }
+            )
+        if page is not None:
+            return self.get_paginated_response(
+                data
+            )
+        return Response(data)
+
+
+@extend_schema(tags=["Enumerators"])
+class EnumeratorViewSet(
+    ListModelMixin,
+    GenericViewSet,
+):
+    """List unique enumerators from submissions.
+
+    Enumerators are derived from the enumerator_id
+    field in submission raw_data, resolved via
+    form question options."""
+
+    queryset = Submission.objects.all()
+    permission_classes = [IsAuthenticated]
+    serializer_class = None
+
+    def list(self, request, *args, **kwargs):
+        form_id = request.query_params.get(
+            "form_id"
+        )
+        search = request.query_params.get(
+            "search"
+        )
+
+        qs = Submission.objects.all()
+        if form_id:
+            qs = qs.filter(
+                form__asset_uid=form_id
+            )
+
+        # Get unique enumerator_id values
+        qs = qs.filter(
+            raw_data__enumerator_id__isnull=(
+                False
+            )
+        ).exclude(
+            raw_data__enumerator_id=""
+        )
+
+        seen = {}
+        forms_cache = {}
+
+        for sub in qs.select_related(
+            "form"
+        ).iterator():
+            raw = sub.raw_data or {}
+            raw_val = raw.get("enumerator_id")
+            if not raw_val:
+                continue
+
+            form = sub.form
+            form_pk = form.pk
+            if form_pk not in forms_cache:
+                om, tm = build_option_lookup(
+                    form
+                )
+                forms_cache[form_pk] = (om, tm)
+            om, tm = forms_cache[form_pk]
+
+            opts = om.get("enumerator_id")
+            if opts:
+                resolved = resolve_value(
+                    raw_val,
+                    opts,
+                    tm.get("enumerator_id"),
+                )
+            else:
+                resolved = raw_val
+
+            label = str(resolved).strip()
+            key = str(raw_val).strip()
+            if key and key not in seen:
+                seen[key] = {
+                    "raw_value": key,
+                    "name": label,
+                    "form_id": (
+                        form.asset_uid
+                    ),
+                    "form_name": form.name,
+                }
+            elif key in seen:
+                seen[key]["submission_count"] = (
+                    seen[key].get(
+                        "submission_count", 1
+                    )
+                    + 1
+                )
+
+        # Count submissions per enumerator
+        for key in seen:
+            if "submission_count" not in seen[key]:
+                seen[key]["submission_count"] = 1
+
+        results = sorted(
+            seen.values(),
+            key=lambda x: x["name"].lower(),
+        )
+
+        if search:
+            q = search.lower()
+            results = [
+                r
+                for r in results
+                if q in r["name"].lower()
+            ]
+
+        # Manual pagination
+        limit = int(
+            request.query_params.get(
+                "limit", 10
+            )
+        )
+        offset = int(
+            request.query_params.get(
+                "offset", 0
+            )
+        )
+        total = len(results)
+        page = results[offset: offset + limit]
+
+        return Response(
+            {
+                "count": total,
+                "results": page,
+            }
         )

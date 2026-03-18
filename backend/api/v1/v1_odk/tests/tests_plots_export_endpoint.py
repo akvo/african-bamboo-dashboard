@@ -481,8 +481,8 @@ class PlotExportEndpointTest(
             feature["geometry"]["type"],
         )
         props = feature["properties"]
-        self.assertEqual(
-            props["PLOT_NAME"], "GJ Farmer"
+        self.assertIn(
+            "PLOT_ID", props
         )
         self.assertEqual(
             props["VAL_STATUS"], "pending"

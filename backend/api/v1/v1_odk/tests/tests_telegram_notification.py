@@ -226,7 +226,7 @@ class TelegramNotificationTaskTest(TestCase):
             mock_client.send_message.call_args
         )
         message = call_args[0][1]
-        self.assertIn("TGN Plot", message)
+        self.assertIn("PLT800", message)
         self.assertIn("Region A", message)
         self.assertIn("Sub A", message)
         self.assertIn("Polygon Error", message)

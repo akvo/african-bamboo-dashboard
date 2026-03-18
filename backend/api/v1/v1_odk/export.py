@@ -58,7 +58,7 @@ APPROVAL_LABELS = {
 # (name, type, size, decimal)
 SHP_FIELDS = [
     ("PLOT_ID", "C", 40, 0),
-    ("PLOT_NAME", "C", 254, 0),
+    ("FARMER_ID", "C", 254, 0),
     ("ENUMERATOR", "C", 254, 0),
     ("REGION", "C", 254, 0),
     ("SUB_REGION", "C", 254, 0),
@@ -165,7 +165,6 @@ def resolve_plot_attributes(
     raw = {}
     approval = None
     submit_time = None
-    instance_name = None
 
     if plot.submission:
         raw = plot.submission.raw_data or {}
@@ -173,17 +172,12 @@ def resolve_plot_attributes(
         submit_time = (
             plot.submission.submission_time
         )
-        instance_name = (
-            plot.submission.instance_name
-        )
 
     form = plot.form
     region_spec = form.region_field or "region"
     sub_region_spec = (
         form.sub_region_field or "sub_region"
     )
-
-    plot_name = plot.plot_name or instance_name
 
     flagged = plot.flagged_for_review
     if flagged is True:
@@ -194,8 +188,17 @@ def resolve_plot_attributes(
         needs_recl = ""
 
     return {
-        "PLOT_ID": str(plot.uuid),
-        "PLOT_NAME": (plot_name or "")[:254],
+        "PLOT_ID": (
+            f"{PREFIX_PLOT_ID}"
+            f"{plot.submission.kobo_id}"
+            if plot.submission
+            else ""
+        ),
+        "FARMER_ID": (
+            f"{PREFIX_FARM_ID}{plot.farmer.uid}"
+            if plot.farmer
+            else ""
+        ),
         "ENUMERATOR": (
             _resolve_field_spec(
                 raw,
@@ -399,7 +402,7 @@ def generate_shapefile(
             w.poly(parts)
             w.record(
                 attrs["PLOT_ID"],
-                attrs["PLOT_NAME"],
+                attrs["FARMER_ID"],
                 attrs["ENUMERATOR"],
                 attrs["REGION"],
                 attrs["SUB_REGION"],

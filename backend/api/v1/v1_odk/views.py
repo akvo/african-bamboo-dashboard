@@ -1,9 +1,10 @@
+import re
 import time
 from datetime import datetime
 from datetime import timezone as tz
 
 from django.conf import settings as django_settings
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.http import HttpResponse
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema
@@ -294,12 +295,57 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
             )
 
         # PUT
-        unique = request.data.get(
+        raw_unique = request.data.get(
             "unique_fields", []
         )
-        values = request.data.get(
+        raw_values = request.data.get(
             "values_fields", []
         )
+
+        # Validate: must be lists of strings
+        if not isinstance(raw_unique, list):
+            return Response(
+                {
+                    "detail": (
+                        "unique_fields must be "
+                        "a list"
+                    )
+                },
+                status=(
+                    status.HTTP_400_BAD_REQUEST
+                ),
+            )
+        if not isinstance(raw_values, list):
+            return Response(
+                {
+                    "detail": (
+                        "values_fields must be "
+                        "a list"
+                    )
+                },
+                status=(
+                    status.HTTP_400_BAD_REQUEST
+                ),
+            )
+
+        # Strip and deduplicate
+        unique = list(
+            dict.fromkeys(
+                s.strip()
+                for s in raw_unique
+                if isinstance(s, str)
+                and s.strip()
+            )
+        )
+        values = list(
+            dict.fromkeys(
+                s.strip()
+                for s in raw_values
+                if isinstance(s, str)
+                and s.strip()
+            )
+        )
+
         if not unique:
             return Response(
                 {
@@ -1198,6 +1244,10 @@ class PlotViewSet(
                     status.HTTP_422_UNPROCESSABLE_ENTITY
                 ),
             )
+        # Sanitize filename for header safety
+        safe_name = re.sub(
+            r'[^\w\s\-.]', '', name
+        )[:100].strip() or "plot"
         resp = HttpResponse(
             kml_content,
             content_type=(
@@ -1206,7 +1256,8 @@ class PlotViewSet(
             ),
         )
         resp["Content-Disposition"] = (
-            f'attachment; filename="{name}.kml"'
+            "attachment; "
+            f'filename="{safe_name}.kml"'
         )
         return resp
 
@@ -1620,6 +1671,20 @@ class FarmerViewSet(
             qs = qs.filter(
                 plots__form__asset_uid=form_id
             ).distinct()
+            qs = qs.annotate(
+                plot_count=Count(
+                    "plots",
+                    filter=Q(
+                        plots__form__asset_uid=(
+                            form_id
+                        )
+                    ),
+                )
+            )
+        else:
+            qs = qs.annotate(
+                plot_count=Count("plots")
+            )
         search = (
             self.request.query_params.get(
                 "search"
@@ -1709,10 +1774,13 @@ class FarmerViewSet(
                             val = all_vals.get(
                                 full
                             )
-                    vals[label] = val or ""
+                    vals[label] = (
+                        val
+                        if val is not None
+                        else ""
+                    )
             else:
                 vals = all_vals
-            plot_count = f.plots.count()
             data.append(
                 {
                     "id": f.pk,
@@ -1720,7 +1788,7 @@ class FarmerViewSet(
                     "farmer_id": f"AB{f.uid}",
                     "name": f.lookup_key,
                     "values": vals,
-                    "plot_count": plot_count,
+                    "plot_count": f.plot_count,
                 }
             )
         if page is not None:
@@ -1825,16 +1893,28 @@ class EnumeratorViewSet(
             ]
 
         # Manual pagination
-        limit = int(
-            request.query_params.get(
-                "limit", 10
+        try:
+            limit = max(
+                1,
+                int(
+                    request.query_params.get(
+                        "limit", 10
+                    )
+                ),
             )
-        )
-        offset = int(
-            request.query_params.get(
-                "offset", 0
+        except (ValueError, TypeError):
+            limit = 10
+        try:
+            offset = max(
+                0,
+                int(
+                    request.query_params.get(
+                        "offset", 0
+                    )
+                ),
             )
-        )
+        except (ValueError, TypeError):
+            offset = 0
         total = len(results)
         page = results[offset: offset + limit]
 

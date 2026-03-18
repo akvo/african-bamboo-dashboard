@@ -805,7 +805,10 @@ def generate_xlsx(queryset, form, filename):
         ])
 
     # Write farmer rows sorted by uid
-    for uid in sorted(seen_farmers.keys()):
+    for uid in sorted(
+        seen_farmers.keys(),
+        key=lambda u: int(u),
+    ):
         vals = seen_farmers[uid]
         row = [f"AB{uid}"]
         for field in farmer_fields:

@@ -69,6 +69,7 @@ from api.v1.v1_odk.serializers import (
     SubmissionUpdateSerializer,
     SyncTriggerSerializer,
     build_option_lookup,
+    resolve_value,
 )
 from api.v1.v1_odk.export import _wkt_to_kml
 from api.v1.v1_odk.utils.area_calc import (
@@ -1610,6 +1611,15 @@ class FarmerViewSet(
 
     def get_queryset(self):
         qs = super().get_queryset()
+        form_id = (
+            self.request.query_params.get(
+                "form_id"
+            )
+        )
+        if form_id:
+            qs = qs.filter(
+                plots__form__asset_uid=form_id
+            ).distinct()
         search = (
             self.request.query_params.get(
                 "search"
@@ -1622,6 +1632,54 @@ class FarmerViewSet(
         return qs.order_by("uid")
 
     def list(self, request, *args, **kwargs):
+        form_id = request.query_params.get(
+            "form_id"
+        )
+
+        # Get allowed fields from form's
+        # FarmerFieldMapping
+        allowed_fields = None
+        q_labels = {}
+        if form_id:
+            mapping = (
+                FarmerFieldMapping.objects.filter(
+                    form__asset_uid=form_id
+                ).first()
+            )
+            if mapping:
+                unique = [
+                    f.strip()
+                    for f in (
+                        mapping.unique_fields
+                        .split(",")
+                    )
+                    if f.strip()
+                ]
+                values = [
+                    f.strip()
+                    for f in (
+                        mapping.values_fields
+                        .split(",")
+                    )
+                    if f.strip()
+                ]
+                seen = set(unique)
+                allowed_fields = list(unique)
+                for v in values:
+                    if v not in seen:
+                        allowed_fields.append(v)
+                        seen.add(v)
+
+                # Resolve field labels
+                q_labels = dict(
+                    FormQuestion.objects.filter(
+                        form__asset_uid=form_id,
+                        name__in=allowed_fields,
+                    ).values_list(
+                        "name", "label"
+                    )
+                )
+
         qs = self.filter_queryset(
             self.get_queryset()
         )
@@ -1629,7 +1687,31 @@ class FarmerViewSet(
         items = page if page is not None else qs
         data = []
         for f in items:
-            vals = f.values or {}
+            all_vals = f.values or {}
+            if allowed_fields is not None:
+                # Build leaf-name lookup for
+                # cross-form key matching
+                leaf_map = {}
+                for vk in all_vals:
+                    leaf = vk.rsplit("/", 1)[-1]
+                    leaf_map[leaf] = vk
+
+                vals = {}
+                for k in allowed_fields:
+                    label = q_labels.get(k, k)
+                    leaf = k.rsplit("/", 1)[-1]
+                    # Try exact key first, then
+                    # match by leaf name
+                    val = all_vals.get(k)
+                    if val is None:
+                        full = leaf_map.get(leaf)
+                        if full:
+                            val = all_vals.get(
+                                full
+                            )
+                    vals[label] = val or ""
+            else:
+                vals = all_vals
             plot_count = f.plots.count()
             data.append(
                 {
@@ -1720,25 +1802,14 @@ class EnumeratorViewSet(
             key = str(raw_val).strip()
             if key and key not in seen:
                 seen[key] = {
-                    "raw_value": key,
+                    "code": key,
                     "name": label,
-                    "form_id": (
-                        form.asset_uid
-                    ),
-                    "form_name": form.name,
+                    "submission_count": 1,
                 }
             elif key in seen:
-                seen[key]["submission_count"] = (
-                    seen[key].get(
-                        "submission_count", 1
-                    )
-                    + 1
-                )
-
-        # Count submissions per enumerator
-        for key in seen:
-            if "submission_count" not in seen[key]:
-                seen[key]["submission_count"] = 1
+                seen[key][
+                    "submission_count"
+                ] += 1
 
         results = sorted(
             seen.values(),

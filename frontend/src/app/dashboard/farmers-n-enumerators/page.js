@@ -20,24 +20,39 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Search, ChevronLeft, ChevronRight } from "lucide-react";
+import { useForms } from "@/hooks/useForms";
 import api from "@/lib/api";
 
 const PAGE_SIZE = 10;
 
-function usePaginatedData(endpoint) {
+function usePaginatedData(endpoint, formId) {
   const [data, setData] = useState([]);
   const [count, setCount] = useState(0);
   const [offset, setOffset] = useState(0);
   const [search, setSearch] = useState("");
   const [isLoading, setIsLoading] = useState(true);
 
-  const fetch = useCallback(async () => {
+  const fetchData = useCallback(async () => {
+    if (!formId) {
+      setData([]);
+      setCount(0);
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     try {
       const params = new URLSearchParams({
         limit: String(PAGE_SIZE),
         offset: String(offset),
+        form_id: formId,
       });
       if (search) params.set("search", search);
       const res = await api.get(`${endpoint}?${params}`);
@@ -49,11 +64,16 @@ function usePaginatedData(endpoint) {
     } finally {
       setIsLoading(false);
     }
-  }, [endpoint, offset, search]);
+  }, [endpoint, offset, search, formId]);
 
   useEffect(() => {
-    fetch();
-  }, [fetch]);
+    fetchData();
+  }, [fetchData]);
+
+  // Reset offset when form changes
+  useEffect(() => {
+    setOffset(0);
+  }, [formId]);
 
   const totalPages = Math.max(1, Math.ceil(count / PAGE_SIZE));
   const currentPage = Math.floor(offset / PAGE_SIZE) + 1;
@@ -76,7 +96,14 @@ function usePaginatedData(endpoint) {
   };
 }
 
-function PaginationControls({ currentPage, totalPages, canPrev, canNext, goNext, goPrev }) {
+function PaginationControls({
+  currentPage,
+  totalPages,
+  canPrev,
+  canNext,
+  goNext,
+  goPrev,
+}) {
   return (
     <div className="flex items-center justify-end gap-2 pt-4">
       <span className="text-sm text-muted-foreground">
@@ -116,8 +143,8 @@ function FarmersTable({ farmers }) {
     );
   }
 
-  // Get value keys from first farmer to build dynamic columns
-  const valueKeys = farmers.length > 0 ? Object.keys(farmers[0].values || {}) : [];
+  const valueKeys =
+    farmers.length > 0 ? Object.keys(farmers[0].values || {}) : [];
 
   return (
     <div className="overflow-x-auto rounded-md border">
@@ -137,7 +164,9 @@ function FarmersTable({ farmers }) {
         <TableBody>
           {farmers.map((farmer) => (
             <TableRow key={farmer.uid}>
-              <TableCell className="font-mono text-xs">{farmer.farmer_id}</TableCell>
+              <TableCell className="font-mono text-xs">
+                {farmer.farmer_id}
+              </TableCell>
               <TableCell className="font-medium">{farmer.name}</TableCell>
               {valueKeys.map((key) => (
                 <TableCell key={key}>{farmer.values?.[key] ?? ""}</TableCell>
@@ -165,16 +194,16 @@ function EnumeratorsTable({ enumerators }) {
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead>Code</TableHead>
             <TableHead>Name</TableHead>
-            <TableHead>Form</TableHead>
             <TableHead className="text-right">Submissions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {enumerators.map((e) => (
-            <TableRow key={e.raw_value}>
+            <TableRow key={e.code}>
+              <TableCell className="font-mono text-xs">{e.code}</TableCell>
               <TableCell className="font-medium">{e.name}</TableCell>
-              <TableCell className="text-muted-foreground">{e.form_name}</TableCell>
               <TableCell className="text-right">{e.submission_count}</TableCell>
             </TableRow>
           ))}
@@ -195,10 +224,13 @@ function SkeletonTable() {
 }
 
 export default function FarmersAndEnumeratorsPage() {
+  const { forms, activeForm, setActiveForm } = useForms();
   const [activeTab, setActiveTab] = useState("farmers");
 
-  const farmers = usePaginatedData("/v1/odk/farmers/");
-  const enumerators = usePaginatedData("/v1/odk/enumerators/");
+  const formId = activeForm?.asset_uid || "";
+
+  const farmers = usePaginatedData("/v1/odk/farmers/", formId);
+  const enumerators = usePaginatedData("/v1/odk/enumerators/", formId);
 
   const active = activeTab === "farmers" ? farmers : enumerators;
 
@@ -219,16 +251,37 @@ export default function FarmersAndEnumeratorsPage() {
                 {activeTab === "farmers" ? "Farmers" : "Enumerators"}
               </CardTitle>
               <CardDescription>
-                {active.count} {activeTab === "farmers" ? "farmer" : "enumerator"}
+                {active.count}{" "}
+                {activeTab === "farmers" ? "farmer" : "enumerator"}
                 {active.count !== 1 ? "s" : ""} found
               </CardDescription>
             </div>
-            <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <TabsList>
-                <TabsTrigger value="farmers">Farmers</TabsTrigger>
-                <TabsTrigger value="enumerators">Enumerators</TabsTrigger>
-              </TabsList>
-            </Tabs>
+            <div className="flex items-center gap-3">
+              <Select
+                value={formId}
+                onValueChange={(val) => {
+                  const form = forms.find((f) => f.asset_uid === val);
+                  if (form) setActiveForm(form);
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select form" />
+                </SelectTrigger>
+                <SelectContent>
+                  {forms.map((form) => (
+                    <SelectItem key={form.asset_uid} value={form.asset_uid}>
+                      {form.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Tabs value={activeTab} onValueChange={setActiveTab}>
+                <TabsList>
+                  <TabsTrigger value="farmers">Farmers</TabsTrigger>
+                  <TabsTrigger value="enumerators">Enumerators</TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </div>
           </div>
         </CardHeader>
         <CardContent>

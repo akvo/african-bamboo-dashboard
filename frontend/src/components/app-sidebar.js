@@ -44,7 +44,7 @@ const navItems = [
     icon: Map,
   },
   {
-    label: "Farmers",
+    label: "Farmers and Enumerators",
     href: "/dashboard/farmers-n-enumerators",
     icon: Users,
   },

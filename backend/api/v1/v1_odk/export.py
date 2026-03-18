@@ -27,6 +27,10 @@ from api.v1.v1_odk.serializers import (
     build_option_lookup,
     resolve_value,
 )
+from api.v1.v1_odk.constants import (
+    PREFIX_FARM_ID,
+    PREFIX_PLOT_ID,
+)
 from api.v1.v1_users.models import SystemUser
 from utils import storage
 
@@ -778,7 +782,7 @@ def generate_xlsx(queryset, form, filename):
                 pass
 
         plot_id = (
-            f"PLT{sub.kobo_id}" if sub else ""
+            f"{PREFIX_PLOT_ID}{sub.kobo_id}" if sub else ""
         )
 
         altitude = _extract_avg_altitude(
@@ -810,7 +814,7 @@ def generate_xlsx(queryset, form, filename):
         key=lambda u: int(u),
     ):
         vals = seen_farmers[uid]
-        row = [f"AB{uid}"]
+        row = [f"{PREFIX_FARM_ID}{uid}"]
         for field in farmer_fields:
             row.append(vals.get(field) or "")
         ws_farmer.append(row)

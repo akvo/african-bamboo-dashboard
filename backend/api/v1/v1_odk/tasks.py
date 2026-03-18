@@ -1,4 +1,5 @@
 import logging
+import re
 import time
 from io import BytesIO
 from pathlib import Path
@@ -156,9 +157,9 @@ def generate_export_file(job_id):
             # XLSX: all plots, run farmer sync
             sync_farmers_for_form(form)
             ts = int(time.time())
-            safe_name = (
-                form.name.replace(" ", "_")
-            )
+            safe_name = re.sub(
+                r"[^\w\-.]", "_", form.name
+            )[:80].strip("_") or "export"
             xlsx_filename = (
                 f"{safe_name}_{ts}"
             )

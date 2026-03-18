@@ -7,6 +7,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import quote
+from xml.sax.saxutils import escape as xml_escape
 from zipfile import ZipFile
 
 import shapefile
@@ -251,6 +252,7 @@ def _wkt_to_kml(wkt_string, name="Plot"):
         else:
             return ""
 
+        safe_name = xml_escape(str(name))
         placemarks = []
         for i, poly in enumerate(polygons):
             coords = " ".join(
@@ -258,8 +260,9 @@ def _wkt_to_kml(wkt_string, name="Plot"):
                 for c in poly.exterior.coords
             )
             pm_name = (
-                name if len(polygons) == 1
-                else f"{name} ({i + 1})"
+                safe_name
+                if len(polygons) == 1
+                else f"{safe_name} ({i + 1})"
             )
             placemarks.append(
                 f"<Placemark>"
@@ -282,7 +285,7 @@ def _wkt_to_kml(wkt_string, name="Plot"):
             '<kml xmlns='
             '"http://www.opengis.net/kml/2.2">'
             "<Document>"
-            f"<name>{name}</name>"
+            f"<name>{safe_name}</name>"
             + "".join(placemarks)
             + "</Document></kml>"
         )

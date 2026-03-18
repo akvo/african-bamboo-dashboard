@@ -44,6 +44,10 @@ def view_job(request, job_id):
 CONTENT_TYPES = {
     ".zip": "application/zip",
     ".geojson": "application/geo+json",
+    ".xlsx": (
+        "application/vnd.openxmlformats-"
+        "officedocument.spreadsheetml.sheet"
+    ),
 }
 
 

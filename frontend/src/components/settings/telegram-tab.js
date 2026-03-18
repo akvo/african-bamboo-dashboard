@@ -20,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, RefreshCw } from "lucide-react";
+import { Loader2, RefreshCw, X } from "lucide-react";
 
 export default function TelegramTab() {
   const [loading, setLoading] = useState(true);
@@ -164,27 +164,47 @@ export default function TelegramTab() {
           <div className="space-y-2">
             <Label htmlFor="supervisor-group">Supervisor Group</Label>
             {groups.length > 0 ? (
-              <Select
-                disabled={disabled}
-                value={config.supervisor_group_id}
-                onValueChange={(val) =>
-                  setConfig((prev) => ({
-                    ...prev,
-                    supervisor_group_id: val,
-                  }))
-                }
-              >
-                <SelectTrigger id="supervisor-group" className="w-full">
-                  <SelectValue placeholder="Select a group..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {groups.map((g) => (
-                    <SelectItem key={g.id} value={g.id}>
-                      {g.title} ({g.id})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="flex gap-2">
+                <Select
+                  disabled={disabled}
+                  value={config.supervisor_group_id || undefined}
+                  onValueChange={(val) =>
+                    setConfig((prev) => ({
+                      ...prev,
+                      supervisor_group_id: val,
+                    }))
+                  }
+                >
+                  <SelectTrigger id="supervisor-group" className="w-full">
+                    <SelectValue placeholder="Select a group..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {groups.map((g) => (
+                      <SelectItem key={g.id} value={g.id}>
+                        {g.title} ({g.id})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {config.supervisor_group_id && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    disabled={disabled}
+                    onClick={() =>
+                      setConfig((prev) => ({
+                        ...prev,
+                        supervisor_group_id: "",
+                      }))
+                    }
+                    title="Clear selection"
+                    className="shrink-0"
+                  >
+                    <X className="size-4" />
+                  </Button>
+                )}
+              </div>
             ) : (
               <Input
                 id="supervisor-group"
@@ -209,27 +229,47 @@ export default function TelegramTab() {
           <div className="space-y-2">
             <Label htmlFor="enumerator-group">Enumerator Group</Label>
             {groups.length > 0 ? (
-              <Select
-                disabled={disabled}
-                value={config.enumerator_group_id}
-                onValueChange={(val) =>
-                  setConfig((prev) => ({
-                    ...prev,
-                    enumerator_group_id: val,
-                  }))
-                }
-              >
-                <SelectTrigger id="enumerator-group" className="w-full">
-                  <SelectValue placeholder="Select a group..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {groups.map((g) => (
-                    <SelectItem key={g.id} value={g.id}>
-                      {g.title} ({g.id})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="flex gap-2">
+                <Select
+                  disabled={disabled}
+                  value={config.enumerator_group_id || undefined}
+                  onValueChange={(val) =>
+                    setConfig((prev) => ({
+                      ...prev,
+                      enumerator_group_id: val,
+                    }))
+                  }
+                >
+                  <SelectTrigger id="enumerator-group" className="w-full">
+                    <SelectValue placeholder="Select a group..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {groups.map((g) => (
+                      <SelectItem key={g.id} value={g.id}>
+                        {g.title} ({g.id})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {config.enumerator_group_id && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    disabled={disabled}
+                    onClick={() =>
+                      setConfig((prev) => ({
+                        ...prev,
+                        enumerator_group_id: "",
+                      }))
+                    }
+                    title="Clear selection"
+                    className="shrink-0"
+                  >
+                    <X className="size-4" />
+                  </Button>
+                )}
+              </div>
             ) : (
               <Input
                 id="enumerator-group"

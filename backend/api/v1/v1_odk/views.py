@@ -1,8 +1,11 @@
+import re
 import time
 from datetime import datetime
 from datetime import timezone as tz
 
-from django.db.models import Q
+from django.conf import settings as django_settings
+from django.db.models import Count, Q
+from django.http import HttpResponse
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 from rest_framework import status, viewsets
@@ -14,7 +17,10 @@ from rest_framework.mixins import (
     RetrieveModelMixin,
     UpdateModelMixin,
 )
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import (
+    AllowAny,
+    IsAuthenticated,
+)
 from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 from drf_spectacular.types import OpenApiTypes
@@ -43,6 +49,8 @@ from api.v1.v1_odk.funcs import (
     validate_and_check_plot,
 )
 from api.v1.v1_odk.models import (
+    Farmer,
+    FarmerFieldMapping,
     FieldMapping,
     FieldSettings,
     FormMetadata,
@@ -62,12 +70,21 @@ from api.v1.v1_odk.serializers import (
     SubmissionUpdateSerializer,
     SyncTriggerSerializer,
     build_option_lookup,
+    resolve_value,
 )
+from api.v1.v1_odk.export import _wkt_to_kml
 from api.v1.v1_odk.utils.area_calc import (
     calculate_area_ha,
 )
+from api.v1.v1_odk.utils.farmer_sync import (
+    sync_farmers_for_form,
+)
 from api.v1.v1_odk.utils.warning_rules import (
     evaluate_warnings,
+)
+from api.v1.v1_odk.constants import (
+    PREFIX_FARM_ID,
+    PREFIX_PLOT_ID,
 )
 from utils.encryption import decrypt
 from utils.kobo_client import KoboClient
@@ -75,6 +92,19 @@ from utils.polygon import (
     extract_plot_data,
     wkt_to_odk_geoshape,
 )
+
+
+def _strip_id_prefix(value):
+    """Strip PLT or AB prefix from a search term
+    so users can search with or without prefix."""
+    if not value:
+        return value
+    upper = value.upper()
+    if upper.startswith(PREFIX_PLOT_ID):
+        return value[len(PREFIX_PLOT_ID):]
+    if upper.startswith(PREFIX_FARM_ID):
+        return value[len(PREFIX_FARM_ID):]
+    return value
 
 
 def _parse_date_param(params, name):
@@ -231,6 +261,155 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
             for q in qs
         ]
         return Response(data)
+
+    @extend_schema(
+        tags=["Forms"],
+        summary=(
+            "Get or update farmer field mapping"
+        ),
+    )
+    @action(
+        detail=True,
+        methods=["get", "put"],
+        url_path="farmer-field-mapping",
+    )
+    def farmer_field_mapping(
+        self, request, asset_uid=None
+    ):
+        """GET: return current mapping.
+        PUT: create or update mapping."""
+        form = self.get_object()
+        if request.method == "GET":
+            mapping = FarmerFieldMapping.objects.filter(
+                form=form
+            ).first()
+            if not mapping:
+                return Response(
+                    {
+                        "unique_fields": [],
+                        "values_fields": [],
+                    }
+                )
+            return Response(
+                {
+                    "unique_fields": [
+                        f.strip()
+                        for f in (
+                            mapping.unique_fields
+                            .split(",")
+                        )
+                        if f.strip()
+                    ],
+                    "values_fields": [
+                        f.strip()
+                        for f in (
+                            mapping.values_fields
+                            .split(",")
+                        )
+                        if f.strip()
+                    ],
+                }
+            )
+
+        # PUT
+        raw_unique = request.data.get(
+            "unique_fields", []
+        )
+        raw_values = request.data.get(
+            "values_fields", []
+        )
+
+        # Validate: must be lists of strings
+        if not isinstance(raw_unique, list):
+            return Response(
+                {
+                    "detail": (
+                        "unique_fields must be "
+                        "a list"
+                    )
+                },
+                status=(
+                    status.HTTP_400_BAD_REQUEST
+                ),
+            )
+        if not isinstance(raw_values, list):
+            return Response(
+                {
+                    "detail": (
+                        "values_fields must be "
+                        "a list"
+                    )
+                },
+                status=(
+                    status.HTTP_400_BAD_REQUEST
+                ),
+            )
+
+        # Strip and deduplicate
+        unique = list(
+            dict.fromkeys(
+                s.strip()
+                for s in raw_unique
+                if isinstance(s, str)
+                and s.strip()
+            )
+        )
+        values = list(
+            dict.fromkeys(
+                s.strip()
+                for s in raw_values
+                if isinstance(s, str)
+                and s.strip()
+            )
+        )
+
+        if not unique:
+            return Response(
+                {
+                    "detail": (
+                        "unique_fields is required"
+                    )
+                },
+                status=(
+                    status.HTTP_400_BAD_REQUEST
+                ),
+            )
+
+        unique_str = ",".join(unique)
+        values_str = ",".join(values)
+
+        mapping, _ = (
+            FarmerFieldMapping.objects
+            .update_or_create(
+                form=form,
+                defaults={
+                    "unique_fields": unique_str,
+                    "values_fields": (
+                        values_str or unique_str
+                    ),
+                },
+            )
+        )
+        return Response(
+            {
+                "unique_fields": [
+                    f.strip()
+                    for f in (
+                        mapping.unique_fields
+                        .split(",")
+                    )
+                    if f.strip()
+                ],
+                "values_fields": [
+                    f.strip()
+                    for f in (
+                        mapping.values_fields
+                        .split(",")
+                    )
+                    if f.strip()
+                ],
+            }
+        )
 
     @extend_schema(
         request=SyncTriggerSerializer,
@@ -484,6 +663,9 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
             if plot.flagged_for_review:
                 plots_flagged += 1
 
+        # Sync farmer records from submissions
+        farmer_result = sync_farmers_for_form(form)
+
         return Response(
             {
                 "synced": len(results),
@@ -493,6 +675,12 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
                 "plots_flagged": plots_flagged,
                 "questions_synced": (
                     questions_synced
+                ),
+                "farmers_created": (
+                    farmer_result["created"]
+                ),
+                "farmers_updated": (
+                    farmer_result["updated"]
                 ),
             }
         )
@@ -639,12 +827,20 @@ class SubmissionViewSet(
             )
         search = params.get("search")
         if search:
+            stripped = _strip_id_prefix(search)
             qs = qs.filter(
                 Q(
-                    plot__plot_name__icontains=search
+                    plot__plot_name__icontains=(
+                        search
+                    )
                 )
                 | Q(
-                    instance_name__icontains=search
+                    instance_name__icontains=(
+                        search
+                    )
+                )
+                | Q(
+                    kobo_id__icontains=stripped
                 )
             )
         start_date, end_date = _parse_date_range(
@@ -866,9 +1062,17 @@ class PlotViewSet(
                 )
         search = params.get("search")
         if search:
+            stripped = _strip_id_prefix(search)
             qs = qs.filter(
-                Q(plot_name__icontains=search) |
-                Q(submission__instance_name__icontains=search)
+                Q(
+                    plot_name__icontains=search
+                )
+                | Q(
+                    submission__instance_name__icontains=search  # noqa: E501
+                )
+                | Q(
+                    submission__kobo_id__icontains=stripped  # noqa: E501
+                )
             )
         region = params.get("region")
         if region:
@@ -1031,6 +1235,64 @@ class PlotViewSet(
             request.user, plot, plot.polygon_wkt
         )
         return Response(PlotSerializer(plot).data)
+
+    @extend_schema(
+        tags=["Plots"],
+        summary="Download plot polygon as KML",
+    )
+    @action(
+        detail=True,
+        methods=["get"],
+        permission_classes=[AllowAny],
+    )
+    def kml(self, request, uuid=None):
+        """Return KML file for a plot polygon.
+
+        Authenticated via ?key=STORAGE_SECRET."""
+        key = request.query_params.get("key", "")
+        if key != django_settings.STORAGE_SECRET:
+            return Response(
+                {"detail": "Invalid key"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        plot = self.get_object()
+        if not plot.polygon_wkt:
+            return Response(
+                {"detail": "No polygon data"},
+                status=(
+                    status.HTTP_404_NOT_FOUND
+                ),
+            )
+        name = (
+            plot.plot_name
+            or str(plot.uuid)
+        )
+        kml_content = _wkt_to_kml(
+            plot.polygon_wkt, name=name
+        )
+        if not kml_content:
+            return Response(
+                {"detail": "Invalid geometry"},
+                status=(
+                    status.HTTP_422_UNPROCESSABLE_ENTITY
+                ),
+            )
+        # Sanitize filename for header safety
+        safe_name = re.sub(
+            r'[^\w\s\-.]', '', name
+        )[:100].strip() or "plot"
+        resp = HttpResponse(
+            kml_content,
+            content_type=(
+                "application/vnd"
+                ".google-earth.kml+xml"
+            ),
+        )
+        resp["Content-Disposition"] = (
+            "attachment; "
+            f'filename="{safe_name}.kml"'
+        )
+        return resp
 
     @extend_schema(
         tags=["Plots"],
@@ -1213,13 +1475,15 @@ class PlotViewSet(
         valid_formats = {
             "shp": JobTypes.export_shapefile,
             "geojson": JobTypes.export_geojson,
+            "xlsx": JobTypes.export_xlsx,
         }
         if fmt not in valid_formats:
             return Response(
                 {
                     "message": (
-                        "Invalid format. "
-                        "Use 'shp' or 'geojson'"
+                        "Invalid format. Use "
+                        "'shp', 'geojson', "
+                        "or 'xlsx'"
                     )
                 },
                 status=(
@@ -1415,4 +1679,285 @@ class FieldMappingViewSet(
             FieldMappingSerializer(
                 mappings, many=True
             ).data
+        )
+
+
+@extend_schema(tags=["Farmers"])
+class FarmerViewSet(
+    ListModelMixin,
+    GenericViewSet,
+):
+    """List farmers with search and plot count."""
+
+    queryset = Farmer.objects.all()
+    permission_classes = [IsAuthenticated]
+    serializer_class = None
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        form_id = (
+            self.request.query_params.get(
+                "form_id"
+            )
+        )
+        if form_id:
+            qs = qs.filter(
+                plots__form__asset_uid=form_id
+            ).distinct()
+            qs = qs.annotate(
+                plot_count=Count(
+                    "plots",
+                    filter=Q(
+                        plots__form__asset_uid=(
+                            form_id
+                        )
+                    ),
+                )
+            )
+        else:
+            qs = qs.annotate(
+                plot_count=Count("plots")
+            )
+        search = (
+            self.request.query_params.get(
+                "search"
+            )
+        )
+        if search:
+            stripped = _strip_id_prefix(search)
+            qs = qs.filter(
+                Q(
+                    lookup_key__icontains=search
+                )
+                | Q(uid__icontains=stripped)
+            )
+        return qs.order_by("uid")
+
+    def list(self, request, *args, **kwargs):
+        form_id = request.query_params.get(
+            "form_id"
+        )
+
+        # Get allowed fields from form's
+        # FarmerFieldMapping
+        allowed_fields = None
+        q_labels = {}
+        if form_id:
+            mapping = (
+                FarmerFieldMapping.objects.filter(
+                    form__asset_uid=form_id
+                ).first()
+            )
+            if mapping:
+                unique = [
+                    f.strip()
+                    for f in (
+                        mapping.unique_fields
+                        .split(",")
+                    )
+                    if f.strip()
+                ]
+                values = [
+                    f.strip()
+                    for f in (
+                        mapping.values_fields
+                        .split(",")
+                    )
+                    if f.strip()
+                ]
+                seen = set(unique)
+                allowed_fields = list(unique)
+                for v in values:
+                    if v not in seen:
+                        allowed_fields.append(v)
+                        seen.add(v)
+
+                # Resolve field labels
+                q_labels = dict(
+                    FormQuestion.objects.filter(
+                        form__asset_uid=form_id,
+                        name__in=allowed_fields,
+                    ).values_list(
+                        "name", "label"
+                    )
+                )
+
+        qs = self.filter_queryset(
+            self.get_queryset()
+        )
+        page = self.paginate_queryset(qs)
+        items = page if page is not None else qs
+        data = []
+        for f in items:
+            all_vals = f.values or {}
+            if allowed_fields is not None:
+                # Build leaf-name lookup for
+                # cross-form key matching
+                leaf_map = {}
+                for vk in all_vals:
+                    leaf = vk.rsplit("/", 1)[-1]
+                    leaf_map[leaf] = vk
+
+                vals = {}
+                for k in allowed_fields:
+                    label = q_labels.get(k, k)
+                    leaf = k.rsplit("/", 1)[-1]
+                    # Try exact key first, then
+                    # match by leaf name
+                    val = all_vals.get(k)
+                    if val is None:
+                        full = leaf_map.get(leaf)
+                        if full:
+                            val = all_vals.get(
+                                full
+                            )
+                    vals[label] = (
+                        val
+                        if val is not None
+                        else ""
+                    )
+            else:
+                vals = all_vals
+            data.append(
+                {
+                    "id": f.pk,
+                    "uid": f.uid,
+                    "farmer_id": f"AB{f.uid}",
+                    "name": f.lookup_key,
+                    "values": vals,
+                    "plot_count": f.plot_count,
+                }
+            )
+        if page is not None:
+            return self.get_paginated_response(
+                data
+            )
+        return Response(data)
+
+
+@extend_schema(tags=["Enumerators"])
+class EnumeratorViewSet(
+    ListModelMixin,
+    GenericViewSet,
+):
+    """List unique enumerators from submissions.
+
+    Enumerators are derived from the enumerator_id
+    field in submission raw_data, resolved via
+    form question options."""
+
+    queryset = Submission.objects.all()
+    permission_classes = [IsAuthenticated]
+    serializer_class = None
+
+    def list(self, request, *args, **kwargs):
+        form_id = request.query_params.get(
+            "form_id"
+        )
+        search = request.query_params.get(
+            "search"
+        )
+
+        qs = Submission.objects.all()
+        if form_id:
+            qs = qs.filter(
+                form__asset_uid=form_id
+            )
+
+        # Get unique enumerator_id values
+        qs = qs.filter(
+            raw_data__enumerator_id__isnull=(
+                False
+            )
+        ).exclude(
+            raw_data__enumerator_id=""
+        )
+
+        seen = {}
+        forms_cache = {}
+
+        for sub in qs.select_related(
+            "form"
+        ).iterator():
+            raw = sub.raw_data or {}
+            raw_val = raw.get("enumerator_id")
+            if not raw_val:
+                continue
+
+            form = sub.form
+            form_pk = form.pk
+            if form_pk not in forms_cache:
+                om, tm = build_option_lookup(
+                    form
+                )
+                forms_cache[form_pk] = (om, tm)
+            om, tm = forms_cache[form_pk]
+
+            opts = om.get("enumerator_id")
+            if opts:
+                resolved = resolve_value(
+                    raw_val,
+                    opts,
+                    tm.get("enumerator_id"),
+                )
+            else:
+                resolved = raw_val
+
+            label = str(resolved).strip()
+            key = str(raw_val).strip()
+            if key and key not in seen:
+                seen[key] = {
+                    "code": key,
+                    "name": label,
+                    "submission_count": 1,
+                }
+            elif key in seen:
+                seen[key][
+                    "submission_count"
+                ] += 1
+
+        results = sorted(
+            seen.values(),
+            key=lambda x: x["name"].lower(),
+        )
+
+        if search:
+            q = search.lower()
+            results = [
+                r
+                for r in results
+                if q in r["name"].lower()
+            ]
+
+        # Manual pagination
+        try:
+            limit = max(
+                1,
+                int(
+                    request.query_params.get(
+                        "limit", 10
+                    )
+                ),
+            )
+        except (ValueError, TypeError):
+            limit = 10
+        try:
+            offset = max(
+                0,
+                int(
+                    request.query_params.get(
+                        "offset", 0
+                    )
+                ),
+            )
+        except (ValueError, TypeError):
+            offset = 0
+        total = len(results)
+        page = results[offset: offset + limit]
+
+        return Response(
+            {
+                "count": total,
+                "results": page,
+            }
         )

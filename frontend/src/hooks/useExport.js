@@ -104,7 +104,7 @@ export function ExportProvider({ children }) {
       formId,
       status,
       search,
-      format = "shp",
+      format,
       region,
       subRegion,
       start_date,

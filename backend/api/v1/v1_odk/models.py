@@ -202,6 +202,13 @@ class Plot(models.Model):
         blank=True,
         help_text="Pre-computed area in hectares",
     )
+    farmer = models.ForeignKey(
+        "Farmer",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="plots",
+    )
     flagged_for_review = models.BooleanField(
         null=True,
         default=None,
@@ -407,3 +414,62 @@ class FieldMapping(models.Model):
             f"{self.form_question.name} "
             f"({self.form.asset_uid})"
         )
+
+
+class FarmerFieldMapping(models.Model):
+    form = models.ForeignKey(
+        FormMetadata,
+        on_delete=models.CASCADE,
+        related_name="farmer_field_mapping",
+    )
+    unique_fields = models.TextField(
+        help_text=(
+            "Comma-separated standardized field names "
+            "used to identify unique farmers. "
+            "Values joined with ' - ' for display."
+        ),
+    )
+    values_fields = models.TextField(
+        help_text=(
+            "Comma-separated standardized field names "
+            "to store as key-value pairs in Farmer.values. "
+            "First field is used as display name."
+        ),
+    )
+
+    class Meta:
+        db_table = "farmer_field_mapping"
+
+    def __str__(self):
+        return f"Farmer Field Mapping {self.pk}"
+
+
+class Farmer(models.Model):
+    uid = models.CharField(
+        max_length=125,
+        unique=True,
+        db_index=True,
+    )
+    lookup_key = models.CharField(
+        max_length=500,
+        unique=True,
+        db_index=True,
+        help_text=(
+            "Concatenated unique_fields values "
+            "joined with ' - ' for deduplication"
+        ),
+    )
+    values = models.JSONField(
+        help_text=(
+            "Key-value pairs of standardized "
+            "field name to value"
+        ),
+        null=True,
+        blank=True,
+    )
+
+    class Meta:
+        db_table = "farmers"
+
+    def __str__(self):
+        return self.uid or f"Farmer {self.pk}"

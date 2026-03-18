@@ -20,6 +20,7 @@ import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import PlotHeaderCard from "@/components/map/plot-header-card";
 import AttachmentCard from "@/components/map/attachment-card";
+import { PREFIX_FARM_ID } from "@/lib/constants";
 
 function SectionHeader({ icon: Icon, title }) {
   return (
@@ -58,7 +59,14 @@ function DataFieldRow({ fields }) {
   );
 }
 
-function PersonSection({ icon: Icon, title, name, fields = [], children }) {
+function PersonSection({
+  icon: Icon,
+  title,
+  name,
+  subTitle = null,
+  fields = [],
+  children,
+}) {
   if (!name) return null;
   const visibleFields = fields.filter((f) => f.value);
   return (
@@ -66,6 +74,7 @@ function PersonSection({ icon: Icon, title, name, fields = [], children }) {
       <SectionHeader icon={Icon} title={title} />
       <Separator className="bg-muted-foreground/20" />
       <p className="text-sm font-bold text-foreground">{name}</p>
+      {subTitle && <p className="text-sm text-muted-foreground">{subTitle}</p>}
       {visibleFields.length > 0 && <DataFieldRow fields={visibleFields} />}
       {children}
     </div>
@@ -235,6 +244,9 @@ export default function PlotDetailPanel({
               icon={User}
               title="Farmer"
               name={details?.farmer?.name}
+              subTitle={
+                plot?.farmer_uid ? `ID number: ${PREFIX_FARM_ID}${plot.farmer_uid}` : null
+              }
               fields={[
                 { label: "Father's name", value: details?.farmer?.fatherName },
                 {
@@ -301,7 +313,7 @@ export default function PlotDetailPanel({
                   {submission.rejection_audits.map((audit) => (
                     <div
                       key={audit.id}
-                      className="rounded-md border border-border p-3 space-y-1"
+                      className="rounded-md border border-border p-3 space-y-1 bg-card"
                     >
                       <div className="flex items-center gap-2">
                         <Badge variant="outline" className="text-xs">

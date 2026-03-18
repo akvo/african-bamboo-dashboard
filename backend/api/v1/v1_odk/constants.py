@@ -100,4 +100,9 @@ DEFAULT_FIELDS = [
     "grandfather_name",
     "age_of_farmer",
     "phone_number",
+    "title_deed_1",
+    "title_deed_2",
 ]
+
+PREFIX_PLOT_ID = "PLT"
+PREFIX_FARM_ID = "AB"

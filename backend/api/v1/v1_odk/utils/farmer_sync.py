@@ -1,5 +1,9 @@
 import logging
 
+from django.db import IntegrityError
+from django.db.models import IntegerField, Max
+from django.db.models.functions import Cast
+
 from api.v1.v1_odk.models import (
     Farmer,
     FarmerFieldMapping,
@@ -83,27 +87,24 @@ def build_farmer_lookup_key(
 def generate_next_farmer_uid():
     """Generate the next sequential farmer UID.
 
+    Uses numeric Cast + Max to avoid lexicographic
+    ordering issues with string UIDs (e.g. "99999"
+    sorting after "100000").
+
     Returns zero-padded string with minimum 5 digits.
-    Naturally grows beyond 5 digits when exceeding
-    99999 (e.g., "100000").
 
     Returns:
         str: e.g. "00001", "00042", "100000"
     """
-    last_uid = (
-        Farmer.objects.order_by("-uid")
-        .values_list("uid", flat=True)
-        .first()
-    )
-    if last_uid is None:
-        return "00001"
-    try:
-        next_num = int(last_uid) + 1
-    except (ValueError, TypeError):
-        next_num = (
-            Farmer.objects.count() + 1
+    result = Farmer.objects.aggregate(
+        max_uid=Max(
+            Cast("uid", IntegerField())
         )
-    return str(next_num).zfill(5)
+    )
+    max_uid = result["max_uid"]
+    if max_uid is None:
+        return "00001"
+    return str(max_uid + 1).zfill(5)
 
 
 def build_farmer_values(
@@ -218,13 +219,24 @@ def sync_farmers_for_form(form):
             farmer.save(update_fields=["values"])
             updated += 1
         except Farmer.DoesNotExist:
-            uid = generate_next_farmer_uid()
-            farmer = Farmer.objects.create(
-                uid=uid,
-                lookup_key=lookup_key,
-                values=values,
-            )
-            created += 1
+            # Retry on IntegrityError to handle
+            # concurrent UID generation races
+            for attempt in range(3):
+                uid = generate_next_farmer_uid()
+                try:
+                    farmer = (
+                        Farmer.objects.create(
+                            uid=uid,
+                            lookup_key=lookup_key,
+                            values=values,
+                        )
+                    )
+                    created += 1
+                    break
+                except IntegrityError:
+                    if attempt == 2:
+                        raise
+                    continue
 
         try:
             plot = submission.plot

@@ -26,6 +26,7 @@ from api.v1.v1_odk.models import (
 from api.v1.v1_odk.tests.mixins import (
     OdkTestHelperMixin,
 )
+from api.v1.v1_users.models import SystemUser
 from utils.storage import get_path
 
 VALID_WKT = (
@@ -321,10 +322,6 @@ class ResolveAttachmentUrlTest(TestCase):
 )
 class GetKoboBaseUrlTest(TestCase):
     def test_returns_url(self):
-        from api.v1.v1_users.models import (
-            SystemUser,
-        )
-
         SystemUser.objects.create_superuser(
             email="test@test.org",
             password="pass",

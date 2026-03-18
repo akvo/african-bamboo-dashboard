@@ -1,4 +1,5 @@
 import math
+import re
 from urllib.parse import quote
 
 from django.conf import settings
@@ -236,14 +237,24 @@ class SubmissionListSerializer(serializers.ModelSerializer):
     def get_region(self, obj):
         form = obj.form
         field_spec = form.region_field or "region"
-        return self._resolve_fields(obj, field_spec)
+        region = self._resolve_fields(obj, field_spec)
+        if region:
+            region = re.sub(
+                r"^not in list\s*-\s*", "", region
+            )
+        return region
 
     def get_sub_region(self, obj):
         form = obj.form
         field_spec = (
             form.sub_region_field or "sub_region"
         )
-        return self._resolve_fields(obj, field_spec)
+        sub_region = self._resolve_fields(obj, field_spec)
+        if sub_region:
+            sub_region = re.sub(
+                r"^not in list\s*-\s*", "", sub_region
+            )
+        return sub_region
 
 
 class RejectionAuditSerializer(
@@ -601,6 +612,11 @@ class PlotSerializer(serializers.ModelSerializer):
         read_only=True,
         allow_null=True,
     )
+    farmer_uid = serializers.CharField(
+        source="farmer.uid",
+        read_only=True,
+        allow_null=True,
+    )
 
     def get_instance_name(self, obj):
         if obj.submission:
@@ -650,17 +666,27 @@ class PlotSerializer(serializers.ModelSerializer):
         field_spec = (
             obj.form.region_field or "region"
         )
-        return self._resolve_plot_fields(
+        region = self._resolve_plot_fields(
             obj, field_spec
         )
+        if region:
+            region = re.sub(
+                r"^not in list\s*-\s*", "", region
+            )
+        return region
 
     def get_sub_region(self, obj):
         field_spec = (
             obj.form.sub_region_field or "sub_region"
         )
-        return self._resolve_plot_fields(
+        sub_region = self._resolve_plot_fields(
             obj, field_spec
         )
+        if sub_region:
+            sub_region = re.sub(
+                r"^not in list\s*-\s*", "", sub_region
+            )
+        return sub_region
 
     def get_enumerator(self, obj):
         return self._resolve_plot_fields(
@@ -691,6 +717,7 @@ class PlotSerializer(serializers.ModelSerializer):
             "flagged_reason",
             "updated_by_name",
             "updated_at",
+            "farmer_uid",
         ]
 
         read_only_fields = [
@@ -704,6 +731,7 @@ class PlotSerializer(serializers.ModelSerializer):
             "flagged_reason",
             "updated_by_name",
             "updated_at",
+            "farmer_uid",
         ]
 
 

@@ -1,4 +1,5 @@
 import logging
+import time
 from io import BytesIO
 from pathlib import Path
 
@@ -21,6 +22,10 @@ from api.v1.v1_odk.export import (
     cleanup_old_exports,
     generate_geojson,
     generate_shapefile,
+    generate_xlsx,
+)
+from api.v1.v1_odk.utils.farmer_sync import (
+    sync_farmers_for_form,
 )
 from api.v1.v1_jobs.constants import (
     JobStatus,
@@ -145,23 +150,41 @@ def generate_export_file(job_id):
                     }
                 )
 
-        # Exclude plots without geometry
-        qs = qs.filter(
-            polygon_wkt__isnull=False
-        ).exclude(polygon_wkt="")
-
         filename = f"plots_{form_id}_{job_id}"
 
-        if job.type == JobTypes.export_geojson:
-            file_path, count = generate_geojson(
-                qs, form, filename
+        if job.type == JobTypes.export_xlsx:
+            # XLSX: all plots, run farmer sync
+            sync_farmers_for_form(form)
+            ts = int(time.time())
+            safe_name = (
+                form.name.replace(" ", "_")
+            )
+            xlsx_filename = (
+                f"{safe_name}_{ts}"
+            )
+            file_path, count = generate_xlsx(
+                qs, form, xlsx_filename
             )
         else:
-            file_path, count = (
-                generate_shapefile(
-                    qs, form, filename
+            # SHP/GeoJSON require geometry
+            qs = qs.filter(
+                polygon_wkt__isnull=False
+            ).exclude(polygon_wkt="")
+
+            if job.type == (
+                JobTypes.export_geojson
+            ):
+                file_path, count = (
+                    generate_geojson(
+                        qs, form, filename
+                    )
                 )
-            )
+            else:
+                file_path, count = (
+                    generate_shapefile(
+                        qs, form, filename
+                    )
+                )
 
         job.status = JobStatus.done
         job.info = {

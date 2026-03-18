@@ -1,9 +1,15 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { Download, Loader2, Search } from "lucide-react";
+import { ChevronDown, Download, Loader2, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DashboardHeader } from "@/components/dashboard-header";
@@ -72,9 +78,10 @@ const DashboardPage = () => {
     setSelectedPlotId(null);
   }, [setSelectedPlotId]);
 
-  const handleExport = () => {
+  const handleExport = (format) => {
     startExport({
       formId: activeForm?.asset_uid,
+      format,
       status: activeTab,
       search,
       region,
@@ -149,24 +156,35 @@ const DashboardPage = () => {
             </Select>
             <Badge variant="secondary">{count} Data points</Badge>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleExport}
-            disabled={isExporting}
-          >
-            {isExporting ? (
-              <>
-                <Loader2 className="size-4 animate-spin" />
-                Exporting...
-              </>
-            ) : (
-              <>
-                <Download className="size-4" />
-                Export data
-              </>
-            )}
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" disabled={isExporting}>
+                {isExporting ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" />
+                    Exporting...
+                  </>
+                ) : (
+                  <>
+                    <Download className="size-4" />
+                    Export data
+                    <ChevronDown className="size-3" />
+                  </>
+                )}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => handleExport("shp")}>
+                Shapefile (.shp)
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleExport("geojson")}>
+                GeoJSON (.geojson)
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleExport("xlsx")}>
+                Clean Data (.xlsx)
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       )}
 

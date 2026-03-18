@@ -2,7 +2,9 @@ import time
 from datetime import datetime
 from datetime import timezone as tz
 
+from django.conf import settings as django_settings
 from django.db.models import Q
+from django.http import HttpResponse
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 from rest_framework import status, viewsets
@@ -14,7 +16,10 @@ from rest_framework.mixins import (
     RetrieveModelMixin,
     UpdateModelMixin,
 )
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import (
+    AllowAny,
+    IsAuthenticated,
+)
 from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 from drf_spectacular.types import OpenApiTypes
@@ -43,6 +48,7 @@ from api.v1.v1_odk.funcs import (
     validate_and_check_plot,
 )
 from api.v1.v1_odk.models import (
+    FarmerFieldMapping,
     FieldMapping,
     FieldSettings,
     FormMetadata,
@@ -63,8 +69,12 @@ from api.v1.v1_odk.serializers import (
     SyncTriggerSerializer,
     build_option_lookup,
 )
+from api.v1.v1_odk.export import _wkt_to_kml
 from api.v1.v1_odk.utils.area_calc import (
     calculate_area_ha,
+)
+from api.v1.v1_odk.utils.farmer_sync import (
+    sync_farmers_for_form,
 )
 from api.v1.v1_odk.utils.warning_rules import (
     evaluate_warnings,
@@ -231,6 +241,110 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
             for q in qs
         ]
         return Response(data)
+
+    @extend_schema(
+        tags=["Forms"],
+        summary=(
+            "Get or update farmer field mapping"
+        ),
+    )
+    @action(
+        detail=True,
+        methods=["get", "put"],
+        url_path="farmer-field-mapping",
+    )
+    def farmer_field_mapping(
+        self, request, asset_uid=None
+    ):
+        """GET: return current mapping.
+        PUT: create or update mapping."""
+        form = self.get_object()
+        if request.method == "GET":
+            mapping = FarmerFieldMapping.objects.filter(
+                form=form
+            ).first()
+            if not mapping:
+                return Response(
+                    {
+                        "unique_fields": [],
+                        "values_fields": [],
+                    }
+                )
+            return Response(
+                {
+                    "unique_fields": [
+                        f.strip()
+                        for f in (
+                            mapping.unique_fields
+                            .split(",")
+                        )
+                        if f.strip()
+                    ],
+                    "values_fields": [
+                        f.strip()
+                        for f in (
+                            mapping.values_fields
+                            .split(",")
+                        )
+                        if f.strip()
+                    ],
+                }
+            )
+
+        # PUT
+        unique = request.data.get(
+            "unique_fields", []
+        )
+        values = request.data.get(
+            "values_fields", []
+        )
+        if not unique:
+            return Response(
+                {
+                    "detail": (
+                        "unique_fields is required"
+                    )
+                },
+                status=(
+                    status.HTTP_400_BAD_REQUEST
+                ),
+            )
+
+        unique_str = ",".join(unique)
+        values_str = ",".join(values)
+
+        mapping, _ = (
+            FarmerFieldMapping.objects
+            .update_or_create(
+                form=form,
+                defaults={
+                    "unique_fields": unique_str,
+                    "values_fields": (
+                        values_str or unique_str
+                    ),
+                },
+            )
+        )
+        return Response(
+            {
+                "unique_fields": [
+                    f.strip()
+                    for f in (
+                        mapping.unique_fields
+                        .split(",")
+                    )
+                    if f.strip()
+                ],
+                "values_fields": [
+                    f.strip()
+                    for f in (
+                        mapping.values_fields
+                        .split(",")
+                    )
+                    if f.strip()
+                ],
+            }
+        )
 
     @extend_schema(
         request=SyncTriggerSerializer,
@@ -484,6 +598,9 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
             if plot.flagged_for_review:
                 plots_flagged += 1
 
+        # Sync farmer records from submissions
+        farmer_result = sync_farmers_for_form(form)
+
         return Response(
             {
                 "synced": len(results),
@@ -493,6 +610,12 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
                 "plots_flagged": plots_flagged,
                 "questions_synced": (
                     questions_synced
+                ),
+                "farmers_created": (
+                    farmer_result["created"]
+                ),
+                "farmers_updated": (
+                    farmer_result["updated"]
                 ),
             }
         )
@@ -1034,6 +1157,59 @@ class PlotViewSet(
 
     @extend_schema(
         tags=["Plots"],
+        summary="Download plot polygon as KML",
+    )
+    @action(
+        detail=True,
+        methods=["get"],
+        permission_classes=[AllowAny],
+    )
+    def kml(self, request, uuid=None):
+        """Return KML file for a plot polygon.
+
+        Authenticated via ?key=STORAGE_SECRET."""
+        key = request.query_params.get("key", "")
+        if key != django_settings.STORAGE_SECRET:
+            return Response(
+                {"detail": "Invalid key"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        plot = self.get_object()
+        if not plot.polygon_wkt:
+            return Response(
+                {"detail": "No polygon data"},
+                status=(
+                    status.HTTP_404_NOT_FOUND
+                ),
+            )
+        name = (
+            plot.plot_name
+            or str(plot.uuid)
+        )
+        kml_content = _wkt_to_kml(
+            plot.polygon_wkt, name=name
+        )
+        if not kml_content:
+            return Response(
+                {"detail": "Invalid geometry"},
+                status=(
+                    status.HTTP_422_UNPROCESSABLE_ENTITY
+                ),
+            )
+        resp = HttpResponse(
+            kml_content,
+            content_type=(
+                "application/vnd"
+                ".google-earth.kml+xml"
+            ),
+        )
+        resp["Content-Disposition"] = (
+            f'attachment; filename="{name}.kml"'
+        )
+        return resp
+
+    @extend_schema(
+        tags=["Plots"],
         summary="Filter options for dropdowns",
     )
     @action(detail=False, methods=["get"])
@@ -1213,13 +1389,15 @@ class PlotViewSet(
         valid_formats = {
             "shp": JobTypes.export_shapefile,
             "geojson": JobTypes.export_geojson,
+            "xlsx": JobTypes.export_xlsx,
         }
         if fmt not in valid_formats:
             return Response(
                 {
                     "message": (
-                        "Invalid format. "
-                        "Use 'shp' or 'geojson'"
+                        "Invalid format. Use "
+                        "'shp', 'geojson', "
+                        "or 'xlsx'"
                     )
                 },
                 status=(

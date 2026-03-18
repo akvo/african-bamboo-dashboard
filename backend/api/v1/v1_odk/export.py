@@ -6,6 +6,7 @@ import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import quote
 from zipfile import ZipFile
 
 import shapefile
@@ -13,11 +14,19 @@ from shapely import wkt as shapely_wkt
 from shapely.geometry import mapping
 from shapely.geometry.polygon import orient
 
+from openpyxl import Workbook
+
 from django.conf import settings
+from api.v1.v1_odk.models import (
+    FieldMapping,
+    FarmerFieldMapping,
+    FormQuestion,
+)
 from api.v1.v1_odk.serializers import (
     build_option_lookup,
     resolve_value,
 )
+from api.v1.v1_users.models import SystemUser
 from utils import storage
 
 logger = logging.getLogger(__name__)
@@ -223,6 +232,62 @@ def resolve_plot_attributes(
             submit_time
         ),
     }
+
+
+def _wkt_to_kml(wkt_string, name="Plot"):
+    """Convert WKT polygon to a KML document string.
+
+    Returns KML XML string or empty string on
+    failure.
+    """
+    if not wkt_string:
+        return ""
+    try:
+        geom = _parse_wkt(wkt_string)
+        if geom.geom_type == "MultiPolygon":
+            polygons = list(geom.geoms)
+        elif geom.geom_type == "Polygon":
+            polygons = [geom]
+        else:
+            return ""
+
+        placemarks = []
+        for i, poly in enumerate(polygons):
+            coords = " ".join(
+                f"{c[0]},{c[1]},0"
+                for c in poly.exterior.coords
+            )
+            pm_name = (
+                name if len(polygons) == 1
+                else f"{name} ({i + 1})"
+            )
+            placemarks.append(
+                f"<Placemark>"
+                f"<name>{pm_name}</name>"
+                f"<Polygon>"
+                f"<outerBoundaryIs>"
+                f"<LinearRing>"
+                f"<coordinates>"
+                f"{coords}"
+                f"</coordinates>"
+                f"</LinearRing>"
+                f"</outerBoundaryIs>"
+                f"</Polygon>"
+                f"</Placemark>"
+            )
+
+        return (
+            '<?xml version="1.0" '
+            'encoding="UTF-8"?>'
+            '<kml xmlns='
+            '"http://www.opengis.net/kml/2.2">'
+            "<Document>"
+            f"<name>{name}</name>"
+            + "".join(placemarks)
+            + "</Document></kml>"
+        )
+    except Exception:
+        return ""
 
 
 def _wkt_to_pyshp_parts(wkt_string):
@@ -461,6 +526,309 @@ def generate_geojson(
         )
 
     return stored, len(features)
+
+
+WHITESPACE_RE = re.compile(r"\s+")
+
+
+def _extract_avg_altitude(raw_data, form):
+    """Extract average altitude from the raw ODK
+    geoshape string in raw_data.
+
+    ODK format: "lat lng alt acc; ..."
+    Returns rounded float or empty string.
+    """
+    polygon_field = form.polygon_field or ""
+    fields = [
+        f.strip()
+        for f in polygon_field.split(",")
+        if f.strip()
+    ]
+    geoshape_str = None
+    for field in fields:
+        val = raw_data.get(field)
+        if val:
+            geoshape_str = val
+            break
+    if not geoshape_str:
+        return ""
+    try:
+        segments = geoshape_str.strip().split(";")
+        altitudes = []
+        for seg in segments:
+            seg = seg.strip()
+            if not seg:
+                continue
+            parts = WHITESPACE_RE.split(seg)
+            if len(parts) >= 3:
+                alt = float(parts[2])
+                altitudes.append(alt)
+        if altitudes:
+            avg = sum(altitudes) / len(altitudes)
+            return round(avg, 3)
+    except (ValueError, IndexError):
+        pass
+    return ""
+
+
+PLOT_TABLE_HEADERS = [
+    "Plot ID",
+    "Farmer ID",
+    "Title Deed First Page",
+    "Title Deed Second Page",
+    "Latitude",
+    "Longitude",
+    "Altitude",
+    "Entire Area Polygon",
+    "Plantation Polygon",
+]
+
+
+def _get_kobo_base_url():
+    """Get the Kobo base URL from the first
+    SystemUser that has one configured."""
+    return (
+        SystemUser.objects.filter(
+            kobo_url__isnull=False,
+        )
+        .exclude(kobo_url="")
+        .values_list("kobo_url", flat=True)
+        .first()
+    ) or ""
+
+
+def _resolve_attachment_url(
+    raw_data, field_name, kobo_base_url
+):
+    """Resolve Kobo attachment URL for a title
+    deed field.
+
+    1. Get filename from raw_data[field_name]
+    2. Match by media_file_basename in _attachments
+    3. Build: kobo_url/media/original?media_file=
+       <url-encoded attachment.filename>
+    """
+    if not field_name:
+        return ""
+    file_val = raw_data.get(field_name)
+    if not file_val:
+        return ""
+    attachments = raw_data.get(
+        "_attachments", []
+    )
+    for att in attachments:
+        basename = att.get(
+            "media_file_basename", ""
+        )
+        if basename == file_val:
+            att_filename = att.get("filename", "")
+            if att_filename and kobo_base_url:
+                encoded = quote(
+                    att_filename, safe=""
+                )
+                return (
+                    f"{kobo_base_url}"
+                    f"/media/original"
+                    f"?media_file="
+                    f"{encoded}"
+                )
+    return ""
+
+
+def _build_farmer_headers(form):
+    """Build dynamic Farmer table headers from
+    FarmerFieldMapping: unique_fields first,
+    then values_fields (deduped).
+
+    Returns (headers, all_fields) where headers
+    starts with 'FarmerID(primary key)' followed
+    by FormQuestion.label for each field.
+    all_fields is the ordered list of raw_data
+    keys matching the headers.
+    """
+    mapping = FarmerFieldMapping.objects.filter(
+        form=form
+    ).first()
+    if not mapping:
+        return ["FarmerID(primary key)"], []
+
+    unique_fields = [
+        f.strip()
+        for f in mapping.unique_fields.split(",")
+        if f.strip()
+    ]
+    values_fields = [
+        f.strip()
+        for f in mapping.values_fields.split(",")
+        if f.strip()
+    ]
+
+    # Combine: unique_fields first, then
+    # values_fields (skip duplicates)
+    seen = set(unique_fields)
+    all_fields = list(unique_fields)
+    for f in values_fields:
+        if f not in seen:
+            all_fields.append(f)
+            seen.add(f)
+
+    # Build question_name → label lookup
+    q_labels = dict(
+        FormQuestion.objects.filter(
+            form=form,
+            name__in=all_fields,
+        ).values_list("name", "label")
+    )
+
+    headers = ["FarmerID(primary key)"]
+    for field in all_fields:
+        headers.append(
+            q_labels.get(field, field)
+        )
+
+    return headers, all_fields
+
+
+def generate_xlsx(queryset, form, filename):
+    """Generate an XLSX file with two sheets:
+    'Farmer table' and 'Plot Table'.
+
+    Matches the Afforestation Monitoring Database
+    column format.
+
+    Returns (stored_file_path, record_count).
+    """
+    storage_key = quote(
+        settings.STORAGE_SECRET, safe=""
+    )
+    web_domain = settings.WEBDOMAIN.rstrip("/")
+    kobo_base_url = _get_kobo_base_url()
+
+    # Build dynamic farmer headers
+    farmer_headers, farmer_fields = (
+        _build_farmer_headers(form)
+    )
+
+    # Resolve title deed field names
+    deed_map = {}
+    deed_qs = FieldMapping.objects.filter(
+        form=form,
+        field__name__in=[
+            "title_deed_1",
+            "title_deed_2",
+        ],
+    ).select_related("field", "form_question")
+    for m in deed_qs:
+        deed_map[m.field.name] = (
+            m.form_question.name
+        )
+    td1_key = deed_map.get("title_deed_1")
+    td2_key = deed_map.get("title_deed_2")
+
+    wb = Workbook()
+
+    # --- Farmer table sheet ---
+    ws_farmer = wb.active
+    ws_farmer.title = "Farmer table"
+    ws_farmer.append(farmer_headers)
+
+    seen_farmers = {}
+    plot_rows = []
+
+    qs = queryset.select_related(
+        "submission", "farmer", "form"
+    )
+
+    for plot in qs.iterator():
+        sub = plot.submission
+        raw = sub.raw_data or {} if sub else {}
+        farmer = plot.farmer
+
+        farmer_id = ""
+        if farmer:
+            farmer_id = f"AB{farmer.uid}"
+            if farmer.uid not in seen_farmers:
+                seen_farmers[farmer.uid] = (
+                    farmer.values or {}
+                )
+
+        # Title deed URLs
+        td1_url = _resolve_attachment_url(
+            raw, td1_key, kobo_base_url
+        )
+        td2_url = _resolve_attachment_url(
+            raw, td2_key, kobo_base_url
+        )
+
+        # Centroid from polygon
+        centroid_lat = ""
+        centroid_lon = ""
+        if plot.polygon_wkt:
+            try:
+                geom = _parse_wkt(
+                    plot.polygon_wkt
+                )
+                c = geom.centroid
+                centroid_lat = round(c.y, 6)
+                centroid_lon = round(c.x, 6)
+            except Exception:
+                pass
+
+        plot_id = (
+            f"PLT{sub.kobo_id}" if sub else ""
+        )
+
+        altitude = _extract_avg_altitude(
+            raw, form
+        )
+
+        plot_rows.append([
+            plot_id,
+            farmer_id,
+            td1_url,
+            td2_url,
+            centroid_lat,
+            centroid_lon,
+            altitude,
+            (
+                f"{web_domain}"
+                f"/api/v1/odk/plots"
+                f"/{plot.uuid}/kml"
+                f"/?key={storage_key}"
+                if plot.polygon_wkt
+                else ""
+            ),
+            "",  # Plantation Polygon
+        ])
+
+    # Write farmer rows sorted by uid
+    for uid in sorted(seen_farmers.keys()):
+        vals = seen_farmers[uid]
+        row = [f"AB{uid}"]
+        for field in farmer_fields:
+            row.append(vals.get(field) or "")
+        ws_farmer.append(row)
+
+    # --- Plot Table sheet ---
+    ws_plot = wb.create_sheet(title="Plot Table")
+    ws_plot.append(PLOT_TABLE_HEADERS)
+    for row in plot_rows:
+        ws_plot.append(row)
+
+    # Write to temp file and upload
+    xlsx_name = f"{filename}.xlsx"
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_path = os.path.join(
+            tmpdir, xlsx_name
+        )
+        wb.save(tmp_path)
+        stored = storage.upload(
+            tmp_path,
+            folder=EXPORT_FOLDER,
+            filename=xlsx_name,
+        )
+
+    return stored, len(plot_rows)
 
 
 def cleanup_old_exports(max_age_hours=24):

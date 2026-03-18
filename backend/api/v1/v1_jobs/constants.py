@@ -1,10 +1,12 @@
 class JobTypes:
     export_shapefile = 1
     export_geojson = 2
+    export_xlsx = 3
 
     FieldStr = {
         export_shapefile: "export_shapefile",
         export_geojson: "export_geojson",
+        export_xlsx: "export_xlsx",
     }
 
 

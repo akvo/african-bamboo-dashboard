@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { StatusBadge } from "@/components/status-badge";
 import { DataTable, AttachmentCell, TextCell } from "@/components/table-view";
+import { PREFIX_PLOT_ID } from "@/lib/constants";
 
 const IMAGE_TYPES = new Set(["image"]);
 const EXCLUDED_QUESTION_NAMES = ["region", "region_specify"];
@@ -54,7 +55,7 @@ export function SubmissionsTable({
         className: "max-w-[240px]",
         cell: (row) => (
           <TextCell className="text-foreground font-bold">
-            {row.kobo_id ? `#${row.kobo_id}` : row.instance_name || "—"}
+            {row.kobo_id ? `${PREFIX_PLOT_ID}${row.kobo_id}` : "—"}
           </TextCell>
         ),
       },

@@ -103,3 +103,6 @@ DEFAULT_FIELDS = [
     "title_deed_1",
     "title_deed_2",
 ]
+
+PREFIX_PLOT_ID = "PLT"
+PREFIX_FARM_ID = "AB"

@@ -82,12 +82,29 @@ from api.v1.v1_odk.utils.farmer_sync import (
 from api.v1.v1_odk.utils.warning_rules import (
     evaluate_warnings,
 )
+from api.v1.v1_odk.constants import (
+    PREFIX_FARM_ID,
+    PREFIX_PLOT_ID,
+)
 from utils.encryption import decrypt
 from utils.kobo_client import KoboClient
 from utils.polygon import (
     extract_plot_data,
     wkt_to_odk_geoshape,
 )
+
+
+def _strip_id_prefix(value):
+    """Strip PLT or AB prefix from a search term
+    so users can search with or without prefix."""
+    if not value:
+        return value
+    upper = value.upper()
+    if upper.startswith(PREFIX_PLOT_ID):
+        return value[len(PREFIX_PLOT_ID):]
+    if upper.startswith(PREFIX_FARM_ID):
+        return value[len(PREFIX_FARM_ID):]
+    return value
 
 
 def _parse_date_param(params, name):
@@ -810,12 +827,20 @@ class SubmissionViewSet(
             )
         search = params.get("search")
         if search:
+            stripped = _strip_id_prefix(search)
             qs = qs.filter(
                 Q(
-                    plot__plot_name__icontains=search
+                    plot__plot_name__icontains=(
+                        search
+                    )
                 )
                 | Q(
-                    instance_name__icontains=search
+                    instance_name__icontains=(
+                        search
+                    )
+                )
+                | Q(
+                    kobo_id__icontains=stripped
                 )
             )
         start_date, end_date = _parse_date_range(
@@ -1037,9 +1062,17 @@ class PlotViewSet(
                 )
         search = params.get("search")
         if search:
+            stripped = _strip_id_prefix(search)
             qs = qs.filter(
-                Q(plot_name__icontains=search) |
-                Q(submission__instance_name__icontains=search)
+                Q(
+                    plot_name__icontains=search
+                )
+                | Q(
+                    submission__instance_name__icontains=search  # noqa: E501
+                )
+                | Q(
+                    submission__kobo_id__icontains=stripped  # noqa: E501
+                )
             )
         region = params.get("region")
         if region:
@@ -1691,8 +1724,12 @@ class FarmerViewSet(
             )
         )
         if search:
+            stripped = _strip_id_prefix(search)
             qs = qs.filter(
-                lookup_key__icontains=search
+                Q(
+                    lookup_key__icontains=search
+                )
+                | Q(uid__icontains=stripped)
             )
         return qs.order_by("uid")
 

@@ -6,6 +6,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { getPlotStatus } from "@/lib/plot-utils";
 import { Separator } from "@/components/ui/separator";
 import { splitFlags } from "@/lib/flag";
+import { PREFIX_PLOT_ID } from "@/lib/constants";
 
 const PlotCardItem = ({
   plot,
@@ -38,7 +39,7 @@ const PlotCardItem = ({
         <div className="flex min-w-0 gap-1">
           <span>Plot ID:&nbsp;</span>
           <span className="truncate text-sm font-bold text-foreground">
-            {plot.plot_id ? `#${plot.plot_id}` : plot.instance_name || "—"}
+            {plot.plot_id ? `${PREFIX_PLOT_ID}${plot.plot_id}` : "—"}
           </span>
         </div>
         <StatusBadge status={status} />
@@ -57,7 +58,7 @@ const PlotCardItem = ({
         <div className="min-w-0 flex-1 pl-3">
           <p className="text-xs text-muted-foreground">Region:</p>
           <p className="truncate text-sm text-foreground">
-            {plot.region || "—"}
+            {plot?.region || "—"}
           </p>
         </div>
       </div>
@@ -67,10 +68,12 @@ const PlotCardItem = ({
       {/* Last checked by */}
       <div className="flex w-full items-center gap-2 px-3 py-2.5">
         <div className="min-w-0 flex-1">
-          <p className="text-xs text-muted-foreground">Last checked by:</p>
+          {lastCheckedAt && (
+            <p className="text-xs text-muted-foreground">Last checked by:</p>
+          )}
           <div className="flex items-center gap-2">
             <span className="truncate text-sm text-foreground">
-              {lastCheckedBy || "—"}
+              {lastCheckedBy || ""}
             </span>
             {lastCheckedAt && (
               <>

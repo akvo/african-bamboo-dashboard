@@ -30,6 +30,7 @@ import {
 import { Search, ChevronLeft, ChevronRight } from "lucide-react";
 import { useForms } from "@/hooks/useForms";
 import api from "@/lib/api";
+import { useMapState } from "@/hooks/useMapState";
 
 const PAGE_SIZE = 10;
 
@@ -152,7 +153,7 @@ function FarmersTable({ farmers }) {
         <TableHeader>
           <TableRow>
             <TableHead>Farmer ID</TableHead>
-            <TableHead>Name</TableHead>
+            {/* <TableHead>Name</TableHead> */}
             {valueKeys.map((key) => (
               <TableHead key={key} className="capitalize">
                 {key.replace(/_/g, " ")}
@@ -167,7 +168,7 @@ function FarmersTable({ farmers }) {
               <TableCell className="font-mono text-xs">
                 {farmer.farmer_id}
               </TableCell>
-              <TableCell className="font-medium">{farmer.name}</TableCell>
+              {/* <TableCell className="font-medium">{farmer.name}</TableCell> */}
               {valueKeys.map((key) => (
                 <TableCell key={key}>{farmer.values?.[key] ?? ""}</TableCell>
               ))}
@@ -225,6 +226,7 @@ function SkeletonTable() {
 
 export default function FarmersAndEnumeratorsPage() {
   const { forms, activeForm, setActiveForm } = useForms();
+  const { setSelectedPlotId } = useMapState();
   const [activeTab, setActiveTab] = useState("farmers");
 
   const formId = activeForm?.asset_uid || "";
@@ -261,7 +263,10 @@ export default function FarmersAndEnumeratorsPage() {
                 value={formId}
                 onValueChange={(val) => {
                   const form = forms.find((f) => f.asset_uid === val);
-                  if (form) setActiveForm(form);
+                  if (form) {
+                    setSelectedPlotId(null);
+                    setActiveForm(form);
+                  }
                 }}
               >
                 <SelectTrigger>

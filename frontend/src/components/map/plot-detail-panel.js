@@ -20,6 +20,7 @@ import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import PlotHeaderCard from "@/components/map/plot-header-card";
 import AttachmentCard from "@/components/map/attachment-card";
+import { PREFIX_FARM_ID } from "@/lib/constants";
 
 function SectionHeader({ icon: Icon, title }) {
   return (
@@ -243,7 +244,9 @@ export default function PlotDetailPanel({
               icon={User}
               title="Farmer"
               name={details?.farmer?.name}
-              subTitle={plot?.farmer_uid ? `ID number: AB${plot.farmer_uid}` : null}
+              subTitle={
+                plot?.farmer_uid ? `ID number: ${PREFIX_FARM_ID}${plot.farmer_uid}` : null
+              }
               fields={[
                 { label: "Father's name", value: details?.farmer?.fatherName },
                 {

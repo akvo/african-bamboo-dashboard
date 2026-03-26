@@ -14,6 +14,7 @@ import {
   AttachmentCell,
   TextCell,
   SortableHeader,
+  getAriaSort,
 } from "@/components/table-view";
 import { PREFIX_PLOT_ID } from "@/lib/constants";
 
@@ -67,6 +68,7 @@ export function SubmissionsTable({
             Plot ID
           </SortableHeader>
         ),
+        ariaSort: getAriaSort("kobo_id", ordering),
         sticky: true,
         className: "max-w-[240px]",
         cell: (row) => (
@@ -93,6 +95,7 @@ export function SubmissionsTable({
             Reviewed by
           </SortableHeader>
         ),
+        ariaSort: getAriaSort("reviewed_by", ordering),
         cell: (row) => <TextCell>{row.reviewed_by || "-"}</TextCell>,
       },
       {
@@ -106,6 +109,7 @@ export function SubmissionsTable({
             Start date
           </SortableHeader>
         ),
+        ariaSort: getAriaSort("start", ordering),
         cell: (row) => (
           <TextCell>
             {row.start ? new Date(row.start).toLocaleDateString("en-GB") : null}
@@ -123,6 +127,7 @@ export function SubmissionsTable({
             End date
           </SortableHeader>
         ),
+        ariaSort: getAriaSort("end", ordering),
         cell: (row) => (
           <TextCell>
             {row.end ? new Date(row.end).toLocaleDateString("en-GB") : null}
@@ -150,6 +155,7 @@ export function SubmissionsTable({
             Area (ha)
           </SortableHeader>
         ),
+        ariaSort: getAriaSort("area_ha", ordering),
         cell: (row) => (
           <TextCell>{row.area_ha != null ? row.area_ha : "-"}</TextCell>
         ),
@@ -169,6 +175,9 @@ export function SubmissionsTable({
       ) : (
         q.label
       ),
+      ariaSort: sortableFields.includes(q.name)
+        ? getAriaSort(q.name, ordering)
+        : undefined,
       headerClassName: "max-w-[250px] truncate",
       className: "max-w-[250px] truncate text-muted-foreground",
       cell: (row) => {

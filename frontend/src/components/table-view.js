@@ -80,6 +80,7 @@ export function DataTable({
                   style={{
                     fontSize: 12,
                   }}
+                  aria-sort={col.ariaSort}
                 >
                   {col.header}
                 </TableHead>
@@ -135,24 +136,42 @@ export function SortableHeader({ children, columnKey, currentSort, onSort }) {
 
   let Icon = ArrowUpDown;
   let iconClass = "size-3.5 text-muted-foreground/50";
+  let sortLabel = "not sorted";
   if (isAsc) {
     Icon = ArrowUp;
     iconClass = "size-3.5";
+    sortLabel = "sorted ascending";
   } else if (isDesc) {
     Icon = ArrowDown;
     iconClass = "size-3.5";
+    sortLabel = "sorted descending";
   }
 
   return (
     <button
       type="button"
-      className="flex items-center gap-1 hover:text-foreground"
+      className={cn(
+        "flex items-center gap-1 hover:text-foreground",
+        "rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
+      )}
       onClick={handleClick}
+      aria-label={`Sort by ${typeof children === "string" ? children : columnKey}, ${sortLabel}`}
     >
       <span>{children}</span>
-      <Icon className={iconClass} />
+      <Icon className={iconClass} aria-hidden="true" />
     </button>
   );
+}
+
+/**
+ * Helper to compute the aria-sort value for a column.
+ * Use in column definitions: { ariaSort: getAriaSort("kobo_id", ordering) }
+ */
+export function getAriaSort(columnKey, currentSort) {
+  if (!currentSort) return undefined;
+  const field = currentSort.replace("-", "");
+  if (field !== columnKey) return undefined;
+  return currentSort.startsWith("-") ? "descending" : "ascending";
 }
 
 export function TwoLineCell({ primary, secondary }) {

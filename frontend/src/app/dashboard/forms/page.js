@@ -1,8 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { logout } from "@/app/actions/auth";
 import { useForms } from "@/hooks/useForms";
+import {
+  EXCLUDED_QUESTION_TYPES,
+  EXCLUDED_QUESTION_NAMES,
+} from "@/lib/constants";
 import {
   Card,
   CardContent,
@@ -359,6 +363,17 @@ export default function FormsPage() {
       prev.includes(name) ? prev.filter((f) => f !== name) : [...prev, name],
     );
   }
+
+  const sortableEligibleFields = useMemo(() => {
+    const mapped = new Set([...regionFields, ...subRegionFields]);
+    return formFields.filter(
+      (f) =>
+        !mapped.has(f.name) &&
+        !EXCLUDED_QUESTION_TYPES.includes(f.type) &&
+        !EXCLUDED_QUESTION_NAMES.includes(f.name) &&
+        !f.name.startsWith("validate_"),
+    );
+  }, [formFields, regionFields, subRegionFields]);
 
   function toggleFarmerUniqueField(name) {
     setFarmerUniqueFields((prev) =>
@@ -860,8 +875,8 @@ export default function FormsPage() {
                       </div>
                     )}
 
-                    {/* Sortable fields - any question type */}
-                    {formFields.length > 0 && (
+                    {/* Sortable fields - only questions visible as table columns */}
+                    {sortableEligibleFields.length > 0 && (
                       <div className="space-y-2">
                         <Label>Sortable fields</Label>
                         <DropdownMenu>
@@ -893,7 +908,7 @@ export default function FormsPage() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
-                            {formFields.map((field) => (
+                            {sortableEligibleFields.map((field) => (
                               <DropdownMenuCheckboxItem
                                 key={field.name}
                                 checked={sortableFields.includes(field.name)}
@@ -907,9 +922,9 @@ export default function FormsPage() {
                           </DropdownMenuContent>
                         </DropdownMenu>
                         <p className="text-xs text-muted-foreground">
-                          Fields that can be sorted in the submissions table.
-                          Columns with sorting enabled will show sort arrows in
-                          the table header.
+                          Only fields visible as columns in the submissions
+                          table are listed. Columns with sorting enabled will
+                          show sort arrows in the table header.
                         </p>
                       </div>
                     )}

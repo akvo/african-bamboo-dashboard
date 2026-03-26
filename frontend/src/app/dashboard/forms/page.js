@@ -139,8 +139,10 @@ export default function FormsPage() {
         message: parts.join(". ") + ".",
       });
     } catch (err) {
+      const isKoboAuth =
+        err.response?.data?.error_type === "kobo_unauthorized";
       setStatus({
-        type: "error",
+        type: isKoboAuth ? "kobo_unauthorized" : "error",
         message:
           err.response?.data?.message ||
           err.response?.data?.detail ||
@@ -451,10 +453,23 @@ export default function FormsPage() {
               className={`mt-4 rounded-md p-3 text-sm ${
                 status.type === "success"
                   ? "bg-status-approved/10 text-status-approved"
-                  : "bg-destructive/10 text-destructive"
+                  : status.type === "kobo_unauthorized"
+                    ? "bg-amber-500/10 text-amber-700 dark:text-amber-400"
+                    : "bg-destructive/10 text-destructive"
               }`}
             >
               {status.message}
+              {status.type === "kobo_unauthorized" && (
+                <>
+                  {" "}
+                  <a
+                    href="/login"
+                    className="underline font-medium hover:opacity-80"
+                  >
+                    Go to login
+                  </a>
+                </>
+              )}
             </div>
           )}
         </CardContent>

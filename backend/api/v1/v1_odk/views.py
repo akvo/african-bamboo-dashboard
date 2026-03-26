@@ -7,91 +7,46 @@ from django.conf import settings as django_settings
 from django.db.models import Count, Q
 from django.http import HttpResponse
 from django.utils import timezone
-from drf_spectacular.utils import extend_schema
+from django_q.tasks import async_task
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
-from rest_framework.mixins import (
-    DestroyModelMixin,
-    ListModelMixin,
-    RetrieveModelMixin,
-    UpdateModelMixin,
-)
-from rest_framework.permissions import (
-    AllowAny,
-    IsAuthenticated,
-)
+from rest_framework.mixins import (DestroyModelMixin, ListModelMixin,
+                                   RetrieveModelMixin, UpdateModelMixin)
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
-from drf_spectacular.types import OpenApiTypes
-from drf_spectacular.utils import OpenApiParameter
 
-from django_q.tasks import async_task
-
-from api.v1.v1_jobs.constants import (
-    JobStatus,
-    JobTypes,
-)
+from api.v1.v1_jobs.constants import JobStatus, JobTypes
 from api.v1.v1_jobs.models import Jobs
-from api.v1.v1_jobs.serializers import (
-    JobSerializer,
-)
-from api.v1.v1_odk.constants import (
-    EXCLUDED_QUESTION_TYPES,
-    ApprovalStatusTypes,
-)
-from api.v1.v1_odk.funcs import (
-    MAPPING_FIELDS,
-    check_and_flag_overlaps,
-    dispatch_kobo_geometry_sync,
-    rederive_plots,
-    sync_form_questions,
-    validate_and_check_plot,
-)
-from api.v1.v1_odk.models import (
-    Farmer,
-    FarmerFieldMapping,
-    FieldMapping,
-    FieldSettings,
-    FormMetadata,
-    FormQuestion,
-    Plot,
-    RejectionAudit,
-    Submission,
-)
-from api.v1.v1_odk.serializers import (
-    FieldMappingSerializer,
-    FieldSettingsSerializer,
-    FormMetadataSerializer,
-    PlotOverlapQuerySerializer,
-    PlotSerializer,
-    SubmissionDetailSerializer,
-    SubmissionListSerializer,
-    SubmissionUpdateSerializer,
-    SyncTriggerSerializer,
-    build_option_lookup,
-    resolve_value,
-)
+from api.v1.v1_jobs.serializers import JobSerializer
+from api.v1.v1_odk.constants import (EXCLUDED_QUESTION_TYPES, PREFIX_FARM_ID,
+                                     PREFIX_PLOT_ID, ApprovalStatusTypes)
 from api.v1.v1_odk.export import _wkt_to_kml
-from api.v1.v1_odk.utils.area_calc import (
-    calculate_area_ha,
-)
-from api.v1.v1_odk.utils.farmer_sync import (
-    sync_farmers_for_form,
-)
-from api.v1.v1_odk.utils.warning_rules import (
-    evaluate_warnings,
-)
-from api.v1.v1_odk.constants import (
-    PREFIX_FARM_ID,
-    PREFIX_PLOT_ID,
-)
+from api.v1.v1_odk.funcs import (MAPPING_FIELDS, check_and_flag_overlaps,
+                                 dispatch_kobo_geometry_sync, rederive_plots,
+                                 sync_form_questions, validate_and_check_plot)
+from api.v1.v1_odk.models import (Farmer, FarmerFieldMapping, FieldMapping,
+                                  FieldSettings, FormMetadata, FormQuestion,
+                                  Plot, RejectionAudit, Submission)
+from api.v1.v1_odk.serializers import (FieldMappingSerializer,
+                                       FieldSettingsSerializer,
+                                       FormMetadataSerializer,
+                                       PlotOverlapQuerySerializer,
+                                       PlotSerializer,
+                                       SubmissionDetailSerializer,
+                                       SubmissionListSerializer,
+                                       SubmissionUpdateSerializer,
+                                       SyncTriggerSerializer,
+                                       build_option_lookup, resolve_value)
+from api.v1.v1_odk.utils.area_calc import calculate_area_ha
+from api.v1.v1_odk.utils.farmer_sync import sync_farmers_for_form
+from api.v1.v1_odk.utils.warning_rules import evaluate_warnings
 from utils.encryption import decrypt
-from utils.kobo_client import KoboClient
-from utils.polygon import (
-    extract_plot_data,
-    wkt_to_odk_geoshape,
-)
+from utils.kobo_client import KoboClient, KoboUnauthorizedError
+from utils.polygon import extract_plot_data, wkt_to_odk_geoshape
 
 
 def _strip_id_prefix(value):
@@ -101,9 +56,9 @@ def _strip_id_prefix(value):
         return value
     upper = value.upper()
     if upper.startswith(PREFIX_PLOT_ID):
-        return value[len(PREFIX_PLOT_ID):]
+        return value[len(PREFIX_PLOT_ID) :]
     if upper.startswith(PREFIX_FARM_ID):
-        return value[len(PREFIX_FARM_ID):]
+        return value[len(PREFIX_FARM_ID) :]
     return value
 
 
@@ -119,9 +74,7 @@ def _parse_date_param(params, name):
     try:
         return int(raw)
     except (ValueError, TypeError):
-        raise ValidationError(
-            {name: "Must be an integer timestamp."}
-        )
+        raise ValidationError({name: "Must be an integer timestamp."})
 
 
 def _parse_date_range(params):
@@ -132,18 +85,8 @@ def _parse_date_range(params):
     """
     start = _parse_date_param(params, "start_date")
     end = _parse_date_param(params, "end_date")
-    if (
-        start is not None
-        and end is not None
-        and start > end
-    ):
-        raise ValidationError(
-            {
-                "start_date": (
-                    "start_date must be <= end_date."
-                )
-            }
-        )
+    if start is not None and end is not None and start > end:
+        raise ValidationError({"start_date": ("start_date must be <= end_date.")})
     return start, end
 
 
@@ -155,11 +98,7 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
     lookup_field = "asset_uid"
 
     def _make_kobo_client(self, user):
-        if (
-            not user.kobo_url
-            or not user.kobo_username
-            or not user.kobo_password
-        ):
+        if not user.kobo_url or not user.kobo_username or not user.kobo_password:
             return None
         return KoboClient(
             user.kobo_url,
@@ -169,15 +108,9 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
 
     def perform_update(self, serializer):
         form = self.get_object()
-        old = {
-            f: getattr(form, f)
-            for f in MAPPING_FIELDS
-        }
+        old = {f: getattr(form, f) for f in MAPPING_FIELDS}
         instance = serializer.save()
-        changed = any(
-            getattr(instance, f) != old[f]
-            for f in MAPPING_FIELDS
-        )
+        changed = any(getattr(instance, f) != old[f] for f in MAPPING_FIELDS)
         if changed:
             rederive_plots(instance)
 
@@ -202,14 +135,9 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
         Kobo API call is needed.
         """
         form = self.get_object()
-        qs = FormQuestion.objects.filter(
-            form=form
-        ).order_by("pk")
+        qs = FormQuestion.objects.filter(form=form).order_by("pk")
 
-        if (
-            request.query_params.get("is_filter")
-            == "true"
-        ):
+        if request.query_params.get("is_filter") == "true":
             excluded = set()
             for spec in [
                 form.region_field,
@@ -222,9 +150,7 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
                         if s:
                             excluded.add(s)
             if excluded:
-                qs = qs.exclude(
-                    name__in=excluded
-                )
+                qs = qs.exclude(name__in=excluded)
 
         fields = [
             {
@@ -242,15 +168,11 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
         summary="List local form questions with IDs",
     )
     @action(detail=True, methods=["get"])
-    def form_questions(
-        self, request, asset_uid=None
-    ):
+    def form_questions(self, request, asset_uid=None):
         """Return FormQuestion records stored in DB
         for a given form, including their IDs."""
         form = self.get_object()
-        qs = FormQuestion.objects.filter(
-            form=form
-        ).order_by("pk")
+        qs = FormQuestion.objects.filter(form=form).order_by("pk")
         data = [
             {
                 "id": q.pk,
@@ -264,25 +186,19 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
 
     @extend_schema(
         tags=["Forms"],
-        summary=(
-            "Get or update farmer field mapping"
-        ),
+        summary=("Get or update farmer field mapping"),
     )
     @action(
         detail=True,
         methods=["get", "put"],
         url_path="farmer-field-mapping",
     )
-    def farmer_field_mapping(
-        self, request, asset_uid=None
-    ):
+    def farmer_field_mapping(self, request, asset_uid=None):
         """GET: return current mapping.
         PUT: create or update mapping."""
         form = self.get_object()
         if request.method == "GET":
-            mapping = FarmerFieldMapping.objects.filter(
-                form=form
-            ).first()
+            mapping = FarmerFieldMapping.objects.filter(form=form).first()
             if not mapping:
                 return Response(
                     {
@@ -294,119 +210,68 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
                 {
                     "unique_fields": [
                         f.strip()
-                        for f in (
-                            mapping.unique_fields
-                            .split(",")
-                        )
+                        for f in (mapping.unique_fields.split(","))
                         if f.strip()
                     ],
                     "values_fields": [
                         f.strip()
-                        for f in (
-                            mapping.values_fields
-                            .split(",")
-                        )
+                        for f in (mapping.values_fields.split(","))
                         if f.strip()
                     ],
                 }
             )
 
         # PUT
-        raw_unique = request.data.get(
-            "unique_fields", []
-        )
-        raw_values = request.data.get(
-            "values_fields", []
-        )
+        raw_unique = request.data.get("unique_fields", [])
+        raw_values = request.data.get("values_fields", [])
 
         # Validate: must be lists of strings
         if not isinstance(raw_unique, list):
             return Response(
-                {
-                    "detail": (
-                        "unique_fields must be "
-                        "a list"
-                    )
-                },
-                status=(
-                    status.HTTP_400_BAD_REQUEST
-                ),
+                {"detail": ("unique_fields must be " "a list")},
+                status=(status.HTTP_400_BAD_REQUEST),
             )
         if not isinstance(raw_values, list):
             return Response(
-                {
-                    "detail": (
-                        "values_fields must be "
-                        "a list"
-                    )
-                },
-                status=(
-                    status.HTTP_400_BAD_REQUEST
-                ),
+                {"detail": ("values_fields must be " "a list")},
+                status=(status.HTTP_400_BAD_REQUEST),
             )
 
         # Strip and deduplicate
         unique = list(
             dict.fromkeys(
-                s.strip()
-                for s in raw_unique
-                if isinstance(s, str)
-                and s.strip()
+                s.strip() for s in raw_unique if isinstance(s, str) and s.strip()
             )
         )
         values = list(
             dict.fromkeys(
-                s.strip()
-                for s in raw_values
-                if isinstance(s, str)
-                and s.strip()
+                s.strip() for s in raw_values if isinstance(s, str) and s.strip()
             )
         )
 
         if not unique:
             return Response(
-                {
-                    "detail": (
-                        "unique_fields is required"
-                    )
-                },
-                status=(
-                    status.HTTP_400_BAD_REQUEST
-                ),
+                {"detail": ("unique_fields is required")},
+                status=(status.HTTP_400_BAD_REQUEST),
             )
 
         unique_str = ",".join(unique)
         values_str = ",".join(values)
 
-        mapping, _ = (
-            FarmerFieldMapping.objects
-            .update_or_create(
-                form=form,
-                defaults={
-                    "unique_fields": unique_str,
-                    "values_fields": (
-                        values_str or unique_str
-                    ),
-                },
-            )
+        mapping, _ = FarmerFieldMapping.objects.update_or_create(
+            form=form,
+            defaults={
+                "unique_fields": unique_str,
+                "values_fields": (values_str or unique_str),
+            },
         )
         return Response(
             {
                 "unique_fields": [
-                    f.strip()
-                    for f in (
-                        mapping.unique_fields
-                        .split(",")
-                    )
-                    if f.strip()
+                    f.strip() for f in (mapping.unique_fields.split(",")) if f.strip()
                 ],
                 "values_fields": [
-                    f.strip()
-                    for f in (
-                        mapping.values_fields
-                        .split(",")
-                    )
-                    if f.strip()
+                    f.strip() for f in (mapping.values_fields.split(",")) if f.strip()
                 ],
             }
         )
@@ -431,20 +296,23 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
         # Sync form questions and options
         questions_synced = 0
         try:
-            content = client.get_asset_detail(
-                form.asset_uid
-            )
-            questions_synced = sync_form_questions(
-                form, content
-            )
-        except Exception as e:
+            content = client.get_asset_detail(form.asset_uid)
+            questions_synced = sync_form_questions(form, content)
+        except KoboUnauthorizedError:
             return Response(
                 {
                     "message": (
-                        f"Error syncing form "
-                        f"questions: {str(e)}"
-                    )
+                        "KoboToolbox credentials are "
+                        "invalid or expired. Please "
+                        "log in again."
+                    ),
+                    "error_type": "kobo_unauthorized",
                 },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        except Exception as e:
+            return Response(
+                {"message": (f"Error syncing form " f"questions: {str(e)}")},
                 status=status.HTTP_502_BAD_GATEWAY,
             )
 
@@ -455,9 +323,20 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
                 tz=tz.utc,
             ).strftime("%Y-%m-%dT%H:%M:%S")
 
-        results = client.fetch_all_submissions(
-            form.asset_uid, since_iso
-        )
+        try:
+            results = client.fetch_all_submissions(form.asset_uid, since_iso)
+        except KoboUnauthorizedError:
+            return Response(
+                {
+                    "message": (
+                        "KoboToolbox credentials are "
+                        "invalid or expired. Please "
+                        "log in again."
+                    ),
+                    "error_type": "kobo_unauthorized",
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         created = 0
         plots_created = 0
@@ -465,61 +344,32 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
         plots_flagged = 0
 
         for item in results:
-            sub_time_str = item.get(
-                "_submission_time", ""
-            )
-            sub_time_ms = int(
-                datetime.fromisoformat(
-                    sub_time_str
-                ).timestamp()
-                * 1000
-            )
+            sub_time_str = item.get("_submission_time", "")
+            sub_time_ms = int(datetime.fromisoformat(sub_time_str).timestamp() * 1000)
             # Map Kobo validation status
-            vs = item.get(
-                "_validation_status", {}
-            )
-            kobo_uid = (
-                vs.get("uid") if vs else None
-            )
+            vs = item.get("_validation_status", {})
+            kobo_uid = vs.get("uid") if vs else None
             approval = (
-                ApprovalStatusTypes
-                .ReverseKoboStatusMap
-                .get(kobo_uid)
+                ApprovalStatusTypes.ReverseKoboStatusMap.get(kobo_uid)
                 if kobo_uid
                 else None
             )
 
-            sub, is_new = (
-                Submission.objects.update_or_create(
-                    form=form,
-                    kobo_id=str(item["_id"]),
-                    defaults={
-                        "uuid": item["_uuid"],
-                        "submission_time": (
-                            sub_time_ms
-                        ),
-                        "submitted_by": item.get(
-                            "_submitted_by"
-                        ),
-                        "instance_name": item.get(
-                            "meta/instanceName"
-                        ),
-                        "approval_status": (
-                            approval
-                        ),
-                        "raw_data": item,
-                        "system_data": {
-                            "_geolocation": (
-                                item.get(
-                                    "_geolocation"
-                                )
-                            ),
-                            "_tags": item.get(
-                                "_tags", []
-                            ),
-                        },
+            sub, is_new = Submission.objects.update_or_create(
+                form=form,
+                kobo_id=str(item["_id"]),
+                defaults={
+                    "uuid": item["_uuid"],
+                    "submission_time": (sub_time_ms),
+                    "submitted_by": item.get("_submitted_by"),
+                    "instance_name": item.get("meta/instanceName"),
+                    "approval_status": (approval),
+                    "raw_data": item,
+                    "system_data": {
+                        "_geolocation": (item.get("_geolocation")),
+                        "_tags": item.get("_tags", []),
                     },
-                )
+                },
             )
             if is_new:
                 created += 1
@@ -528,58 +378,32 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
             plot_data = extract_plot_data(item, form)
             now_ms = int(time.time() * 1000)
             # Compute area from raw polygon
-            raw_polygon = plot_data.get(
-                "raw_polygon_string"
-            )
+            raw_polygon = plot_data.get("raw_polygon_string")
             area = calculate_area_ha(raw_polygon)
 
             # Run warning rules for valid geometry
             warnings = []
             if plot_data["polygon_wkt"]:
-                warnings = evaluate_warnings(
-                    raw_polygon, area
-                )
+                warnings = evaluate_warnings(raw_polygon, area)
 
             # Merge geometry errors + warnings
             all_flags = []
             if plot_data["flagged_reason"]:
-                all_flags.extend(
-                    plot_data["flagged_reason"]
-                )
+                all_flags.extend(plot_data["flagged_reason"])
             if warnings:
                 all_flags.extend(warnings)
 
             defaults = {
                 "form": form,
-                "plot_name": (
-                    plot_data["plot_name"]
-                ),
-                "polygon_source_field": (
-                    plot_data[
-                        "polygon_source_field"
-                    ]
-                ),
-                "polygon_wkt": (
-                    plot_data["polygon_wkt"]
-                ),
-                "min_lat": (
-                    plot_data["min_lat"]
-                ),
-                "max_lat": (
-                    plot_data["max_lat"]
-                ),
-                "min_lon": (
-                    plot_data["min_lon"]
-                ),
-                "max_lon": (
-                    plot_data["max_lon"]
-                ),
-                "region": (
-                    plot_data["region"]
-                ),
-                "sub_region": (
-                    plot_data["sub_region"]
-                ),
+                "plot_name": (plot_data["plot_name"]),
+                "polygon_source_field": (plot_data["polygon_source_field"]),
+                "polygon_wkt": (plot_data["polygon_wkt"]),
+                "min_lat": (plot_data["min_lat"]),
+                "max_lat": (plot_data["max_lat"]),
+                "min_lon": (plot_data["min_lon"]),
+                "max_lon": (plot_data["max_lon"]),
+                "region": (plot_data["region"]),
+                "sub_region": (plot_data["sub_region"]),
                 "area_ha": area,
                 "created_at": now_ms,
             }
@@ -587,24 +411,14 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
             # warnings; preserve tri-state when
             # no flags at all.
             if all_flags:
-                defaults["flagged_for_review"] = (
-                    True
-                )
-                defaults["flagged_reason"] = (
-                    all_flags
-                )
+                defaults["flagged_for_review"] = True
+                defaults["flagged_reason"] = all_flags
             elif plot_data["flagged_for_review"]:
-                defaults["flagged_for_review"] = (
-                    True
-                )
-                defaults["flagged_reason"] = (
-                    plot_data["flagged_reason"]
-                )
-            plot, plot_is_new = (
-                Plot.objects.update_or_create(
-                    submission=sub,
-                    defaults=defaults,
-                )
+                defaults["flagged_for_review"] = True
+                defaults["flagged_reason"] = plot_data["flagged_reason"]
+            plot, plot_is_new = Plot.objects.update_or_create(
+                submission=sub,
+                defaults=defaults,
             )
             if plot_is_new:
                 plots_created += 1
@@ -620,18 +434,12 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
 
             # Queue attachment download
             has_images = any(
-                a.get("mimetype", "").startswith(
-                    "image/"
-                )
-                for a in item.get(
-                    "_attachments", []
-                )
+                a.get("mimetype", "").startswith("image/")
+                for a in item.get("_attachments", [])
             )
             if has_images:
                 async_task(
-                    "api.v1.v1_odk.tasks"
-                    ".download_submission"
-                    "_attachments",
+                    "api.v1.v1_odk.tasks" ".download_submission" "_attachments",
                     request.user.kobo_url,
                     request.user.kobo_username,
                     request.user.kobo_password,
@@ -639,15 +447,9 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
                 )
 
         if results:
-            latest = max(
-                r["_submission_time"]
-                for r in results
-            )
+            latest = max(r["_submission_time"] for r in results)
             form.last_sync_timestamp = int(
-                datetime.fromisoformat(
-                    latest
-                ).timestamp()
-                * 1000
+                datetime.fromisoformat(latest).timestamp() * 1000
             )
             form.save()
 
@@ -673,15 +475,9 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
                 "plots_created": plots_created,
                 "plots_updated": plots_updated,
                 "plots_flagged": plots_flagged,
-                "questions_synced": (
-                    questions_synced
-                ),
-                "farmers_created": (
-                    farmer_result["created"]
-                ),
-                "farmers_updated": (
-                    farmer_result["updated"]
-                ),
+                "questions_synced": (questions_synced),
+                "farmers_created": (farmer_result["created"]),
+                "farmers_updated": (farmer_result["updated"]),
             }
         )
 
@@ -710,30 +506,15 @@ class SubmissionViewSet(
     def get_serializer_context(self):
         ctx = super().get_serializer_context()
         if self.action == "list":
-            asset_uid = (
-                self.request.query_params.get(
-                    "asset_uid"
-                )
-            )
+            asset_uid = self.request.query_params.get("asset_uid")
             if asset_uid:
                 try:
-                    form = (
-                        FormMetadata.objects.get(
-                            asset_uid=asset_uid
-                        )
-                    )
-                    om, tm = build_option_lookup(
-                        form
-                    )
+                    form = FormMetadata.objects.get(asset_uid=asset_uid)
+                    om, tm = build_option_lookup(form)
                     ctx["option_lookup"] = om
                     ctx["type_map"] = tm
                     ctx["question_names"] = {
-                        q["name"]
-                        for q in (
-                            self._get_form_questions(
-                                asset_uid
-                            )
-                        )
+                        q["name"] for q in (self._get_form_questions(asset_uid))
                     }
                 except FormMetadata.DoesNotExist:
                     pass
@@ -741,9 +522,7 @@ class SubmissionViewSet(
 
     def _get_form_questions(self, asset_uid):
         try:
-            form = FormMetadata.objects.get(
-                asset_uid=asset_uid
-            )
+            form = FormMetadata.objects.get(asset_uid=asset_uid)
         except FormMetadata.DoesNotExist:
             return []
         mapped_fields = set()
@@ -760,8 +539,7 @@ class SubmissionViewSet(
         qs = (
             FormQuestion.objects.filter(form=form)
             .exclude(
-                Q(type__in=EXCLUDED_QUESTION_TYPES) |
-                Q(name__startswith="validate_")
+                Q(type__in=EXCLUDED_QUESTION_TYPES) | Q(name__startswith="validate_")
             )
             .order_by("pk")
         )
@@ -776,16 +554,10 @@ class SubmissionViewSet(
         ]
 
     def list(self, request, *args, **kwargs):
-        response = super().list(
-            request, *args, **kwargs
-        )
-        asset_uid = request.query_params.get(
-            "asset_uid"
-        )
+        response = super().list(request, *args, **kwargs)
+        asset_uid = request.query_params.get("asset_uid")
         if asset_uid:
-            response.data["questions"] = (
-                self._get_form_questions(asset_uid)
-            )
+            response.data["questions"] = self._get_form_questions(asset_uid)
         else:
             response.data["questions"] = []
         return response
@@ -800,107 +572,55 @@ class SubmissionViewSet(
         params = self.request.query_params
         asset_uid = params.get("asset_uid")
         if asset_uid:
-            qs = qs.filter(
-                form__asset_uid=asset_uid
-            )
+            qs = qs.filter(form__asset_uid=asset_uid)
         status_param = params.get("status")
         if status_param is not None:
             if status_param == "pending":
-                qs = qs.filter(
-                    approval_status__isnull=True
-                )
+                qs = qs.filter(approval_status__isnull=True)
             elif status_param in self.STATUS_MAP:
-                qs = qs.filter(
-                    approval_status=(
-                        self.STATUS_MAP[
-                            status_param
-                        ]
-                    )
-                )
+                qs = qs.filter(approval_status=(self.STATUS_MAP[status_param]))
         region = params.get("region")
         if region:
             qs = qs.filter(plot__region=region)
         sub_region = params.get("sub_region")
         if sub_region:
-            qs = qs.filter(
-                plot__sub_region=sub_region
-            )
+            qs = qs.filter(plot__sub_region=sub_region)
         search = params.get("search")
         if search:
             stripped = _strip_id_prefix(search)
             qs = qs.filter(
-                Q(
-                    plot__plot_name__icontains=(
-                        search
-                    )
-                )
-                | Q(
-                    instance_name__icontains=(
-                        search
-                    )
-                )
-                | Q(
-                    kobo_id__icontains=stripped
-                )
+                Q(plot__plot_name__icontains=(search))
+                | Q(instance_name__icontains=(search))
+                | Q(kobo_id__icontains=stripped)
             )
-        start_date, end_date = _parse_date_range(
-            params
-        )
+        start_date, end_date = _parse_date_range(params)
         if start_date is not None:
-            qs = qs.filter(
-                submission_time__gte=start_date
-            )
+            qs = qs.filter(submission_time__gte=start_date)
         if end_date is not None:
-            qs = qs.filter(
-                submission_time__lte=end_date
-            )
+            qs = qs.filter(submission_time__lte=end_date)
         # Dynamic raw_data filters
         if asset_uid:
-            qs = self._apply_dynamic_filters(
-                qs, params, asset_uid
-            )
+            qs = self._apply_dynamic_filters(qs, params, asset_uid)
         return qs
 
-    def _apply_dynamic_filters(
-        self, qs, params, asset_uid
-    ):
-        filter_keys = [
-            k
-            for k in params
-            if k.startswith("filter__")
-        ]
+    def _apply_dynamic_filters(self, qs, params, asset_uid):
+        filter_keys = [k for k in params if k.startswith("filter__")]
         if not filter_keys:
             return qs
         try:
-            form = FormMetadata.objects.get(
-                asset_uid=asset_uid
-            )
+            form = FormMetadata.objects.get(asset_uid=asset_uid)
         except FormMetadata.DoesNotExist:
             return qs
         allowed = form.filter_fields or []
         for key in filter_keys:
-            field_name = key[len("filter__"):]
+            field_name = key[len("filter__") :]
             if field_name in allowed:
-                qs = qs.filter(
-                    **{
-                        f"raw_data__{field_name}": (
-                            params[key]
-                        )
-                    }
-                )
+                qs = qs.filter(**{f"raw_data__{field_name}": (params[key])})
         return qs
 
     def perform_update(self, serializer):
-        reason_category = (
-            serializer.validated_data.get(
-                "reason_category"
-            )
-        )
-        reason_text = (
-            serializer.validated_data.get(
-                "reason_text", ""
-            )
-        )
+        reason_category = serializer.validated_data.get("reason_category")
+        reason_text = serializer.validated_data.get("reason_text", "")
         instance = serializer.save(
             updated_by=self.request.user,
             updated_at=timezone.now(),
@@ -909,68 +629,38 @@ class SubmissionViewSet(
 
         # Re-check polygon & overlaps on revert
         if approval is None:
-            plot = getattr(
-                instance, "plot", None
-            )
+            plot = getattr(instance, "plot", None)
             if plot:
                 validate_and_check_plot(plot)
 
         # Create RejectionAudit for rejections
         audit = None
-        if (
-            approval
-            == ApprovalStatusTypes.REJECTED
-            and reason_category
-        ):
-            plot = getattr(
-                instance, "plot", None
-            )
+        if approval == ApprovalStatusTypes.REJECTED and reason_category:
+            plot = getattr(instance, "plot", None)
             if plot:
-                audit = (
-                    RejectionAudit.objects.create(
-                        plot=plot,
-                        submission=instance,
-                        validator=(
-                            self.request.user
-                        ),
-                        reason_category=(
-                            reason_category
-                        ),
-                        reason_text=reason_text,
-                    )
+                audit = RejectionAudit.objects.create(
+                    plot=plot,
+                    submission=instance,
+                    validator=(self.request.user),
+                    reason_category=(reason_category),
+                    reason_text=reason_text,
                 )
 
-        kobo_key = (
-            approval
-            if approval is not None
-            else ApprovalStatusTypes.PENDING
-        )
-        kobo_uid = (
-            ApprovalStatusTypes.KoboStatusMap.get(
-                kobo_key
-            )
-        )
+        kobo_key = approval if approval is not None else ApprovalStatusTypes.PENDING
+        kobo_uid = ApprovalStatusTypes.KoboStatusMap.get(kobo_key)
         if not kobo_uid:
             return
         user = self.request.user
-        if (
-            not user.kobo_url
-            or not user.kobo_username
-            or not user.kobo_password
-        ):
+        if not user.kobo_url or not user.kobo_username or not user.kobo_password:
             return
 
         task_kwargs = {}
         if audit:
-            task_kwargs["hook"] = (
-                "api.v1.v1_odk.tasks"
-                ".on_kobo_sync_complete"
-            )
+            task_kwargs["hook"] = "api.v1.v1_odk.tasks" ".on_kobo_sync_complete"
             task_kwargs["audit_id"] = audit.pk
 
         async_task(
-            "api.v1.v1_odk.tasks"
-            ".sync_kobo_validation_status",
+            "api.v1.v1_odk.tasks" ".sync_kobo_validation_status",
             user.kobo_url,
             user.kobo_username,
             user.kobo_password,
@@ -985,31 +675,19 @@ class SubmissionViewSet(
     def latest_sync_time(self, request):
         """Get latest submission_time
         for a form."""
-        asset_uid = request.query_params.get(
-            "asset_uid"
-        )
+        asset_uid = request.query_params.get("asset_uid")
         if not asset_uid:
             return Response(
-                {
-                    "message": (
-                        "asset_uid is required"
-                    )
-                },
+                {"message": ("asset_uid is required")},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         latest = (
-            Submission.objects.filter(
-                form__asset_uid=asset_uid
-            )
+            Submission.objects.filter(form__asset_uid=asset_uid)
             .order_by("-submission_time")
-            .values_list(
-                "submission_time", flat=True
-            )
+            .values_list("submission_time", flat=True)
             .first()
         )
-        return Response(
-            {"latest_submission_time": latest}
-        )
+        return Response({"latest_submission_time": latest})
 
 
 @extend_schema(tags=["Plots"])
@@ -1031,48 +709,30 @@ class PlotViewSet(
     }
 
     def get_queryset(self):
-        qs = (
-            super()
-            .get_queryset()
-            .select_related("submission")
-        )
+        qs = super().get_queryset().select_related("submission")
         params = self.request.query_params
         form_id = params.get("form_id")
         status_param = params.get("status")
         if form_id:
-            qs = qs.filter(
-                form__asset_uid=form_id
-            )
+            qs = qs.filter(form__asset_uid=form_id)
         if status_param is not None:
             if status_param == "flagged":
-                qs = qs.filter(
-                    flagged_for_review=True
-                )
+                qs = qs.filter(flagged_for_review=True)
             elif status_param == "pending":
                 qs = qs.filter(
                     submission__approval_status__isnull=True,  # noqa: E501
                 )
             elif status_param in self.STATUS_MAP:
                 qs = qs.filter(
-                    submission__approval_status=(
-                        self.STATUS_MAP[
-                            status_param
-                        ]
-                    )
+                    submission__approval_status=(self.STATUS_MAP[status_param])
                 )
         search = params.get("search")
         if search:
             stripped = _strip_id_prefix(search)
             qs = qs.filter(
-                Q(
-                    plot_name__icontains=search
-                )
-                | Q(
-                    submission__instance_name__icontains=search  # noqa: E501
-                )
-                | Q(
-                    submission__kobo_id__icontains=stripped  # noqa: E501
-                )
+                Q(plot_name__icontains=search)
+                | Q(submission__instance_name__icontains=search)  # noqa: E501
+                | Q(submission__kobo_id__icontains=stripped)  # noqa: E501
             )
         region = params.get("region")
         if region:
@@ -1080,21 +740,11 @@ class PlotViewSet(
         sub_region = params.get("sub_region")
         if sub_region:
             qs = qs.filter(sub_region=sub_region)
-        start_date, end_date = _parse_date_range(
-            params
-        )
+        start_date, end_date = _parse_date_range(params)
         if start_date is not None:
-            qs = qs.filter(
-                submission__submission_time__gte=(
-                    start_date
-                )
-            )
+            qs = qs.filter(submission__submission_time__gte=(start_date))
         if end_date is not None:
-            qs = qs.filter(
-                submission__submission_time__lte=(
-                    end_date
-                )
-            )
+            qs = qs.filter(submission__submission_time__lte=(end_date))
         sort = params.get("sort")
         if sort == "name":
             qs = qs.order_by("plot_name")
@@ -1102,33 +752,19 @@ class PlotViewSet(
             qs = qs.order_by("-created_at")
         # Dynamic raw_data filters
         if form_id:
-            filter_keys = [
-                k
-                for k in params
-                if k.startswith("filter__")
-            ]
+            filter_keys = [k for k in params if k.startswith("filter__")]
             if filter_keys:
                 try:
-                    form = (
-                        FormMetadata.objects.get(
-                            asset_uid=form_id
-                        )
-                    )
-                    allowed = (
-                        form.filter_fields or []
-                    )
+                    form = FormMetadata.objects.get(asset_uid=form_id)
+                    allowed = form.filter_fields or []
                     for key in filter_keys:
-                        field = key[
-                            len("filter__"):
-                        ]
+                        field = key[len("filter__") :]
                         if field in allowed:
                             qs = qs.filter(
                                 **{
                                     "submission__"
                                     "raw_data__"
-                                    f"{field}": (
-                                        params[key]
-                                    )
+                                    f"{field}": (params[key])
                                 }
                             )
                 except FormMetadata.DoesNotExist:
@@ -1137,19 +773,10 @@ class PlotViewSet(
 
     def perform_update(self, serializer):
         instance = serializer.save()
-        if (
-            "polygon_wkt"
-            in serializer.validated_data
-        ):
-            odk_str = wkt_to_odk_geoshape(
-                instance.polygon_wkt
-            )
-            instance.area_ha = calculate_area_ha(
-                odk_str
-            )
-            instance.save(
-                update_fields=["area_ha"]
-            )
+        if "polygon_wkt" in serializer.validated_data:
+            odk_str = wkt_to_odk_geoshape(instance.polygon_wkt)
+            instance.area_ha = calculate_area_ha(odk_str)
+            instance.save(update_fields=["area_ha"])
             validate_and_check_plot(instance)
             dispatch_kobo_geometry_sync(
                 self.request.user,
@@ -1166,9 +793,7 @@ class PlotViewSet(
     def overlap_candidates(self, request):
         """Find plots whose bounding boxes overlap
         with the given bounds."""
-        serializer = PlotOverlapQuerySerializer(
-            data=request.data
-        )
+        serializer = PlotOverlapQuerySerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         d = serializer.validated_data
 
@@ -1179,19 +804,13 @@ class PlotViewSet(
             max_lat__gte=d["min_lat"],
         )
         if d.get("exclude_uuid"):
-            plots = plots.exclude(
-                uuid=d["exclude_uuid"]
-            )
+            plots = plots.exclude(uuid=d["exclude_uuid"])
 
-        return Response(
-            PlotSerializer(plots, many=True).data
-        )
+        return Response(PlotSerializer(plots, many=True).data)
 
     @extend_schema(
         tags=["ODK"],
-        summary=(
-            "Reset polygon to original from Kobo"
-        ),
+        summary=("Reset polygon to original from Kobo"),
     )
     @action(detail=True, methods=["post"])
     def reset_polygon(self, request, uuid=None):
@@ -1203,37 +822,23 @@ class PlotViewSet(
                 {"message": "No linked submission"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        plot_data = extract_plot_data(
-            plot.submission.raw_data, plot.form
-        )
+        plot_data = extract_plot_data(plot.submission.raw_data, plot.form)
         plot.polygon_wkt = plot_data["polygon_wkt"]
-        plot.polygon_source_field = plot_data[
-            "polygon_source_field"
-        ]
+        plot.polygon_source_field = plot_data["polygon_source_field"]
         plot.min_lat = plot_data["min_lat"]
         plot.max_lat = plot_data["max_lat"]
         plot.min_lon = plot_data["min_lon"]
         plot.max_lon = plot_data["max_lon"]
-        plot.flagged_for_review = plot_data[
-            "flagged_for_review"
-        ]
-        plot.flagged_reason = plot_data[
-            "flagged_reason"
-        ]
-        raw_polygon = plot_data.get(
-            "raw_polygon_string"
-        )
-        plot.area_ha = calculate_area_ha(
-            raw_polygon
-        )
+        plot.flagged_for_review = plot_data["flagged_for_review"]
+        plot.flagged_reason = plot_data["flagged_reason"]
+        raw_polygon = plot_data.get("raw_polygon_string")
+        plot.area_ha = calculate_area_ha(raw_polygon)
         plot.save()
         # Re-run overlap detection for valid
         # geometry
         if plot_data["polygon_wkt"]:
             check_and_flag_overlaps(plot)
-        dispatch_kobo_geometry_sync(
-            request.user, plot, plot.polygon_wkt
-        )
+        dispatch_kobo_geometry_sync(request.user, plot, plot.polygon_wkt)
         return Response(PlotSerializer(plot).data)
 
     @extend_schema(
@@ -1259,39 +864,22 @@ class PlotViewSet(
         if not plot.polygon_wkt:
             return Response(
                 {"detail": "No polygon data"},
-                status=(
-                    status.HTTP_404_NOT_FOUND
-                ),
+                status=(status.HTTP_404_NOT_FOUND),
             )
-        name = (
-            plot.plot_name
-            or str(plot.uuid)
-        )
-        kml_content = _wkt_to_kml(
-            plot.polygon_wkt, name=name
-        )
+        name = plot.plot_name or str(plot.uuid)
+        kml_content = _wkt_to_kml(plot.polygon_wkt, name=name)
         if not kml_content:
             return Response(
                 {"detail": "Invalid geometry"},
-                status=(
-                    status.HTTP_422_UNPROCESSABLE_ENTITY
-                ),
+                status=(status.HTTP_422_UNPROCESSABLE_ENTITY),
             )
         # Sanitize filename for header safety
-        safe_name = re.sub(
-            r'[^\w\s\-.]', '', name
-        )[:100].strip() or "plot"
+        safe_name = re.sub(r"[^\w\s\-.]", "", name)[:100].strip() or "plot"
         resp = HttpResponse(
             kml_content,
-            content_type=(
-                "application/vnd"
-                ".google-earth.kml+xml"
-            ),
+            content_type=("application/vnd" ".google-earth.kml+xml"),
         )
-        resp["Content-Disposition"] = (
-            "attachment; "
-            f'filename="{safe_name}.kml"'
-        )
+        resp["Content-Disposition"] = "attachment; " f'filename="{safe_name}.kml"'
         return resp
 
     @extend_schema(
@@ -1302,31 +890,21 @@ class PlotViewSet(
     def filter_options(self, request):
         """Return distinct regions, sub_regions, and
         configured dynamic filter options."""
-        form_id = request.query_params.get(
-            "form_id"
-        )
+        form_id = request.query_params.get("form_id")
         if not form_id:
             return Response(
-                {
-                    "detail": (
-                        "form_id is required"
-                    )
-                },
+                {"detail": ("form_id is required")},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         try:
-            form = FormMetadata.objects.get(
-                asset_uid=form_id
-            )
+            form = FormMetadata.objects.get(asset_uid=form_id)
         except FormMetadata.DoesNotExist:
             return Response(
                 {"detail": "Form not found"},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        qs = Plot.objects.filter(
-            form__asset_uid=form_id
-        )
+        qs = Plot.objects.filter(form__asset_uid=form_id)
 
         # Build option lookups for region and
         # sub_region fields to resolve raw codes
@@ -1337,23 +915,13 @@ class PlotViewSet(
             labels using option lookups."""
             if not raw_val:
                 return raw_val
-            fields = [
-                f.strip()
-                for f in (field_spec or "").split(
-                    ","
-                )
-                if f.strip()
-            ]
+            fields = [f.strip() for f in (field_spec or "").split(",") if f.strip()]
             parts = raw_val.split(" - ")
             resolved = []
             for i, part in enumerate(parts):
                 if i < len(fields):
-                    opts = option_map.get(
-                        fields[i], {}
-                    )
-                    resolved.append(
-                        opts.get(part, part)
-                    )
+                    opts = option_map.get(fields[i], {})
+                    resolved.append(opts.get(part, part))
                 else:
                     resolved.append(part)
             return " - ".join(resolved)
@@ -1367,49 +935,35 @@ class PlotViewSet(
         regions = [
             {
                 "value": r,
-                "label": _resolve_label(
-                    r, form.region_field
-                ),
+                "label": _resolve_label(r, form.region_field),
             }
             for r in raw_regions
         ]
 
         sub_region_qs = qs.exclude(sub_region="")
-        region = request.query_params.get(
-            "region"
-        )
+        region = request.query_params.get("region")
         if region:
-            sub_region_qs = sub_region_qs.filter(
-                region=region
-            )
+            sub_region_qs = sub_region_qs.filter(region=region)
         raw_sub_regions = list(
-            sub_region_qs.values_list(
-                "sub_region", flat=True
-            )
+            sub_region_qs.values_list("sub_region", flat=True)
             .distinct()
             .order_by("sub_region")
         )
         sub_regions = [
             {
                 "value": w,
-                "label": _resolve_label(
-                    w, form.sub_region_field
-                ),
+                "label": _resolve_label(w, form.sub_region_field),
             }
             for w in raw_sub_regions
         ]
 
         dynamic_filters = []
-        filter_field_names = (
-            form.filter_fields or []
-        )
+        filter_field_names = form.filter_fields or []
         if filter_field_names:
-            questions = (
-                FormQuestion.objects.filter(
-                    form=form,
-                    name__in=filter_field_names,
-                ).prefetch_related("options")
-            )
+            questions = FormQuestion.objects.filter(
+                form=form,
+                name__in=filter_field_names,
+            ).prefetch_related("options")
             for q in questions:
                 dynamic_filters.append(
                     {
@@ -1421,9 +975,7 @@ class PlotViewSet(
                                 "name": o.name,
                                 "label": o.label,
                             }
-                            for o in (
-                                q.options.all()
-                            )
+                            for o in (q.options.all())
                         ],
                     }
                 )
@@ -1432,17 +984,13 @@ class PlotViewSet(
             {
                 "regions": regions,
                 "sub_regions": sub_regions,
-                "dynamic_filters": (
-                    dynamic_filters
-                ),
+                "dynamic_filters": (dynamic_filters),
             }
         )
 
     @extend_schema(
         tags=["Plots"],
-        summary=(
-            "Export plots as Shapefile or GeoJSON"
-        ),
+        summary=("Export plots as Shapefile or GeoJSON"),
     )
     @action(detail=False, methods=["post"])
     def export(self, request):
@@ -1451,24 +999,14 @@ class PlotViewSet(
         form_id = request.data.get("form_id")
         if not form_id:
             return Response(
-                {
-                    "message": (
-                        "form_id is required"
-                    )
-                },
-                status=(
-                    status.HTTP_400_BAD_REQUEST
-                ),
+                {"message": ("form_id is required")},
+                status=(status.HTTP_400_BAD_REQUEST),
             )
 
-        if not FormMetadata.objects.filter(
-            asset_uid=form_id
-        ).exists():
+        if not FormMetadata.objects.filter(asset_uid=form_id).exists():
             return Response(
                 {"message": "Form not found"},
-                status=(
-                    status.HTTP_404_NOT_FOUND
-                ),
+                status=(status.HTTP_404_NOT_FOUND),
             )
 
         fmt = request.data.get("format", "shp")
@@ -1479,22 +1017,12 @@ class PlotViewSet(
         }
         if fmt not in valid_formats:
             return Response(
-                {
-                    "message": (
-                        "Invalid format. Use "
-                        "'shp', 'geojson', "
-                        "or 'xlsx'"
-                    )
-                },
-                status=(
-                    status.HTTP_400_BAD_REQUEST
-                ),
+                {"message": ("Invalid format. Use " "'shp', 'geojson', " "or 'xlsx'")},
+                status=(status.HTTP_400_BAD_REQUEST),
             )
 
         filters = {}
-        status_param = request.data.get(
-            "status"
-        )
+        status_param = request.data.get("status")
         if status_param and status_param != "all":
             filters["status"] = status_param
         search = request.data.get("search")
@@ -1509,9 +1037,7 @@ class PlotViewSet(
             val = request.data.get(f)
             if val:
                 filters[f] = val
-        dynamic = request.data.get(
-            "dynamic_filters"
-        )
+        dynamic = request.data.get("dynamic_filters")
         if dynamic and isinstance(dynamic, dict):
             filters["dynamic_filters"] = dynamic
 
@@ -1526,8 +1052,7 @@ class PlotViewSet(
         )
 
         task_id = async_task(
-            "api.v1.v1_odk.tasks"
-            ".generate_export_file",
+            "api.v1.v1_odk.tasks" ".generate_export_file",
             job.id,
             timeout=300,
         )
@@ -1547,9 +1072,7 @@ class FieldSettingsViewSet(
 ):
     """Read-only list of standardized fields."""
 
-    queryset = FieldSettings.objects.all().order_by(
-        "pk"
-    )
+    queryset = FieldSettings.objects.all().order_by("pk")
     serializer_class = FieldSettingsSerializer
     permission_classes = [IsAuthenticated]
     pagination_class = None
@@ -1569,18 +1092,10 @@ class FieldMappingViewSet(
 
     def get_queryset(self):
         qs = super().get_queryset()
-        form_id = (
-            self.request.query_params.get(
-                "form_id"
-            )
-        )
+        form_id = self.request.query_params.get("form_id")
         if form_id:
-            qs = qs.filter(
-                form__asset_uid=form_id
-            )
-        return qs.select_related(
-            "field", "form_question"
-        )
+            qs = qs.filter(form__asset_uid=form_id)
+        return qs.select_related("field", "form_question")
 
     @extend_schema(
         summary="Bulk upsert field mappings",
@@ -1590,18 +1105,14 @@ class FieldMappingViewSet(
         methods=["put"],
         url_path=r"(?P<asset_uid>[^/.]+)",
     )
-    def bulk_upsert(
-        self, request, asset_uid=None
-    ):
+    def bulk_upsert(self, request, asset_uid=None):
         """Bulk upsert mappings for a form.
 
         Body: { "field_name": question_id, ... }
         Set question_id to null to delete.
         """
         try:
-            form = FormMetadata.objects.get(
-                asset_uid=asset_uid
-            )
+            form = FormMetadata.objects.get(asset_uid=asset_uid)
         except FormMetadata.DoesNotExist:
             return Response(
                 {"detail": "Form not found"},
@@ -1611,28 +1122,16 @@ class FieldMappingViewSet(
         data = request.data
         if not isinstance(data, dict):
             return Response(
-                {
-                    "detail": (
-                        "Expected a JSON object"
-                    )
-                },
-                status=(
-                    status.HTTP_400_BAD_REQUEST
-                ),
+                {"detail": ("Expected a JSON object")},
+                status=(status.HTTP_400_BAD_REQUEST),
             )
 
         errors = {}
         for field_name, q_id in data.items():
             try:
-                field_setting = (
-                    FieldSettings.objects.get(
-                        name=field_name
-                    )
-                )
+                field_setting = FieldSettings.objects.get(name=field_name)
             except FieldSettings.DoesNotExist:
-                errors[field_name] = (
-                    "Unknown field setting"
-                )
+                errors[field_name] = "Unknown field setting"
                 continue
 
             if q_id is None:
@@ -1643,15 +1142,9 @@ class FieldMappingViewSet(
                 continue
 
             try:
-                question = (
-                    FormQuestion.objects.get(
-                        pk=q_id, form=form
-                    )
-                )
+                question = FormQuestion.objects.get(pk=q_id, form=form)
             except FormQuestion.DoesNotExist:
-                errors[field_name] = (
-                    f"Question {q_id} not found"
-                )
+                errors[field_name] = f"Question {q_id} not found"
                 continue
 
             FieldMapping.objects.update_or_create(
@@ -1665,21 +1158,13 @@ class FieldMappingViewSet(
         if errors:
             return Response(
                 {"errors": errors},
-                status=(
-                    status.HTTP_400_BAD_REQUEST
-                ),
+                status=(status.HTTP_400_BAD_REQUEST),
             )
 
-        mappings = FieldMapping.objects.filter(
-            form=form
-        ).select_related(
+        mappings = FieldMapping.objects.filter(form=form).select_related(
             "field", "form_question"
         )
-        return Response(
-            FieldMappingSerializer(
-                mappings, many=True
-            ).data
-        )
+        return Response(FieldMappingSerializer(mappings, many=True).data)
 
 
 @extend_schema(tags=["Farmers"])
@@ -1695,75 +1180,38 @@ class FarmerViewSet(
 
     def get_queryset(self):
         qs = super().get_queryset()
-        form_id = (
-            self.request.query_params.get(
-                "form_id"
-            )
-        )
+        form_id = self.request.query_params.get("form_id")
         if form_id:
-            qs = qs.filter(
-                plots__form__asset_uid=form_id
-            ).distinct()
+            qs = qs.filter(plots__form__asset_uid=form_id).distinct()
             qs = qs.annotate(
                 plot_count=Count(
                     "plots",
-                    filter=Q(
-                        plots__form__asset_uid=(
-                            form_id
-                        )
-                    ),
+                    filter=Q(plots__form__asset_uid=(form_id)),
                 )
             )
         else:
-            qs = qs.annotate(
-                plot_count=Count("plots")
-            )
-        search = (
-            self.request.query_params.get(
-                "search"
-            )
-        )
+            qs = qs.annotate(plot_count=Count("plots"))
+        search = self.request.query_params.get("search")
         if search:
             stripped = _strip_id_prefix(search)
-            qs = qs.filter(
-                Q(
-                    lookup_key__icontains=search
-                )
-                | Q(uid__icontains=stripped)
-            )
+            qs = qs.filter(Q(lookup_key__icontains=search) | Q(uid__icontains=stripped))
         return qs.order_by("uid")
 
     def list(self, request, *args, **kwargs):
-        form_id = request.query_params.get(
-            "form_id"
-        )
+        form_id = request.query_params.get("form_id")
 
         # Get allowed fields from form's
         # FarmerFieldMapping
         allowed_fields = None
         q_labels = {}
         if form_id:
-            mapping = (
-                FarmerFieldMapping.objects.filter(
-                    form__asset_uid=form_id
-                ).first()
-            )
+            mapping = FarmerFieldMapping.objects.filter(form__asset_uid=form_id).first()
             if mapping:
                 unique = [
-                    f.strip()
-                    for f in (
-                        mapping.unique_fields
-                        .split(",")
-                    )
-                    if f.strip()
+                    f.strip() for f in (mapping.unique_fields.split(",")) if f.strip()
                 ]
                 values = [
-                    f.strip()
-                    for f in (
-                        mapping.values_fields
-                        .split(",")
-                    )
-                    if f.strip()
+                    f.strip() for f in (mapping.values_fields.split(",")) if f.strip()
                 ]
                 seen = set(unique)
                 allowed_fields = list(unique)
@@ -1777,14 +1225,10 @@ class FarmerViewSet(
                     FormQuestion.objects.filter(
                         form__asset_uid=form_id,
                         name__in=allowed_fields,
-                    ).values_list(
-                        "name", "label"
-                    )
+                    ).values_list("name", "label")
                 )
 
-        qs = self.filter_queryset(
-            self.get_queryset()
-        )
+        qs = self.filter_queryset(self.get_queryset())
         page = self.paginate_queryset(qs)
         items = page if page is not None else qs
         data = []
@@ -1808,14 +1252,8 @@ class FarmerViewSet(
                     if val is None:
                         full = leaf_map.get(leaf)
                         if full:
-                            val = all_vals.get(
-                                full
-                            )
-                    vals[label] = (
-                        val
-                        if val is not None
-                        else ""
-                    )
+                            val = all_vals.get(full)
+                    vals[label] = val if val is not None else ""
             else:
                 vals = all_vals
             data.append(
@@ -1829,9 +1267,7 @@ class FarmerViewSet(
                 }
             )
         if page is not None:
-            return self.get_paginated_response(
-                data
-            )
+            return self.get_paginated_response(data)
         return Response(data)
 
 
@@ -1851,34 +1287,22 @@ class EnumeratorViewSet(
     serializer_class = None
 
     def list(self, request, *args, **kwargs):
-        form_id = request.query_params.get(
-            "form_id"
-        )
-        search = request.query_params.get(
-            "search"
-        )
+        form_id = request.query_params.get("form_id")
+        search = request.query_params.get("search")
 
         qs = Submission.objects.all()
         if form_id:
-            qs = qs.filter(
-                form__asset_uid=form_id
-            )
+            qs = qs.filter(form__asset_uid=form_id)
 
         # Get unique enumerator_id values
-        qs = qs.filter(
-            raw_data__enumerator_id__isnull=(
-                False
-            )
-        ).exclude(
+        qs = qs.filter(raw_data__enumerator_id__isnull=(False)).exclude(
             raw_data__enumerator_id=""
         )
 
         seen = {}
         forms_cache = {}
 
-        for sub in qs.select_related(
-            "form"
-        ).iterator():
+        for sub in qs.select_related("form").iterator():
             raw = sub.raw_data or {}
             raw_val = raw.get("enumerator_id")
             if not raw_val:
@@ -1887,9 +1311,7 @@ class EnumeratorViewSet(
             form = sub.form
             form_pk = form.pk
             if form_pk not in forms_cache:
-                om, tm = build_option_lookup(
-                    form
-                )
+                om, tm = build_option_lookup(form)
                 forms_cache[form_pk] = (om, tm)
             om, tm = forms_cache[form_pk]
 
@@ -1912,9 +1334,7 @@ class EnumeratorViewSet(
                     "submission_count": 1,
                 }
             elif key in seen:
-                seen[key][
-                    "submission_count"
-                ] += 1
+                seen[key]["submission_count"] += 1
 
         results = sorted(
             seen.values(),
@@ -1923,37 +1343,25 @@ class EnumeratorViewSet(
 
         if search:
             q = search.lower()
-            results = [
-                r
-                for r in results
-                if q in r["name"].lower()
-            ]
+            results = [r for r in results if q in r["name"].lower()]
 
         # Manual pagination
         try:
             limit = max(
                 1,
-                int(
-                    request.query_params.get(
-                        "limit", 10
-                    )
-                ),
+                int(request.query_params.get("limit", 10)),
             )
         except (ValueError, TypeError):
             limit = 10
         try:
             offset = max(
                 0,
-                int(
-                    request.query_params.get(
-                        "offset", 0
-                    )
-                ),
+                int(request.query_params.get("offset", 0)),
             )
         except (ValueError, TypeError):
             offset = 0
         total = len(results)
-        page = results[offset: offset + limit]
+        page = results[offset : offset + limit]
 
         return Response(
             {

@@ -464,3 +464,152 @@ class SubmissionSortingNullHandlingTest(
     ):
         uuids = self._get_uuids("&ordering=-score")
         self.assertEqual(uuids[-1], "null-b")
+
+
+@override_settings(USE_TZ=False, TEST_ENV=True)
+class SubmissionSortingPaginationStabilityTest(
+    TestCase, OdkTestHelperMixin
+):
+    """Verify that rows with identical sort values
+    produce stable pagination (no duplicates or
+    missing rows) thanks to the secondary tiebreaker
+    ordering (-submission_time, pk)."""
+
+    def setUp(self):
+        self.user = self.create_kobo_user()
+        self.auth = self.get_auth_header()
+
+        self.form = FormMetadata.objects.create(
+            asset_uid="stableSort",
+            name="Stable Sort Form",
+            sortable_fields=["colour"],
+        )
+
+        # 5 submissions, all with the same area_ha
+        # and same dynamic field value.
+        # They differ only in submission_time and pk.
+        self.subs = []
+        for i in range(5):
+            sub = Submission.objects.create(
+                uuid=f"stable-{i}",
+                form=self.form,
+                kobo_id=str(500 + i),
+                submission_time=(
+                    1700000000000 + i * 1000
+                ),
+                raw_data={"colour": "red"},
+            )
+            Plot.objects.create(
+                plot_name=f"P{i}",
+                form=self.form,
+                region="R",
+                sub_region="S",
+                created_at=1700000000000 + i * 1000,
+                submission=sub,
+                area_ha=1.0,
+            )
+            self.subs.append(sub)
+
+        self.url = (
+            "/api/v1/odk/submissions/"
+            "?asset_uid=stableSort"
+        )
+
+    def _get_all_uuids_paged(
+        self, ordering, page_size=2
+    ):
+        """Fetch all pages and return concatenated
+        uuid list."""
+        all_uuids = []
+        offset = 0
+        while True:
+            resp = self.client.get(
+                f"{self.url}"
+                f"&ordering={ordering}"
+                f"&limit={page_size}"
+                f"&offset={offset}",
+                **self.auth,
+            )
+            self.assertEqual(resp.status_code, 200)
+            results = resp.json()["results"]
+            if not results:
+                break
+            all_uuids.extend(
+                r["uuid"] for r in results
+            )
+            offset += page_size
+        return all_uuids
+
+    def test_no_duplicates_area_ha_asc(self):
+        """All 5 rows with identical area_ha appear
+        exactly once across pages."""
+        uuids = self._get_all_uuids_paged("area_ha")
+        self.assertEqual(len(uuids), 5)
+        self.assertEqual(len(set(uuids)), 5)
+
+    def test_no_duplicates_area_ha_desc(self):
+        uuids = self._get_all_uuids_paged(
+            "-area_ha"
+        )
+        self.assertEqual(len(uuids), 5)
+        self.assertEqual(len(set(uuids)), 5)
+
+    def test_no_duplicates_dynamic_field(self):
+        """Identical dynamic sort values still
+        produce stable pages."""
+        uuids = self._get_all_uuids_paged("colour")
+        self.assertEqual(len(uuids), 5)
+        self.assertEqual(len(set(uuids)), 5)
+
+    def test_tiebreaker_uses_submission_time(self):
+        """Within identical sort values, rows are
+        ordered by -submission_time (newest first),
+        then pk."""
+        uuids = self._get_all_uuids_paged(
+            "area_ha", page_size=10
+        )
+        # All have same area_ha, so secondary order
+        # is -submission_time (newest first)
+        expected = [
+            f"stable-{i}" for i in range(4, -1, -1)
+        ]
+        self.assertEqual(uuids, expected)
+
+    def test_pages_are_consistent(self):
+        """Page 1 + page 2 + page 3 contain no
+        overlapping rows."""
+        page1 = self._get_all_uuids_paged(
+            "area_ha", page_size=2
+        )
+        # Re-fetch individually to confirm
+        resp1 = self.client.get(
+            f"{self.url}&ordering=area_ha"
+            "&limit=2&offset=0",
+            **self.auth,
+        )
+        resp2 = self.client.get(
+            f"{self.url}&ordering=area_ha"
+            "&limit=2&offset=2",
+            **self.auth,
+        )
+        resp3 = self.client.get(
+            f"{self.url}&ordering=area_ha"
+            "&limit=2&offset=4",
+            **self.auth,
+        )
+        p1 = [
+            r["uuid"]
+            for r in resp1.json()["results"]
+        ]
+        p2 = [
+            r["uuid"]
+            for r in resp2.json()["results"]
+        ]
+        p3 = [
+            r["uuid"]
+            for r in resp3.json()["results"]
+        ]
+        combined = p1 + p2 + p3
+        self.assertEqual(len(combined), 5)
+        self.assertEqual(len(set(combined)), 5)
+        self.assertEqual(combined, page1)

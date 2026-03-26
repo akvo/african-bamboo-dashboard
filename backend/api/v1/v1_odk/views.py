@@ -694,7 +694,11 @@ class SubmissionViewSet(
                     expr = expr.asc(
                         nulls_last=True
                     )
-                qs = qs.order_by(expr)
+                qs = qs.order_by(
+                    expr,
+                    "-submission_time",
+                    "pk",
+                )
             elif asset_uid:
                 qs = self._apply_dynamic_ordering(
                     qs, asset_uid, field, desc
@@ -726,7 +730,9 @@ class SubmissionViewSet(
             expr = expr.desc(nulls_last=True)
         else:
             expr = expr.asc(nulls_last=True)
-        return qs.order_by(expr)
+        return qs.order_by(
+            expr, "-submission_time", "pk"
+        )
 
     def _apply_dynamic_filters(self, qs, params, asset_uid):
         filter_keys = [k for k in params if k.startswith("filter__")]

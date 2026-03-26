@@ -74,6 +74,15 @@ class FormMetadata(models.Model):
             "are supported."
         ),
     )
+    sortable_fields = models.JSONField(
+        null=True,
+        blank=True,
+        help_text=(
+            "List of raw_data field names that "
+            "can be used for sorting in the "
+            "submissions table."
+        ),
+    )
 
     class Meta:
         db_table = "form_metadata"

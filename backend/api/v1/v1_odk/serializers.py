@@ -79,6 +79,7 @@ class FormMetadataSerializer(serializers.ModelSerializer):
             "sub_region_field",
             "plot_name_field",
             "filter_fields",
+            "sortable_fields",
         ]
 
     def get_submission_count(self, obj):
@@ -464,7 +465,6 @@ class SubmissionDetailSerializer(
         for spec in [
             form.region_field,
             form.sub_region_field,
-            form.plot_name_field,
         ]:
             if spec:
                 for f in spec.split(","):

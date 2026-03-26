@@ -608,6 +608,8 @@ class SubmissionViewSet(
         "start": "sort_start",
         "end": "sort_end",
         "area_ha": "plot__area_ha",
+        "region": "plot__region",
+        "sub_region": "plot__sub_region",
     }
 
     def get_queryset(self):

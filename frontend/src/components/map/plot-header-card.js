@@ -46,14 +46,9 @@ function FlagList({ flags }) {
     <>
       <div className="flex flex-col gap-1.5">
         {groups.map((group) => {
-          const isError = group.severity === "error";
-          const Icon = isError ? AlertCircle : AlertTriangle;
-          const colorClass = isError
-            ? "text-status-rejected"
-            : "text-status-flagged";
-          const borderClass = isError
-            ? "border-status-rejected/30 bg-status-rejected/10"
-            : "border-status-flagged/30 bg-status-flagged/10";
+          const Icon = AlertTriangle;
+          const colorClass = "text-status-rejected";
+          const borderClass = "border-status-rejected/30 bg-status-rejected/10";
           const label =
             FlagMessages[group.type] || group.items[0]?.note || group.type;
           const hasDetails = group.items.some((f) => f.note);

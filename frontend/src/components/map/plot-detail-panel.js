@@ -245,7 +245,9 @@ export default function PlotDetailPanel({
               title="Farmer"
               name={details?.farmer?.name}
               subTitle={
-                plot?.farmer_uid ? `ID number: ${PREFIX_FARM_ID}${plot.farmer_uid}` : null
+                plot?.farmer_uid
+                  ? `ID number: ${PREFIX_FARM_ID}${plot.farmer_uid}`
+                  : null
               }
               fields={[
                 { label: "Father's name", value: details?.farmer?.fatherName },

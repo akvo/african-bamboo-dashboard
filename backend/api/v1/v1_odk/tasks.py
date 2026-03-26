@@ -69,7 +69,9 @@ def generate_export_file(job_id):
                     submission__approval_status__isnull=True,  # noqa: E501
                 )
             elif status_param in STATUS_MAP:
-                qs = qs.filter(submission__approval_status=(STATUS_MAP[status_param]))
+                qs = qs.filter(
+                    submission__approval_status=(STATUS_MAP[status_param])
+                )
 
         # Apply search filter
         search = filters.get("search")
@@ -105,7 +107,8 @@ def generate_export_file(job_id):
             # XLSX: all plots, run farmer sync
             sync_farmers_for_form(form)
             ts = int(time.time())
-            safe_name = re.sub(r"[^\w\-.]", "_", form.name)[:80].strip("_") or "export"
+            safe_name = re.sub(r"[^\w\-.]", "_", form.name)[:80].strip("_") \
+                or "export"
             xlsx_filename = f"{safe_name}_{ts}"
             file_path, count = generate_xlsx(qs, form, xlsx_filename)
         else:
@@ -267,7 +270,8 @@ def on_kobo_sync_complete(task):
         tg_config = get_telegram_config()
         if tg_config["enabled"]:
             async_task(
-                "api.v1.v1_odk.tasks" ".send_telegram_rejection" "_notification",
+                "api.v1.v1_odk.tasks"
+                ".send_telegram_rejection" "_notification",
                 audit_id,
             )
         else:
@@ -394,7 +398,8 @@ def send_telegram_rejection_notification(audit_id):
         reason = f"{category_display}: " f"{audit.reason_text}"
 
     rejected_at_str = (
-        audit.rejected_at.strftime("%Y-%m-%d %H:%M UTC") if audit.rejected_at else "N/A"
+        audit.rejected_at.strftime("%Y-%m-%d %H:%M UTC")
+        if audit.rejected_at else "N/A"
     )
     plot_location = _resolve_plot_location(submission, plot)
 
@@ -514,7 +519,9 @@ def download_submission_attachments(
     password = decrypt(kobo_password_enc)
     client = KoboClient(kobo_url, kobo_username, password)
 
-    dest_dir = Path(settings.STORAGE_PATH) / ATTACHMENTS_FOLDER / str(submission_uuid)
+    dest_dir = (
+        Path(settings.STORAGE_PATH) / ATTACHMENTS_FOLDER / str(submission_uuid)
+    )
     dest_dir.mkdir(parents=True, exist_ok=True)
 
     for att in image_atts:

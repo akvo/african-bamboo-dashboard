@@ -56,9 +56,9 @@ def _strip_id_prefix(value):
         return value
     upper = value.upper()
     if upper.startswith(PREFIX_PLOT_ID):
-        return value[len(PREFIX_PLOT_ID) :]
+        return value[len(PREFIX_PLOT_ID):]
     if upper.startswith(PREFIX_FARM_ID):
-        return value[len(PREFIX_FARM_ID) :]
+        return value[len(PREFIX_FARM_ID):]
     return value
 
 
@@ -86,7 +86,9 @@ def _parse_date_range(params):
     start = _parse_date_param(params, "start_date")
     end = _parse_date_param(params, "end_date")
     if start is not None and end is not None and start > end:
-        raise ValidationError({"start_date": ("start_date must be <= end_date.")})
+        raise ValidationError(
+            {"start_date": ("start_date must be <= end_date.")}
+        )
     return start, end
 
 
@@ -98,7 +100,11 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
     lookup_field = "asset_uid"
 
     def _make_kobo_client(self, user):
-        if not user.kobo_url or not user.kobo_username or not user.kobo_password:
+        if (
+            not user.kobo_url or
+            not user.kobo_username or
+            not user.kobo_password
+        ):
             return None
         return KoboClient(
             user.kobo_url,
@@ -240,12 +246,14 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
         # Strip and deduplicate
         unique = list(
             dict.fromkeys(
-                s.strip() for s in raw_unique if isinstance(s, str) and s.strip()
+                s.strip()
+                for s in raw_unique if isinstance(s, str) and s.strip()
             )
         )
         values = list(
             dict.fromkeys(
-                s.strip() for s in raw_values if isinstance(s, str) and s.strip()
+                s.strip()
+                for s in raw_values if isinstance(s, str) and s.strip()
             )
         )
 
@@ -268,10 +276,12 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
         return Response(
             {
                 "unique_fields": [
-                    f.strip() for f in (mapping.unique_fields.split(",")) if f.strip()
+                    f.strip()
+                    for f in (mapping.unique_fields.split(",")) if f.strip()
                 ],
                 "values_fields": [
-                    f.strip() for f in (mapping.values_fields.split(",")) if f.strip()
+                    f.strip()
+                    for f in (mapping.values_fields.split(",")) if f.strip()
                 ],
             }
         )
@@ -345,7 +355,9 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
 
         for item in results:
             sub_time_str = item.get("_submission_time", "")
-            sub_time_ms = int(datetime.fromisoformat(sub_time_str).timestamp() * 1000)
+            sub_time_ms = int(
+                datetime.fromisoformat(sub_time_str).timestamp() * 1000
+            )
             # Map Kobo validation status
             vs = item.get("_validation_status", {})
             kobo_uid = vs.get("uid") if vs else None
@@ -439,7 +451,8 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
             )
             if has_images:
                 async_task(
-                    "api.v1.v1_odk.tasks" ".download_submission" "_attachments",
+                    "api.v1.v1_odk.tasks"
+                    ".download_submission" "_attachments",
                     request.user.kobo_url,
                     request.user.kobo_username,
                     request.user.kobo_password,
@@ -514,7 +527,8 @@ class SubmissionViewSet(
                     ctx["option_lookup"] = om
                     ctx["type_map"] = tm
                     ctx["question_names"] = {
-                        q["name"] for q in (self._get_form_questions(asset_uid))
+                        q["name"]
+                        for q in (self._get_form_questions(asset_uid))
                     }
                 except FormMetadata.DoesNotExist:
                     pass
@@ -539,7 +553,8 @@ class SubmissionViewSet(
         qs = (
             FormQuestion.objects.filter(form=form)
             .exclude(
-                Q(type__in=EXCLUDED_QUESTION_TYPES) | Q(name__startswith="validate_")
+                Q(type__in=EXCLUDED_QUESTION_TYPES) |
+                Q(name__startswith="validate_")
             )
             .order_by("pk")
         )
@@ -613,7 +628,8 @@ class SubmissionViewSet(
             return qs
         allowed = form.filter_fields or []
         for key in filter_keys:
-            field_name = key[len("filter__") :]
+            field_name = \
+                key[len("filter__"):]
             if field_name in allowed:
                 qs = qs.filter(**{f"raw_data__{field_name}": (params[key])})
         return qs
@@ -646,17 +662,23 @@ class SubmissionViewSet(
                     reason_text=reason_text,
                 )
 
-        kobo_key = approval if approval is not None else ApprovalStatusTypes.PENDING
+        kobo_key = approval \
+            if approval is not None else ApprovalStatusTypes.PENDING
         kobo_uid = ApprovalStatusTypes.KoboStatusMap.get(kobo_key)
         if not kobo_uid:
             return
         user = self.request.user
-        if not user.kobo_url or not user.kobo_username or not user.kobo_password:
+        if (
+            not user.kobo_url or
+            not user.kobo_username or
+            not user.kobo_password
+        ):
             return
 
         task_kwargs = {}
         if audit:
-            task_kwargs["hook"] = "api.v1.v1_odk.tasks" ".on_kobo_sync_complete"
+            task_kwargs["hook"] = "api.v1.v1_odk.tasks"\
+                ".on_kobo_sync_complete"
             task_kwargs["audit_id"] = audit.pk
 
         async_task(
@@ -758,7 +780,7 @@ class PlotViewSet(
                     form = FormMetadata.objects.get(asset_uid=form_id)
                     allowed = form.filter_fields or []
                     for key in filter_keys:
-                        field = key[len("filter__") :]
+                        field = key[len("filter__"):]
                         if field in allowed:
                             qs = qs.filter(
                                 **{
@@ -879,7 +901,8 @@ class PlotViewSet(
             kml_content,
             content_type=("application/vnd" ".google-earth.kml+xml"),
         )
-        resp["Content-Disposition"] = "attachment; " f'filename="{safe_name}.kml"'
+        resp["Content-Disposition"] = "attachment; " \
+            f'filename="{safe_name}.kml"'
         return resp
 
     @extend_schema(
@@ -915,7 +938,10 @@ class PlotViewSet(
             labels using option lookups."""
             if not raw_val:
                 return raw_val
-            fields = [f.strip() for f in (field_spec or "").split(",") if f.strip()]
+            fields = [
+                f.strip()
+                for f in (field_spec or "").split(",") if f.strip()
+            ]
             parts = raw_val.split(" - ")
             resolved = []
             for i, part in enumerate(parts):
@@ -1017,7 +1043,11 @@ class PlotViewSet(
         }
         if fmt not in valid_formats:
             return Response(
-                {"message": ("Invalid format. Use " "'shp', 'geojson', " "or 'xlsx'")},
+                {
+                    "message": (
+                        "Invalid format. Use " "'shp', 'geojson', " "or 'xlsx'"
+                    )
+                },
                 status=(status.HTTP_400_BAD_REQUEST),
             )
 
@@ -1194,7 +1224,10 @@ class FarmerViewSet(
         search = self.request.query_params.get("search")
         if search:
             stripped = _strip_id_prefix(search)
-            qs = qs.filter(Q(lookup_key__icontains=search) | Q(uid__icontains=stripped))
+            qs = qs.filter(
+                Q(lookup_key__icontains=search) |
+                Q(uid__icontains=stripped)
+            )
         return qs.order_by("uid")
 
     def list(self, request, *args, **kwargs):
@@ -1205,13 +1238,17 @@ class FarmerViewSet(
         allowed_fields = None
         q_labels = {}
         if form_id:
-            mapping = FarmerFieldMapping.objects.filter(form__asset_uid=form_id).first()
+            mapping = FarmerFieldMapping.objects.filter(
+                form__asset_uid=form_id
+            ).first()
             if mapping:
                 unique = [
-                    f.strip() for f in (mapping.unique_fields.split(",")) if f.strip()
+                    f.strip()
+                    for f in (mapping.unique_fields.split(",")) if f.strip()
                 ]
                 values = [
-                    f.strip() for f in (mapping.values_fields.split(",")) if f.strip()
+                    f.strip()
+                    for f in (mapping.values_fields.split(",")) if f.strip()
                 ]
                 seen = set(unique)
                 allowed_fields = list(unique)
@@ -1361,7 +1398,7 @@ class EnumeratorViewSet(
         except (ValueError, TypeError):
             offset = 0
         total = len(results)
-        page = results[offset : offset + limit]
+        page = results[offset: offset + limit]
 
         return Response(
             {

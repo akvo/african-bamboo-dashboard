@@ -54,18 +54,26 @@ const DashboardPage = () => {
   const startMs = startDate ? startDate.getTime() : null;
   const endMs = endDate ? endDate.getTime() : null;
 
-  const { data, questions, count, isLoading, page, totalPages, setPage } =
-    useSubmissions({
-      assetUid: activeForm?.asset_uid,
-      status: activeTab,
-      search,
-      region,
-      subRegion,
-      startDate: startMs,
-      endDate: endMs,
-      dynamicFilters: dynamicValues,
-      ordering,
-    });
+  const {
+    data,
+    questions,
+    sortableFields,
+    count,
+    isLoading,
+    page,
+    totalPages,
+    setPage,
+  } = useSubmissions({
+    assetUid: activeForm?.asset_uid,
+    status: activeTab,
+    search,
+    region,
+    subRegion,
+    startDate: startMs,
+    endDate: endMs,
+    dynamicFilters: dynamicValues,
+    ordering,
+  });
   const { plots } = usePlots({ formId: activeForm?.asset_uid });
   const { setSelectedPlotId } = useMapState();
 
@@ -222,6 +230,7 @@ const DashboardPage = () => {
         questions={questions}
         ordering={ordering}
         onSort={setOrdering}
+        sortableFields={sortableFields}
       />
 
       {/* Pagination */}

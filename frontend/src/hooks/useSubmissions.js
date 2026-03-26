@@ -17,6 +17,7 @@ export function useSubmissions({
 } = {}) {
   const [data, setData] = useState([]);
   const [questions, setQuestions] = useState([]);
+  const [sortableFields, setSortableFields] = useState([]);
   const [count, setCount] = useState(0);
   const [offset, setOffset] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
@@ -62,6 +63,7 @@ export function useSubmissions({
       const res = await api.get("/v1/odk/submissions/", { params });
       setData(res.data.results);
       setQuestions(res.data.questions || []);
+      setSortableFields(res.data.sortable_fields || []);
       setCount(res.data.count);
     } catch (err) {
       setError(err.response?.data?.message || "Failed to fetch submissions");
@@ -96,6 +98,7 @@ export function useSubmissions({
   return {
     data,
     questions,
+    sortableFields,
     count,
     isLoading,
     error,

@@ -39,6 +39,7 @@ export function SubmissionsTable({
   questions = [],
   ordering,
   onSort,
+  sortableFields = [],
 }) {
   const router = useRouter();
   const [preview, setPreview] = useState(null);
@@ -157,7 +158,17 @@ export function SubmissionsTable({
 
     const dynamic = dynamicQuestions.map((q) => ({
       key: q.name,
-      header: q.label,
+      header: sortableFields.includes(q.name) ? (
+        <SortableHeader
+          columnKey={q.name}
+          currentSort={ordering}
+          onSort={onSort}
+        >
+          {q.label}
+        </SortableHeader>
+      ) : (
+        q.label
+      ),
       headerClassName: "max-w-[250px] truncate",
       className: "max-w-[250px] truncate text-muted-foreground",
       cell: (row) => {
@@ -193,7 +204,7 @@ export function SubmissionsTable({
     }));
 
     return [...base, ...dynamic];
-  }, [dynamicQuestions, ordering, onSort]);
+  }, [dynamicQuestions, ordering, onSort, sortableFields]);
 
   return (
     <DataTable

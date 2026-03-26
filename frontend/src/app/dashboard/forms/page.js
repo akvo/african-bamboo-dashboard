@@ -73,6 +73,7 @@ export default function FormsPage() {
   const [subRegionFields, setSubRegionFields] = useState([]);
   const [plotNameFields, setPlotNameFields] = useState([]);
   const [filterFields, setFilterFields] = useState([]);
+  const [sortableFields, setSortableFields] = useState([]);
 
   // Detail Fields tab state
   const [configTab, setConfigTab] = useState("structure");
@@ -195,6 +196,9 @@ export default function FormsPage() {
     setFilterFields(
       Array.isArray(form.filter_fields) ? form.filter_fields : [],
     );
+    setSortableFields(
+      Array.isArray(form.sortable_fields) ? form.sortable_fields : [],
+    );
 
     // Fetch all fields and filter-eligible fields in parallel
     setIsLoadingFields(true);
@@ -266,6 +270,7 @@ export default function FormsPage() {
         sub_region_field: subRegionFields.join(",") || null,
         plot_name_field: plotNameFields.join(","),
         filter_fields: filterFields.length > 0 ? filterFields : null,
+        sortable_fields: sortableFields.length > 0 ? sortableFields : null,
       });
 
       // Save Detail Fields mappings
@@ -345,6 +350,12 @@ export default function FormsPage() {
 
   function toggleFilterField(name) {
     setFilterFields((prev) =>
+      prev.includes(name) ? prev.filter((f) => f !== name) : [...prev, name],
+    );
+  }
+
+  function toggleSortableField(name) {
+    setSortableFields((prev) =>
       prev.includes(name) ? prev.filter((f) => f !== name) : [...prev, name],
     );
   }
@@ -845,6 +856,60 @@ export default function FormsPage() {
                           region/sub-region filters, so best to choose fields
                           with a limited number of options (e.g. select_one or
                           select_multiple fields).
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Sortable fields - any question type */}
+                    {formFields.length > 0 && (
+                      <div className="space-y-2">
+                        <Label>Sortable fields</Label>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="outline"
+                              className="w-full justify-between h-auto min-h-[2.25rem] px-3 py-2"
+                            >
+                              <div className="flex flex-wrap gap-1">
+                                {sortableFields.length === 0 ? (
+                                  <span className="text-muted-foreground">
+                                    Select sortable fields...
+                                  </span>
+                                ) : (
+                                  sortableFields.map((name) => {
+                                    const field = formFields.find(
+                                      (f) =>
+                                        f.name === name || f.full_path === name,
+                                    );
+                                    return (
+                                      <Badge key={name} variant="secondary">
+                                        {field?.label || name}
+                                      </Badge>
+                                    );
+                                  })
+                                )}
+                              </div>
+                              <ChevronDown className="size-4 opacity-50 shrink-0" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
+                            {formFields.map((field) => (
+                              <DropdownMenuCheckboxItem
+                                key={field.name}
+                                checked={sortableFields.includes(field.name)}
+                                onCheckedChange={() =>
+                                  toggleSortableField(field.name)
+                                }
+                              >
+                                {field.label} ({field.type})
+                              </DropdownMenuCheckboxItem>
+                            ))}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                        <p className="text-xs text-muted-foreground">
+                          Fields that can be sorted in the submissions table.
+                          Columns with sorting enabled will show sort arrows in
+                          the table header.
                         </p>
                       </div>
                     )}

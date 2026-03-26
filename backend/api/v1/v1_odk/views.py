@@ -4,7 +4,10 @@ from datetime import datetime
 from datetime import timezone as tz
 
 from django.conf import settings as django_settings
-from django.db.models import Count, Q
+from django.db.models import Count, F, Q
+from django.db.models.fields.json import (
+    KeyTextTransform,
+)
 from django.http import HttpResponse
 from django.utils import timezone
 from django_q.tasks import async_task
@@ -582,6 +585,14 @@ class SubmissionViewSet(
         "rejected": ApprovalStatusTypes.REJECTED,
     }
 
+    ALLOWED_ORDERINGS = {
+        "kobo_id": "kobo_id",
+        "reviewed_by": "updated_by__name",
+        "start": "sort_start",
+        "end": "sort_end",
+        "area_ha": "plot__area_ha",
+    }
+
     def get_queryset(self):
         qs = super().get_queryset()
         params = self.request.query_params
@@ -591,31 +602,82 @@ class SubmissionViewSet(
         status_param = params.get("status")
         if status_param is not None:
             if status_param == "pending":
-                qs = qs.filter(approval_status__isnull=True)
+                qs = qs.filter(
+                    approval_status__isnull=True
+                )
             elif status_param in self.STATUS_MAP:
-                qs = qs.filter(approval_status=(self.STATUS_MAP[status_param]))
+                qs = qs.filter(
+                    approval_status=(
+                        self.STATUS_MAP[status_param]
+                    )
+                )
         region = params.get("region")
         if region:
             qs = qs.filter(plot__region=region)
         sub_region = params.get("sub_region")
         if sub_region:
-            qs = qs.filter(plot__sub_region=sub_region)
+            qs = qs.filter(
+                plot__sub_region=sub_region
+            )
         search = params.get("search")
         if search:
             stripped = _strip_id_prefix(search)
             qs = qs.filter(
-                Q(plot__plot_name__icontains=(search))
-                | Q(instance_name__icontains=(search))
+                Q(
+                    plot__plot_name__icontains=(
+                        search
+                    )
+                )
+                | Q(
+                    instance_name__icontains=(
+                        search
+                    )
+                )
                 | Q(kobo_id__icontains=stripped)
             )
-        start_date, end_date = _parse_date_range(params)
+        start_date, end_date = (
+            _parse_date_range(params)
+        )
         if start_date is not None:
-            qs = qs.filter(submission_time__gte=start_date)
+            qs = qs.filter(
+                submission_time__gte=start_date
+            )
         if end_date is not None:
-            qs = qs.filter(submission_time__lte=end_date)
+            qs = qs.filter(
+                submission_time__lte=end_date
+            )
         # Dynamic raw_data filters
         if asset_uid:
-            qs = self._apply_dynamic_filters(qs, params, asset_uid)
+            qs = self._apply_dynamic_filters(
+                qs, params, asset_uid
+            )
+        # Sorting
+        qs = qs.annotate(
+            sort_start=KeyTextTransform(
+                "start", "raw_data"
+            ),
+            sort_end=KeyTextTransform(
+                "end", "raw_data"
+            ),
+        )
+        ordering = params.get("ordering")
+        if ordering:
+            desc = ordering.startswith("-")
+            field = ordering.lstrip("-")
+            orm_field = self.ALLOWED_ORDERINGS.get(
+                field
+            )
+            if orm_field:
+                expr = F(orm_field)
+                if desc:
+                    expr = expr.desc(
+                        nulls_last=True
+                    )
+                else:
+                    expr = expr.asc(
+                        nulls_last=True
+                    )
+                qs = qs.order_by(expr)
         return qs
 
     def _apply_dynamic_filters(self, qs, params, asset_uid):

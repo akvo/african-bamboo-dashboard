@@ -16,10 +16,12 @@ import {
   SortableHeader,
   getAriaSort,
 } from "@/components/table-view";
-import { PREFIX_PLOT_ID } from "@/lib/constants";
+import {
+  PREFIX_PLOT_ID,
+  EXCLUDED_QUESTION_NAMES,
+} from "@/lib/constants";
 
 const IMAGE_TYPES = new Set(["image"]);
-const EXCLUDED_QUESTION_NAMES = ["region", "region_specify"];
 
 function getApprovalLabel(approvalStatus) {
   if (approvalStatus === 1) return "approved";
@@ -136,12 +138,30 @@ export function SubmissionsTable({
       },
       {
         key: "region",
-        header: "Region",
+        header: (
+          <SortableHeader
+            columnKey="region"
+            currentSort={ordering}
+            onSort={onSort}
+          >
+            Region
+          </SortableHeader>
+        ),
+        ariaSort: getAriaSort("region", ordering),
         cell: (row) => <TextCell>{row.region}</TextCell>,
       },
       {
         key: "sub_region",
-        header: "Sub-region",
+        header: (
+          <SortableHeader
+            columnKey="sub_region"
+            currentSort={ordering}
+            onSort={onSort}
+          >
+            Sub-region
+          </SortableHeader>
+        ),
+        ariaSort: getAriaSort("sub_region", ordering),
         cell: (row) => <TextCell>{row.sub_region}</TextCell>,
       },
       {

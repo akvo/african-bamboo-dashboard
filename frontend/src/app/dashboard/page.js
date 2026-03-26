@@ -44,6 +44,7 @@ const DashboardPage = () => {
   const [startDate, setStartDate] = useState(null);
   const [endDate, setEndDate] = useState(null);
   const [dynamicValues, setDynamicValues] = useState({});
+  const [ordering, setOrdering] = useState(null);
 
   const { regions, sub_regions, dynamic_filters } = useFilterOptions({
     formId: activeForm?.asset_uid,
@@ -63,6 +64,7 @@ const DashboardPage = () => {
       startDate: startMs,
       endDate: endMs,
       dynamicFilters: dynamicValues,
+      ordering,
     });
   const { plots } = usePlots({ formId: activeForm?.asset_uid });
   const { setSelectedPlotId } = useMapState();
@@ -73,6 +75,7 @@ const DashboardPage = () => {
     setStartDate(null);
     setEndDate(null);
     setDynamicValues({});
+    setOrdering(null);
     setSearch("");
     setActiveTab("all");
     setSelectedPlotId(null);
@@ -217,6 +220,8 @@ const DashboardPage = () => {
         isLoading={isLoading}
         plots={plots}
         questions={questions}
+        ordering={ordering}
+        onSort={setOrdering}
       />
 
       {/* Pagination */}

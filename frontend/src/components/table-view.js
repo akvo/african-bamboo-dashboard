@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { ArrowDown, FileIcon } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, FileIcon } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -118,12 +118,40 @@ export function DataTable({
 
 /* ── Reusable cell helpers ── */
 
-export function SortableHeader({ children }) {
+export function SortableHeader({ children, columnKey, currentSort, onSort }) {
+  const isActive = currentSort?.replace("-", "") === columnKey;
+  const isDesc = isActive && currentSort?.startsWith("-");
+  const isAsc = isActive && !isDesc;
+
+  const handleClick = () => {
+    if (!isActive) {
+      onSort(columnKey);
+    } else if (isAsc) {
+      onSort(`-${columnKey}`);
+    } else {
+      onSort(null);
+    }
+  };
+
+  let Icon = ArrowUpDown;
+  let iconClass = "size-3.5 text-muted-foreground/50";
+  if (isAsc) {
+    Icon = ArrowUp;
+    iconClass = "size-3.5";
+  } else if (isDesc) {
+    Icon = ArrowDown;
+    iconClass = "size-3.5";
+  }
+
   return (
-    <div className="flex items-center gap-1">
+    <button
+      type="button"
+      className="flex items-center gap-1 hover:text-foreground"
+      onClick={handleClick}
+    >
       <span>{children}</span>
-      <ArrowDown className="size-3.5 text-muted-foreground" />
-    </div>
+      <Icon className={iconClass} />
+    </button>
   );
 }
 

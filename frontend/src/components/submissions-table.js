@@ -9,7 +9,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { StatusBadge } from "@/components/status-badge";
-import { DataTable, AttachmentCell, TextCell } from "@/components/table-view";
+import {
+  DataTable,
+  AttachmentCell,
+  TextCell,
+  SortableHeader,
+} from "@/components/table-view";
 import { PREFIX_PLOT_ID } from "@/lib/constants";
 
 const IMAGE_TYPES = new Set(["image"]);
@@ -32,6 +37,8 @@ export function SubmissionsTable({
   isLoading,
   plots = [],
   questions = [],
+  ordering,
+  onSort,
 }) {
   const router = useRouter();
   const [preview, setPreview] = useState(null);
@@ -50,7 +57,15 @@ export function SubmissionsTable({
     const base = [
       {
         key: "kobo_id",
-        header: "Plot ID",
+        header: (
+          <SortableHeader
+            columnKey="kobo_id"
+            currentSort={ordering}
+            onSort={onSort}
+          >
+            Plot ID
+          </SortableHeader>
+        ),
         sticky: true,
         className: "max-w-[240px]",
         cell: (row) => (
@@ -68,12 +83,28 @@ export function SubmissionsTable({
       },
       {
         key: "reviewed_by",
-        header: "Reviewed by",
+        header: (
+          <SortableHeader
+            columnKey="reviewed_by"
+            currentSort={ordering}
+            onSort={onSort}
+          >
+            Reviewed by
+          </SortableHeader>
+        ),
         cell: (row) => <TextCell>{row.reviewed_by || "-"}</TextCell>,
       },
       {
         key: "start",
-        header: "Start date",
+        header: (
+          <SortableHeader
+            columnKey="start"
+            currentSort={ordering}
+            onSort={onSort}
+          >
+            Start date
+          </SortableHeader>
+        ),
         cell: (row) => (
           <TextCell>
             {row.start ? new Date(row.start).toLocaleDateString("en-GB") : null}
@@ -82,7 +113,15 @@ export function SubmissionsTable({
       },
       {
         key: "end",
-        header: "End date",
+        header: (
+          <SortableHeader
+            columnKey="end"
+            currentSort={ordering}
+            onSort={onSort}
+          >
+            End date
+          </SortableHeader>
+        ),
         cell: (row) => (
           <TextCell>
             {row.end ? new Date(row.end).toLocaleDateString("en-GB") : null}
@@ -101,7 +140,15 @@ export function SubmissionsTable({
       },
       {
         key: "area_ha",
-        header: "Area (ha)",
+        header: (
+          <SortableHeader
+            columnKey="area_ha"
+            currentSort={ordering}
+            onSort={onSort}
+          >
+            Area (ha)
+          </SortableHeader>
+        ),
         cell: (row) => (
           <TextCell>{row.area_ha != null ? row.area_ha : "-"}</TextCell>
         ),
@@ -146,7 +193,7 @@ export function SubmissionsTable({
     }));
 
     return [...base, ...dynamic];
-  }, [dynamicQuestions]);
+  }, [dynamicQuestions, ordering, onSort]);
 
   return (
     <DataTable

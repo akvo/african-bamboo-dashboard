@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { logout } from "@/app/actions/auth";
 import { useForms } from "@/hooks/useForms";
 import {
   Card,
@@ -139,8 +140,7 @@ export default function FormsPage() {
         message: parts.join(". ") + ".",
       });
     } catch (err) {
-      const isKoboAuth =
-        err.response?.data?.error_type === "kobo_unauthorized";
+      const isKoboAuth = err.response?.data?.error_type === "kobo_unauthorized";
       setStatus({
         type: isKoboAuth ? "kobo_unauthorized" : "error",
         message:
@@ -460,15 +460,12 @@ export default function FormsPage() {
             >
               {status.message}
               {status.type === "kobo_unauthorized" && (
-                <>
-                  {" "}
-                  <a
-                    href="/login"
-                    className="underline font-medium hover:opacity-80"
-                  >
-                    Go to login
-                  </a>
-                </>
+                <button
+                  onClick={() => logout()}
+                  className="underline font-medium hover:opacity-80 cursor-pointer ml-2"
+                >
+                  Go to login
+                </button>
               )}
             </div>
           )}

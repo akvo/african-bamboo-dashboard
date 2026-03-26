@@ -546,7 +546,6 @@ class SubmissionViewSet(
         for spec in [
             form.region_field,
             form.sub_region_field,
-            form.plot_name_field,
         ]:
             if spec:
                 for f in spec.split(","):
@@ -572,12 +571,30 @@ class SubmissionViewSet(
         ]
 
     def list(self, request, *args, **kwargs):
-        response = super().list(request, *args, **kwargs)
-        asset_uid = request.query_params.get("asset_uid")
+        response = super().list(
+            request, *args, **kwargs
+        )
+        asset_uid = (
+            request.query_params.get("asset_uid")
+        )
         if asset_uid:
-            response.data["questions"] = self._get_form_questions(asset_uid)
+            response.data["questions"] = (
+                self._get_form_questions(asset_uid)
+            )
+            try:
+                form = FormMetadata.objects.get(
+                    asset_uid=asset_uid
+                )
+                response.data[
+                    "sortable_fields"
+                ] = (form.sortable_fields or [])
+            except FormMetadata.DoesNotExist:
+                response.data[
+                    "sortable_fields"
+                ] = []
         else:
             response.data["questions"] = []
+            response.data["sortable_fields"] = []
         return response
 
     STATUS_MAP = {
@@ -678,7 +695,38 @@ class SubmissionViewSet(
                         nulls_last=True
                     )
                 qs = qs.order_by(expr)
+            elif asset_uid:
+                qs = self._apply_dynamic_ordering(
+                    qs, asset_uid, field, desc
+                )
         return qs
+
+    def _apply_dynamic_ordering(
+        self, qs, asset_uid, field, desc
+    ):
+        try:
+            form = FormMetadata.objects.get(
+                asset_uid=asset_uid
+            )
+        except FormMetadata.DoesNotExist:
+            return qs
+        allowed = form.sortable_fields or []
+        if field not in allowed:
+            return qs
+        ann_key = f"sort_dyn_{field}"
+        qs = qs.annotate(
+            **{
+                ann_key: KeyTextTransform(
+                    field, "raw_data"
+                )
+            }
+        )
+        expr = F(ann_key)
+        if desc:
+            expr = expr.desc(nulls_last=True)
+        else:
+            expr = expr.asc(nulls_last=True)
+        return qs.order_by(expr)
 
     def _apply_dynamic_filters(self, qs, params, asset_uid):
         filter_keys = [k for k in params if k.startswith("filter__")]

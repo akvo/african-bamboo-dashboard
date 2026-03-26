@@ -12,10 +12,12 @@ export function useSubmissions({
   startDate,
   endDate,
   dynamicFilters,
+  ordering,
   limit = 10,
 } = {}) {
   const [data, setData] = useState([]);
   const [questions, setQuestions] = useState([]);
+  const [sortableFields, setSortableFields] = useState([]);
   const [count, setCount] = useState(0);
   const [offset, setOffset] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
@@ -28,7 +30,7 @@ export function useSubmissions({
   );
 
   // Reset offset when any filter changes
-  const filterKey = `${assetUid}-${status}-${search}-${region}-${subRegion}-${startDate}-${endDate}-${dynamicKey}`;
+  const filterKey = `${assetUid}-${status}-${search}-${region}-${subRegion}-${startDate}-${endDate}-${dynamicKey}-${ordering}`;
   const prevFilterKey = useRef(filterKey);
   useEffect(() => {
     if (prevFilterKey.current !== filterKey) {
@@ -46,6 +48,7 @@ export function useSubmissions({
     setError(null);
     try {
       const params = { asset_uid: assetUid, limit, offset };
+      if (ordering) params.ordering = ordering;
       if (status && status !== "all") params.status = status;
       if (search) params.search = search;
       if (region) params.region = region;
@@ -60,6 +63,7 @@ export function useSubmissions({
       const res = await api.get("/v1/odk/submissions/", { params });
       setData(res.data.results);
       setQuestions(res.data.questions || []);
+      setSortableFields(res.data.sortable_fields || []);
       setCount(res.data.count);
     } catch (err) {
       setError(err.response?.data?.message || "Failed to fetch submissions");
@@ -75,6 +79,7 @@ export function useSubmissions({
     startDate,
     endDate,
     dynamicKey,
+    ordering,
     limit,
     offset,
   ]);
@@ -93,6 +98,7 @@ export function useSubmissions({
   return {
     data,
     questions,
+    sortableFields,
     count,
     isLoading,
     error,

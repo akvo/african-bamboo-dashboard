@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { ArrowDown, FileIcon } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, FileIcon } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -80,6 +80,7 @@ export function DataTable({
                   style={{
                     fontSize: 12,
                   }}
+                  aria-sort={col.ariaSort}
                 >
                   {col.header}
                 </TableHead>
@@ -118,13 +119,59 @@ export function DataTable({
 
 /* ── Reusable cell helpers ── */
 
-export function SortableHeader({ children }) {
+export function SortableHeader({ children, columnKey, currentSort, onSort }) {
+  const isActive = currentSort?.replace("-", "") === columnKey;
+  const isDesc = isActive && currentSort?.startsWith("-");
+  const isAsc = isActive && !isDesc;
+
+  const handleClick = () => {
+    if (!isActive) {
+      onSort(columnKey);
+    } else if (isAsc) {
+      onSort(`-${columnKey}`);
+    } else {
+      onSort(null);
+    }
+  };
+
+  let Icon = ArrowUpDown;
+  let iconClass = "size-3.5 text-muted-foreground/50";
+  let sortLabel = "not sorted";
+  if (isAsc) {
+    Icon = ArrowUp;
+    iconClass = "size-3.5";
+    sortLabel = "sorted ascending";
+  } else if (isDesc) {
+    Icon = ArrowDown;
+    iconClass = "size-3.5";
+    sortLabel = "sorted descending";
+  }
+
   return (
-    <div className="flex items-center gap-1">
+    <button
+      type="button"
+      className={cn(
+        "flex items-center gap-1 hover:text-foreground",
+        "rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
+      )}
+      onClick={handleClick}
+      aria-label={`Sort by ${typeof children === "string" ? children : columnKey}, ${sortLabel}`}
+    >
       <span>{children}</span>
-      <ArrowDown className="size-3.5 text-muted-foreground" />
-    </div>
+      <Icon className={iconClass} aria-hidden="true" />
+    </button>
   );
+}
+
+/**
+ * Helper to compute the aria-sort value for a column.
+ * Use in column definitions: { ariaSort: getAriaSort("kobo_id", ordering) }
+ */
+export function getAriaSort(columnKey, currentSort) {
+  if (!currentSort) return undefined;
+  const field = currentSort.replace("-", "");
+  if (field !== columnKey) return undefined;
+  return currentSort.startsWith("-") ? "descending" : "ascending";
 }
 
 export function TwoLineCell({ primary, secondary }) {

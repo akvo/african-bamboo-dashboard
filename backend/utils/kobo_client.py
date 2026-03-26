@@ -3,6 +3,16 @@ from base64 import b64encode
 import requests
 
 
+class KoboUnauthorizedError(Exception):
+    """Raised when KoboToolbox returns 401 Unauthorized.
+
+    Signals that the stored Kobo credentials are
+    invalid or expired.
+    """
+
+    pass
+
+
 class KoboClient:
     """Server-side client for KoboToolbox API v2."""
 
@@ -20,6 +30,18 @@ class KoboClient:
         self.session = requests.Session()
         credentials = b64encode(f"{username}:{password}".encode()).decode()
         self.session.headers["Authorization"] = f"Basic {credentials}"
+
+    def _check_response(self, resp):
+        """Raise KoboUnauthorizedError on 401,
+        otherwise delegate to raise_for_status."""
+        if resp.status_code == 401:
+            raise KoboUnauthorizedError(
+                "KoboToolbox credentials are "
+                "invalid or expired. Please "
+                "log in again with your updated "
+                "Kobo password."
+            )
+        resp.raise_for_status()
 
     def verify_credentials(self) -> bool:
         """Validate credentials with a lightweight
@@ -51,7 +73,7 @@ class KoboClient:
             params={"limit": limit, "start": start},
             timeout=self.timeout,
         )
-        resp.raise_for_status()
+        self._check_response(resp)
         return resp.json()
 
     def get_submissions_since(
@@ -73,7 +95,7 @@ class KoboClient:
             },
             timeout=self.timeout,
         )
-        resp.raise_for_status()
+        self._check_response(resp)
         return resp.json()
 
     def get_asset_detail(self, asset_uid: str):
@@ -84,7 +106,7 @@ class KoboClient:
             params={"format": "json"},
             timeout=self.timeout,
         )
-        resp.raise_for_status()
+        self._check_response(resp)
         return resp.json()["content"]
 
     def update_validation_statuses(
@@ -103,9 +125,7 @@ class KoboClient:
         payload = {
             "payload": {
                 "submission_ids": submission_ids,
-                "validation_status.uid": (
-                    validation_status_uid
-                ),
+                "validation_status.uid": (validation_status_uid),
             }
         }
         resp = self.session.patch(
@@ -113,7 +133,7 @@ class KoboClient:
             json=payload,
             timeout=self.timeout,
         )
-        resp.raise_for_status()
+        self._check_response(resp)
         return resp.json()
 
     def update_submission_data(
@@ -124,16 +144,10 @@ class KoboClient:
     ):
         """Update a single submission's data
         via the bulk PATCH endpoint."""
-        url = (
-            f"{self.base_url}"
-            f"/api/v2/assets/{asset_uid}"
-            f"/data/bulk/"
-        )
+        url = f"{self.base_url}" f"/api/v2/assets/{asset_uid}" f"/data/bulk/"
         payload = {
             "payload": {
-                "submission_ids": [
-                    submission_id
-                ],
+                "submission_ids": [submission_id],
                 "data": data,
             }
         }
@@ -142,7 +156,7 @@ class KoboClient:
             json=payload,
             timeout=self.timeout,
         )
-        resp.raise_for_status()
+        self._check_response(resp)
         return resp.json()
 
     def fetch_all_submissions(

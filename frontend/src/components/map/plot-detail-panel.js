@@ -215,14 +215,13 @@ export default function PlotDetailPanel({
     async (section) => {
       if (!submission) return;
       // Fetch form questions with options (cached)
-      let questions = formQuestions;
-      if (questions.length === 0) {
+      // Only needed for non-plot sections (plot uses plot_field_specs)
+      if (section !== "plot" && formQuestions.length === 0) {
         try {
           const res = await api.get(
             `/v1/odk/forms/${submission.form}/form_questions/`,
           );
-          questions = res.data;
-          setFormQuestions(questions);
+          setFormQuestions(res.data);
         } catch {
           return;
         }

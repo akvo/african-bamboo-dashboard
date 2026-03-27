@@ -108,20 +108,29 @@ export function MapStateProvider({ children }) {
 
   const [selectedPlot, setSelectedPlot] = useState(null);
   const [isLoadingPlot, setIsLoadingPlot] = useState(false);
+  const latestPlotRequestRef = useRef(0);
 
   const fetchSelectedPlot = useCallback(async (plotId) => {
+    const requestId = ++latestPlotRequestRef.current;
     if (!plotId) {
       setSelectedPlot(null);
+      setIsLoadingPlot(false);
       return;
     }
     setIsLoadingPlot(true);
     try {
       const res = await api.get(`/v1/odk/plots/${plotId}/`);
-      setSelectedPlot(res.data);
+      if (requestId === latestPlotRequestRef.current) {
+        setSelectedPlot(res.data);
+      }
     } catch {
-      setSelectedPlot(null);
+      if (requestId === latestPlotRequestRef.current) {
+        setSelectedPlot(null);
+      }
     } finally {
-      setIsLoadingPlot(false);
+      if (requestId === latestPlotRequestRef.current) {
+        setIsLoadingPlot(false);
+      }
     }
   }, []);
 

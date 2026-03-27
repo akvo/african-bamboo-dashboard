@@ -237,6 +237,53 @@ def sync_kobo_submission_geometry(
         )
 
 
+def sync_kobo_submission_data(
+    kobo_url,
+    kobo_username,
+    kobo_password_enc,
+    asset_uid,
+    kobo_id,
+    data,
+):
+    """Sync edited field data back to
+    KoboToolbox via bulk update.
+
+    All arguments are primitives/dicts so the
+    task is safe to serialise via Django Q broker.
+    """
+    try:
+        password = decrypt(kobo_password_enc)
+        client = KoboClient(
+            kobo_url, kobo_username, password
+        )
+        client.update_submission_data(
+            asset_uid, kobo_id, data
+        )
+        logger.info(
+            "Synced field data for kobo_id=%s "
+            "on asset %s: %s",
+            kobo_id,
+            asset_uid,
+            list(data.keys()),
+        )
+    except KoboUnauthorizedError:
+        logger.error(
+            "Kobo credentials expired for "
+            "user %s — cannot sync field data "
+            "for kobo_id=%s on asset %s",
+            kobo_username,
+            kobo_id,
+            asset_uid,
+        )
+    except Exception:
+        logger.exception(
+            "Failed to sync field data "
+            "for kobo_id=%s on asset %s",
+            kobo_id,
+            asset_uid,
+        )
+
+
 def on_kobo_sync_complete(task):
     """Django-Q2 hook called after
     sync_kobo_validation_status completes.

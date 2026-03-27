@@ -223,6 +223,10 @@ export default function PlotDetailPanel({
           );
           setFormQuestions(res.data);
         } catch {
+          mapState.setToastMessage({
+            message: "Failed to load form questions. Please try again.",
+            type: "error",
+          });
           return;
         }
       }
@@ -253,7 +257,7 @@ export default function PlotDetailPanel({
       setEditValues(initial);
       setEditingSection(section);
     },
-    [submission, formQuestions],
+    [submission, formQuestions.length, mapState],
   );
 
   const handleSave = useCallback(async () => {

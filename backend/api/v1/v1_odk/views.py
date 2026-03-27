@@ -68,7 +68,6 @@ from api.v1.v1_odk.serializers import (
     resolve_value,
 )
 from api.v1.v1_odk.utils.area_calc import calculate_area_ha
-from api.v1.v1_odk.utils.farmer_sync import sync_farmers_for_form
 from api.v1.v1_odk.utils.warning_rules import evaluate_warnings
 from utils.encryption import decrypt
 from utils.kobo_client import KoboClient, KoboUnauthorizedError
@@ -527,8 +526,13 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
             if plot.flagged_for_review:
                 plots_flagged += 1
 
-        # Sync farmer records from submissions
-        farmer_result = sync_farmers_for_form(form)
+        # Sync farmer records asynchronously to
+        # avoid blocking the response for large forms
+        async_task(
+            "api.v1.v1_odk.utils.farmer_sync"
+            ".sync_farmers_for_form",
+            form,
+        )
 
         return Response(
             {
@@ -538,8 +542,6 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
                 "plots_updated": plots_updated,
                 "plots_flagged": plots_flagged,
                 "questions_synced": (questions_synced),
-                "farmers_created": (farmer_result["created"]),
-                "farmers_updated": (farmer_result["updated"]),
             }
         )
 
@@ -975,7 +977,11 @@ class SubmissionViewSet(
             )
         )
         if mapped_q_names & set(fields.keys()):
-            sync_farmers_for_form(form)
+            async_task(
+                "api.v1.v1_odk.utils.farmer_sync"
+                ".sync_farmers_for_form",
+                form,
+            )
 
     def _sync_edit_to_kobo(
         self, user, submission, fields

@@ -289,10 +289,10 @@ class SubmissionEditDataTest(
 
     @patch(
         "api.v1.v1_odk.views"
-        ".sync_farmers_for_form"
+        ".async_task"
     )
     def test_edit_resyncs_farmer(
-        self, mock_sync
+        self, mock_async
     ):
         """Editing farmer-mapped field triggers
         farmer sync."""
@@ -315,6 +315,16 @@ class SubmissionEditDataTest(
             content_type="application/json",
             **self.auth,
         )
-        mock_sync.assert_called_once_with(
-            self.form
+        # async_task is called for both Kobo sync
+        # and farmer resync; find the farmer call
+        farmer_calls = [
+            c for c in mock_async.call_args_list
+            if c[0][0] == (
+                "api.v1.v1_odk.utils.farmer_sync"
+                ".sync_farmers_for_form"
+            )
+        ]
+        self.assertEqual(len(farmer_calls), 1)
+        self.assertEqual(
+            farmer_calls[0][0][1], self.form
         )

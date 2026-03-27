@@ -317,6 +317,9 @@ class SubmissionDetailSerializer(
     attachments = (
         serializers.SerializerMethodField()
     )
+    plot_field_specs = (
+        serializers.SerializerMethodField()
+    )
     rejection_reason = (
         serializers.SerializerMethodField()
     )
@@ -397,8 +400,77 @@ class SubmissionDetailSerializer(
                 "value": resolved,
                 "raw_value": raw_value,
                 "label": q.label,
+                "question_name": q.name,
+                "type": q.type,
             }
         return result
+
+    def _resolve_field_spec(self, form, raw, spec):
+        """Resolve a comma-separated field spec
+        into a list of editable field metadata.
+
+        For each field name in the spec, looks up the
+        FormQuestion to get label, type, and options.
+        Only includes fields that have a value in
+        raw_data.
+        """
+        if not spec:
+            return []
+        names = [
+            f.strip()
+            for f in spec.split(",")
+            if f.strip()
+        ]
+        questions = {
+            q.name: q
+            for q in FormQuestion.objects.filter(
+                form=form, name__in=names
+            ).prefetch_related("options")
+        }
+        result = []
+        for name in names:
+            raw_value = raw.get(name)
+            if raw_value is None or raw_value == "":
+                continue
+            q = questions.get(name)
+            if not q:
+                continue
+            entry = {
+                "question_name": q.name,
+                "label": q.label,
+                "type": q.type,
+                "raw_value": raw_value,
+            }
+            if q.type.startswith("select_"):
+                entry["options"] = [
+                    {
+                        "name": o.name,
+                        "label": o.label,
+                    }
+                    for o in q.options.all()
+                ]
+            result.append(entry)
+        return result
+
+    def get_plot_field_specs(self, obj):
+        """Return editable field metadata for
+        region and sub_region specs.
+
+        Unlike field_mapped_data (which uses
+        FieldMapping), these come from
+        FormMetadata.region_field and
+        sub_region_field config.
+        """
+        form = obj.form
+        raw = obj.raw_data or {}
+        return {
+            "region": self._resolve_field_spec(
+                form, raw, form.region_field
+            ),
+            "sub_region": self._resolve_field_spec(
+                form, raw, form.sub_region_field
+            ),
+        }
 
     def get_attachments(self, obj):
         raw = obj.raw_data or {}
@@ -574,6 +646,67 @@ class SubmissionUpdateSerializer(
             "reason_text",
             "reviewer_notes",
         ]
+
+
+class SubmissionEditDataSerializer(
+    serializers.Serializer
+):
+    """Validates field edits against
+    FormQuestion definitions."""
+
+    fields = serializers.DictField(
+        child=serializers.CharField(
+            allow_blank=True,
+            allow_null=True,
+        ),
+        help_text=(
+            "Dict of question_name: new_value. "
+            "Only raw values (option names for "
+            "select_one fields)."
+        ),
+    )
+
+    def validate_fields(self, value):
+        submission = self.context["submission"]
+        form = submission.form
+        valid_questions = set(
+            FormQuestion.objects.filter(
+                form=form
+            ).values_list("name", flat=True)
+        )
+        invalid = (
+            set(value.keys()) - valid_questions
+        )
+        if invalid:
+            raise serializers.ValidationError(
+                "Unknown question names: "
+                f"{', '.join(sorted(invalid))}"
+            )
+
+        for q_name, new_val in value.items():
+            if new_val is None or new_val == "":
+                continue
+            q = FormQuestion.objects.filter(
+                form=form, name=q_name
+            ).first()
+            if q and q.type == "select_one":
+                valid_opts = set(
+                    q.options.values_list(
+                        "name", flat=True
+                    )
+                )
+                if new_val not in valid_opts:
+                    raise serializers.ValidationError(
+                        {
+                            q_name: (
+                                "Invalid option "
+                                f"'{new_val}'. "
+                                "Valid: "
+                                f"{sorted(valid_opts)}"
+                            )
+                        }
+                    )
+        return value
 
 
 class PlotSerializer(serializers.ModelSerializer):

@@ -4,10 +4,8 @@ from datetime import datetime
 from datetime import timezone as tz
 
 from django.conf import settings as django_settings
-from django.db.models import Count, F, Q
-from django.db.models.fields.json import (
-    KeyTextTransform,
-)
+from django.db.models import Count, F, OuterRef, Q, Subquery
+from django.db.models.fields.json import KeyTextTransform
 from django.http import HttpResponse
 from django.utils import timezone
 from django_q.tasks import async_task
@@ -16,8 +14,12 @@ from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
-from rest_framework.mixins import (DestroyModelMixin, ListModelMixin,
-                                   RetrieveModelMixin, UpdateModelMixin)
+from rest_framework.mixins import (
+    DestroyModelMixin,
+    ListModelMixin,
+    RetrieveModelMixin,
+    UpdateModelMixin
+)
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
@@ -25,25 +27,44 @@ from rest_framework.viewsets import GenericViewSet
 from api.v1.v1_jobs.constants import JobStatus, JobTypes
 from api.v1.v1_jobs.models import Jobs
 from api.v1.v1_jobs.serializers import JobSerializer
-from api.v1.v1_odk.constants import (EXCLUDED_QUESTION_TYPES, PREFIX_FARM_ID,
-                                     PREFIX_PLOT_ID, ApprovalStatusTypes)
+from api.v1.v1_odk.constants import (
+    EXCLUDED_QUESTION_TYPES,
+    PREFIX_FARM_ID,
+    PREFIX_PLOT_ID,
+    ApprovalStatusTypes
+)
 from api.v1.v1_odk.export import _wkt_to_kml
-from api.v1.v1_odk.funcs import (MAPPING_FIELDS, check_and_flag_overlaps,
-                                 dispatch_kobo_geometry_sync, rederive_plots,
-                                 sync_form_questions, validate_and_check_plot)
-from api.v1.v1_odk.models import (Farmer, FarmerFieldMapping, FieldMapping,
-                                  FieldSettings, FormMetadata, FormQuestion,
-                                  Plot, RejectionAudit, Submission)
-from api.v1.v1_odk.serializers import (FieldMappingSerializer,
-                                       FieldSettingsSerializer,
-                                       FormMetadataSerializer,
-                                       PlotOverlapQuerySerializer,
-                                       PlotSerializer,
-                                       SubmissionDetailSerializer,
-                                       SubmissionListSerializer,
-                                       SubmissionUpdateSerializer,
-                                       SyncTriggerSerializer,
-                                       build_option_lookup, resolve_value)
+from api.v1.v1_odk.funcs import (
+    MAPPING_FIELDS,
+    check_and_flag_overlaps,
+    dispatch_kobo_geometry_sync,
+    rederive_plots,
+    sync_form_questions, validate_and_check_plot
+)
+from api.v1.v1_odk.models import (
+    Farmer,
+    FarmerFieldMapping,
+    FieldMapping,
+    FieldSettings,
+    FormMetadata,
+    FormOption,
+    FormQuestion,
+    Plot,
+    RejectionAudit,
+    Submission
+)
+from api.v1.v1_odk.serializers import (
+    FieldMappingSerializer,
+    FieldSettingsSerializer,
+    FormMetadataSerializer,
+    PlotOverlapQuerySerializer,
+    PlotSerializer,
+    SubmissionDetailSerializer,
+    SubmissionListSerializer,
+    SubmissionUpdateSerializer,
+    SyncTriggerSerializer,
+    build_option_lookup, resolve_value
+)
 from api.v1.v1_odk.utils.area_calc import calculate_area_ha
 from api.v1.v1_odk.utils.farmer_sync import sync_farmers_for_form
 from api.v1.v1_odk.utils.warning_rules import evaluate_warnings
@@ -571,27 +592,15 @@ class SubmissionViewSet(
         ]
 
     def list(self, request, *args, **kwargs):
-        response = super().list(
-            request, *args, **kwargs
-        )
-        asset_uid = (
-            request.query_params.get("asset_uid")
-        )
+        response = super().list(request, *args, **kwargs)
+        asset_uid = request.query_params.get("asset_uid")
         if asset_uid:
-            response.data["questions"] = (
-                self._get_form_questions(asset_uid)
-            )
+            response.data["questions"] = self._get_form_questions(asset_uid)
             try:
-                form = FormMetadata.objects.get(
-                    asset_uid=asset_uid
-                )
-                response.data[
-                    "sortable_fields"
-                ] = (form.sortable_fields or [])
+                form = FormMetadata.objects.get(asset_uid=asset_uid)
+                response.data["sortable_fields"] = form.sortable_fields or []
             except FormMetadata.DoesNotExist:
-                response.data[
-                    "sortable_fields"
-                ] = []
+                response.data["sortable_fields"] = []
         else:
             response.data["questions"] = []
             response.data["sortable_fields"] = []
@@ -621,120 +630,93 @@ class SubmissionViewSet(
         status_param = params.get("status")
         if status_param is not None:
             if status_param == "pending":
-                qs = qs.filter(
-                    approval_status__isnull=True
-                )
+                qs = qs.filter(approval_status__isnull=True)
             elif status_param in self.STATUS_MAP:
-                qs = qs.filter(
-                    approval_status=(
-                        self.STATUS_MAP[status_param]
-                    )
-                )
+                qs = qs.filter(approval_status=(self.STATUS_MAP[status_param]))
         region = params.get("region")
         if region:
             qs = qs.filter(plot__region=region)
         sub_region = params.get("sub_region")
         if sub_region:
-            qs = qs.filter(
-                plot__sub_region=sub_region
-            )
+            qs = qs.filter(plot__sub_region=sub_region)
         search = params.get("search")
         if search:
             stripped = _strip_id_prefix(search)
             qs = qs.filter(
-                Q(
-                    plot__plot_name__icontains=(
-                        search
-                    )
-                )
-                | Q(
-                    instance_name__icontains=(
-                        search
-                    )
-                )
+                Q(plot__plot_name__icontains=(search))
+                | Q(instance_name__icontains=(search))
                 | Q(kobo_id__icontains=stripped)
             )
-        start_date, end_date = (
-            _parse_date_range(params)
-        )
+        start_date, end_date = _parse_date_range(params)
         if start_date is not None:
-            qs = qs.filter(
-                submission_time__gte=start_date
-            )
+            qs = qs.filter(submission_time__gte=start_date)
         if end_date is not None:
-            qs = qs.filter(
-                submission_time__lte=end_date
-            )
+            qs = qs.filter(submission_time__lte=end_date)
         # Dynamic raw_data filters
         if asset_uid:
-            qs = self._apply_dynamic_filters(
-                qs, params, asset_uid
-            )
+            qs = self._apply_dynamic_filters(qs, params, asset_uid)
         # Sorting
         qs = qs.annotate(
-            sort_start=KeyTextTransform(
-                "start", "raw_data"
-            ),
-            sort_end=KeyTextTransform(
-                "end", "raw_data"
-            ),
+            sort_start=KeyTextTransform("start", "raw_data"),
+            sort_end=KeyTextTransform("end", "raw_data"),
         )
         ordering = params.get("ordering")
         if ordering:
             desc = ordering.startswith("-")
             field = ordering.lstrip("-")
-            orm_field = self.ALLOWED_ORDERINGS.get(
-                field
-            )
+            orm_field = self.ALLOWED_ORDERINGS.get(field)
             if orm_field:
                 expr = F(orm_field)
                 if desc:
-                    expr = expr.desc(
-                        nulls_last=True
-                    )
+                    expr = expr.desc(nulls_last=True)
                 else:
-                    expr = expr.asc(
-                        nulls_last=True
-                    )
+                    expr = expr.asc(nulls_last=True)
                 qs = qs.order_by(
                     expr,
                     "-submission_time",
                     "pk",
                 )
             elif asset_uid:
-                qs = self._apply_dynamic_ordering(
-                    qs, asset_uid, field, desc
-                )
+                qs = self._apply_dynamic_ordering(qs, asset_uid, field, desc)
         return qs
 
-    def _apply_dynamic_ordering(
-        self, qs, asset_uid, field, desc
-    ):
+    def _apply_dynamic_ordering(self, qs, asset_uid, field, desc):
         try:
-            form = FormMetadata.objects.get(
-                asset_uid=asset_uid
-            )
+            form = FormMetadata.objects.get(asset_uid=asset_uid)
         except FormMetadata.DoesNotExist:
             return qs
         allowed = form.sortable_fields or []
         if field not in allowed:
             return qs
         ann_key = f"sort_dyn_{field}"
-        qs = qs.annotate(
-            **{
-                ann_key: KeyTextTransform(
-                    field, "raw_data"
-                )
-            }
-        )
-        expr = F(ann_key)
+        qs = qs.annotate(**{ann_key: KeyTextTransform(field, "raw_data")})
+        sort_key = ann_key
+        # For select_one fields, sort by resolved
+        # option label instead of raw option name
+        question = FormQuestion.objects.filter(
+            form=form,
+            name=field,
+            type="select_one",
+        ).first()
+        if question:
+            label_key = f"sort_label_{field}"
+            qs = qs.annotate(
+                **{
+                    label_key: Subquery(
+                        FormOption.objects.filter(
+                            question=question,
+                            name=OuterRef(ann_key),
+                        ).values("label")[:1]
+                    )
+                }
+            )
+            sort_key = label_key
+        expr = F(sort_key)
         if desc:
             expr = expr.desc(nulls_last=True)
         else:
             expr = expr.asc(nulls_last=True)
-        return qs.order_by(
-            expr, "-submission_time", "pk"
-        )
+        return qs.order_by(expr, "-submission_time", "pk")
 
     def _apply_dynamic_filters(self, qs, params, asset_uid):
         filter_keys = [k for k in params if k.startswith("filter__")]

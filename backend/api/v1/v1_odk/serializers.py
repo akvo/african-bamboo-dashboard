@@ -669,13 +669,15 @@ class SubmissionEditDataSerializer(
     def validate_fields(self, value):
         submission = self.context["submission"]
         form = submission.form
-        valid_questions = set(
-            FormQuestion.objects.filter(
-                form=form
-            ).values_list("name", flat=True)
-        )
+        questions = {
+            q.name: q
+            for q in FormQuestion.objects.filter(
+                form=form,
+                name__in=value.keys(),
+            ).prefetch_related("options")
+        }
         invalid = (
-            set(value.keys()) - valid_questions
+            set(value.keys()) - set(questions)
         )
         if invalid:
             raise serializers.ValidationError(
@@ -686,15 +688,12 @@ class SubmissionEditDataSerializer(
         for q_name, new_val in value.items():
             if new_val is None or new_val == "":
                 continue
-            q = FormQuestion.objects.filter(
-                form=form, name=q_name
-            ).first()
-            if q and q.type == "select_one":
-                valid_opts = set(
-                    q.options.values_list(
-                        "name", flat=True
-                    )
-                )
+            q = questions[q_name]
+            if q.type == "select_one":
+                valid_opts = {
+                    o.name
+                    for o in q.options.all()
+                }
                 if new_val not in valid_opts:
                     raise serializers.ValidationError(
                         {

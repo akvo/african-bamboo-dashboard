@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useForms } from "@/hooks/useForms";
 import { useMapState } from "@/hooks/useMapState";
@@ -23,22 +23,31 @@ export default function MapPage() {
   const router = useRouter();
   const { activeForm, isChanged, setIsChanged } = useForms();
   const mapState = useMapState();
-  const { plots, count, isLoading, refetch } = mapState;
+  const { plots, count, isLoading, refetch, selectedPlotId } = mapState;
 
   const { regions, sub_regions, dynamic_filters } = useFilterOptions({
     formId: activeForm?.asset_uid,
     region: mapState.region,
   });
 
-  const initialPlotApplied = useRef(false);
-
+  // Sync URL plot param → selectedPlotId (URL is source of truth)
   useEffect(() => {
-    const plotId = searchParams.get("plot");
-    if (plotId && !initialPlotApplied.current) {
-      mapState.setSelectedPlotId(plotId);
-      initialPlotApplied.current = true;
+    const plotId = searchParams.get("plot") || null;
+    if (plotId !== selectedPlotId) {
+      mapState.handleSelectPlot(plotId);
     }
-  }, [searchParams, mapState]);
+  }, [searchParams, selectedPlotId, mapState]);
+
+  const handleSelectPlot = useCallback(
+    (plotUuid) => {
+      if (mapState.editingPlotId && plotUuid !== mapState.editingPlotId) return;
+      mapState.handleSelectPlot(plotUuid);
+      if (plotUuid) {
+        router.replace(`/dashboard/map?plot=${plotUuid}`, { scroll: false });
+      }
+    },
+    [mapState, router],
+  );
 
   const [editedGeo, setEditedGeo] = useState(null);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
@@ -67,7 +76,7 @@ export default function MapPage() {
         `/v1/odk/submissions/${mapState.selectedPlot.submission_uuid}/`,
         { approval_status: 1 },
       );
-      await refetch();
+      await Promise.all([refetch(), mapState.refetchSelectedPlot()]);
       mapState.setApprovalDialogOpen(false);
       mapState.setToastMessage("Plot approved successfully");
     } catch {
@@ -93,7 +102,7 @@ export default function MapPage() {
             reason_text: notes || "",
           },
         );
-        await refetch();
+        await Promise.all([refetch(), mapState.refetchSelectedPlot()]);
         mapState.setRejectionDialogOpen(false);
         mapState.setToastMessage("Plot rejected");
       } catch {
@@ -116,7 +125,7 @@ export default function MapPage() {
         `/v1/odk/submissions/${mapState.selectedPlot.submission_uuid}/`,
         { approval_status: null },
       );
-      await refetch();
+      await Promise.all([refetch(), mapState.refetchSelectedPlot()]);
       mapState.setToastMessage("Plot reverted to pending");
     } catch {
       mapState.setToastMessage({
@@ -138,7 +147,7 @@ export default function MapPage() {
       setSaveDialogOpen(false);
       setEditedGeo(null);
       mapState.handleCancelEditing();
-      await refetch();
+      await Promise.all([refetch(), mapState.refetchSelectedPlot()]);
       mapState.setToastMessage("Geometry saved. Syncing to Kobo...");
     } catch {
       mapState.setToastMessage({
@@ -163,7 +172,7 @@ export default function MapPage() {
     try {
       await api.post(`/v1/odk/plots/${mapState.editingPlotId}/reset_polygon/`);
       setEditedGeo(null);
-      await refetch();
+      await Promise.all([refetch(), mapState.refetchSelectedPlot()]);
       mapState.setToastMessage("Polygon reset to original. Syncing to Kobo...");
     } catch {
       mapState.setToastMessage({
@@ -183,11 +192,10 @@ export default function MapPage() {
           {mapState.selectedPlotId ? (
             <PlotDetailPanel
               plot={mapState.selectedPlot}
+              isLoading={mapState.isLoadingPlot}
               onBack={() => {
                 mapState.handleBackToList();
-                if (searchParams.get("plot")) {
-                  router.replace("/dashboard/map", { scroll: false });
-                }
+                router.replace("/dashboard/map", { scroll: false });
               }}
               onApprove={() => mapState.setApprovalDialogOpen(true)}
               onReject={() => mapState.setRejectionDialogOpen(true)}
@@ -207,7 +215,7 @@ export default function MapPage() {
               onTabChange={mapState.setActiveTab}
               onSortChange={mapState.setSortBy}
               onSearchChange={mapState.handleSearchChange}
-              onSelectPlot={mapState.handleSelectPlot}
+              onSelectPlot={handleSelectPlot}
             />
           )}
         </div>
@@ -227,23 +235,30 @@ export default function MapPage() {
               dynamicValues={mapState.dynamicValues}
               onRegionChange={(v) => {
                 mapState.setSelectedPlotId(null);
+                router.replace("/dashboard/map", { scroll: false });
                 mapState.setRegion(v);
                 mapState.setSubRegion("");
               }}
               onSubRegionChange={(v) => {
                 mapState.setSelectedPlotId(null);
+                router.replace("/dashboard/map", { scroll: false });
                 mapState.setSubRegion(v);
               }}
               onDateRangeChange={(from, to) => {
                 mapState.setSelectedPlotId(null);
+                router.replace("/dashboard/map", { scroll: false });
                 mapState.setStartDate(from);
                 mapState.setEndDate(to);
               }}
               onDynamicFilterChange={(name, val) => {
                 mapState.setSelectedPlotId(null);
+                router.replace("/dashboard/map", { scroll: false });
                 mapState.setDynamicValues((prev) => ({ ...prev, [name]: val }));
               }}
-              onReset={mapState.handleResetFilters}
+              onReset={() => {
+                mapState.handleResetFilters();
+                router.replace("/dashboard/map", { scroll: false });
+              }}
             />
           </div>
           <MapContainerDynamic
@@ -252,7 +267,7 @@ export default function MapPage() {
             editingPlotId={mapState.editingPlotId}
             editedGeo={editedGeo}
             setEditedGeo={setEditedGeo}
-            onSelectPlot={mapState.handleSelectPlot}
+            onSelectPlot={handleSelectPlot}
             onSaveEdit={handleSaveClick}
             onCancelEdit={handleCancelEdit}
             onReset={handleResetPolygon}

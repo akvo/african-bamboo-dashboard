@@ -106,7 +106,41 @@ export function MapStateProvider({ children }) {
     }
   }, []);
 
-  const selectedPlot = plots.find((p) => p.uuid === selectedPlotId) || null;
+  const [selectedPlot, setSelectedPlot] = useState(null);
+  const [isLoadingPlot, setIsLoadingPlot] = useState(false);
+  const latestPlotRequestRef = useRef(0);
+
+  const fetchSelectedPlot = useCallback(async (plotId) => {
+    const requestId = ++latestPlotRequestRef.current;
+    if (!plotId) {
+      setSelectedPlot(null);
+      setIsLoadingPlot(false);
+      return;
+    }
+    setIsLoadingPlot(true);
+    try {
+      const res = await api.get(`/v1/odk/plots/${plotId}/`);
+      if (requestId === latestPlotRequestRef.current) {
+        setSelectedPlot(res.data);
+      }
+    } catch {
+      if (requestId === latestPlotRequestRef.current) {
+        setSelectedPlot(null);
+      }
+    } finally {
+      if (requestId === latestPlotRequestRef.current) {
+        setIsLoadingPlot(false);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchSelectedPlot(selectedPlotId);
+  }, [selectedPlotId, fetchSelectedPlot]);
+
+  const refetchSelectedPlot = useCallback(() => {
+    return fetchSelectedPlot(selectedPlotId);
+  }, [selectedPlotId, fetchSelectedPlot]);
 
   const handleSelectPlot = useCallback(
     (plotUuid) => {
@@ -157,6 +191,8 @@ export function MapStateProvider({ children }) {
         refetch: fetchPlots,
         selectedPlotId,
         selectedPlot,
+        isLoadingPlot,
+        refetchSelectedPlot,
         editingPlotId,
         approvalDialogOpen,
         rejectionDialogOpen,

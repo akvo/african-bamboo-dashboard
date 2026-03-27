@@ -21,6 +21,7 @@ from api.v1.v1_odk.utils.farmer_sync import (
     generate_next_farmer_uid,
     resolve_field_value,
     sync_farmers_for_form,
+    update_farmer_for_submission,
 )
 
 
@@ -436,4 +437,270 @@ class SyncFarmersCommandTest(TestCase):
         )
         self.assertIn(
             "not found", err.getvalue()
+        )
+
+
+@override_settings(USE_TZ=False, TEST_ENV=True)
+class UpdateFarmerForSubmissionTest(TestCase):
+    """Tests for update_farmer_for_submission —
+    targeted farmer update on field edits."""
+
+    def setUp(self):
+        self.form = _create_form_with_questions()
+        FarmerFieldMapping.objects.create(
+            form=self.form,
+            unique_fields=(
+                "First_Name,"
+                "Father_s_Name,"
+                "Grandfather_s_Name"
+            ),
+            values_fields=(
+                "First_Name,"
+                "Father_s_Name,"
+                "Grandfather_s_Name,"
+                "age_of_farmer"
+            ),
+        )
+
+    def test_rename_preserves_farmer_uid(self):
+        """Editing a unique field updates the
+        farmer in place — no new UID generated."""
+        sub, plot = _create_submission(
+            self.form,
+            "k001",
+            {
+                "First_Name": "Dara",
+                "Father_s_Name": "Hora",
+                "Grandfather_s_Name": "Daye",
+                "age_of_farmer": "38",
+            },
+        )
+        # Initial sync to create farmer
+        sync_farmers_for_form(self.form)
+        plot.refresh_from_db()
+        original_farmer = plot.farmer
+        self.assertIsNotNone(original_farmer)
+        self.assertEqual(
+            original_farmer.uid, "00001"
+        )
+
+        # Simulate name edit
+        sub.raw_data["First_Name"] = "Tadesse"
+        sub.save()
+
+        result = update_farmer_for_submission(
+            self.form, sub
+        )
+        self.assertEqual(
+            result["action"], "renamed"
+        )
+        self.assertEqual(
+            result["farmer_id"], original_farmer.pk
+        )
+
+        # Farmer UID preserved
+        original_farmer.refresh_from_db()
+        self.assertEqual(
+            original_farmer.uid, "00001"
+        )
+        self.assertEqual(
+            original_farmer.lookup_key,
+            "Tadesse - Hora - Daye",
+        )
+        self.assertEqual(
+            original_farmer.values["First_Name"],
+            "Tadesse",
+        )
+
+        # Plot still references same farmer
+        plot.refresh_from_db()
+        self.assertEqual(
+            plot.farmer_id, original_farmer.pk
+        )
+
+        # No new farmers created
+        self.assertEqual(
+            Farmer.objects.count(), 1
+        )
+
+    def test_values_only_update(self):
+        """Editing a values-only field (not in
+        unique_fields) updates values in place."""
+        sub, plot = _create_submission(
+            self.form,
+            "k001",
+            {
+                "First_Name": "Dara",
+                "Father_s_Name": "Hora",
+                "Grandfather_s_Name": "Daye",
+                "age_of_farmer": "38",
+            },
+        )
+        sync_farmers_for_form(self.form)
+        plot.refresh_from_db()
+        farmer = plot.farmer
+
+        # Edit non-unique field
+        sub.raw_data["age_of_farmer"] = "39"
+        sub.save()
+
+        result = update_farmer_for_submission(
+            self.form, sub
+        )
+        self.assertEqual(
+            result["action"], "updated"
+        )
+
+        farmer.refresh_from_db()
+        self.assertEqual(
+            farmer.values["age_of_farmer"], "39"
+        )
+        self.assertEqual(Farmer.objects.count(), 1)
+
+    def test_shared_farmer_detaches_plot(self):
+        """When farmer is shared across plots,
+        editing one detaches it and links to a
+        new farmer."""
+        raw = {
+            "First_Name": "Dara",
+            "Father_s_Name": "Hora",
+            "Grandfather_s_Name": "Daye",
+            "age_of_farmer": "38",
+        }
+        sub1, plot1 = _create_submission(
+            self.form, "k001", dict(raw)
+        )
+        sub2, plot2 = _create_submission(
+            self.form, "k002", dict(raw)
+        )
+        sync_farmers_for_form(self.form)
+
+        plot1.refresh_from_db()
+        plot2.refresh_from_db()
+        shared_farmer = plot1.farmer
+        self.assertEqual(
+            plot1.farmer_id, plot2.farmer_id
+        )
+        self.assertEqual(Farmer.objects.count(), 1)
+
+        # Edit sub1's name
+        sub1.raw_data["First_Name"] = "Tadesse"
+        sub1.save()
+
+        result = update_farmer_for_submission(
+            self.form, sub1
+        )
+        self.assertEqual(
+            result["action"], "detached"
+        )
+
+        # Now two farmers exist
+        self.assertEqual(Farmer.objects.count(), 2)
+
+        # plot1 linked to new farmer
+        plot1.refresh_from_db()
+        self.assertNotEqual(
+            plot1.farmer_id, shared_farmer.pk
+        )
+        self.assertEqual(
+            plot1.farmer.lookup_key,
+            "Tadesse - Hora - Daye",
+        )
+
+        # plot2 still on old farmer
+        plot2.refresh_from_db()
+        self.assertEqual(
+            plot2.farmer_id, shared_farmer.pk
+        )
+
+    def test_merge_into_existing_farmer(self):
+        """When renaming to match another existing
+        farmer's lookup_key, merges instead of
+        creating duplicate."""
+        sub1, plot1 = _create_submission(
+            self.form,
+            "k001",
+            {
+                "First_Name": "Dara",
+                "Father_s_Name": "Hora",
+                "Grandfather_s_Name": "Daye",
+            },
+        )
+        sub2, plot2 = _create_submission(
+            self.form,
+            "k002",
+            {
+                "First_Name": "Tadesse",
+                "Father_s_Name": "Hora",
+                "Grandfather_s_Name": "Daye",
+            },
+        )
+        sync_farmers_for_form(self.form)
+        self.assertEqual(Farmer.objects.count(), 2)
+
+        plot1.refresh_from_db()
+        plot2.refresh_from_db()
+        farmer2 = plot2.farmer
+
+        # Rename farmer1 to match farmer2
+        sub1.raw_data["First_Name"] = "Tadesse"
+        sub1.save()
+
+        result = update_farmer_for_submission(
+            self.form, sub1
+        )
+        self.assertEqual(
+            result["action"], "merged"
+        )
+
+        # Old farmer deleted, plot points to
+        # the target farmer
+        self.assertEqual(Farmer.objects.count(), 1)
+        plot1.refresh_from_db()
+        self.assertEqual(
+            plot1.farmer_id, farmer2.pk
+        )
+
+    def test_no_farmer_linked_creates_one(self):
+        """When no farmer is linked yet,
+        find-or-create one."""
+        sub, plot = _create_submission(
+            self.form,
+            "k001",
+            {
+                "First_Name": "Dara",
+                "Father_s_Name": "Hora",
+                "Grandfather_s_Name": "Daye",
+            },
+        )
+        self.assertIsNone(plot.farmer)
+
+        result = update_farmer_for_submission(
+            self.form, sub
+        )
+        self.assertEqual(
+            result["action"], "linked"
+        )
+
+        plot.refresh_from_db()
+        self.assertIsNotNone(plot.farmer)
+        self.assertEqual(
+            plot.farmer.lookup_key,
+            "Dara - Hora - Daye",
+        )
+
+    def test_no_mapping_returns_early(self):
+        """No FarmerFieldMapping returns
+        no_mapping."""
+        FarmerFieldMapping.objects.all().delete()
+        sub, _ = _create_submission(
+            self.form,
+            "k001",
+            {"First_Name": "Dara"},
+        )
+        result = update_farmer_for_submission(
+            self.form, sub
+        )
+        self.assertEqual(
+            result["action"], "no_mapping"
         )

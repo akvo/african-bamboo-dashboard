@@ -106,7 +106,32 @@ export function MapStateProvider({ children }) {
     }
   }, []);
 
-  const selectedPlot = plots.find((p) => p.uuid === selectedPlotId) || null;
+  const [selectedPlot, setSelectedPlot] = useState(null);
+  const [isLoadingPlot, setIsLoadingPlot] = useState(false);
+
+  const fetchSelectedPlot = useCallback(async (plotId) => {
+    if (!plotId) {
+      setSelectedPlot(null);
+      return;
+    }
+    setIsLoadingPlot(true);
+    try {
+      const res = await api.get(`/v1/odk/plots/${plotId}/`);
+      setSelectedPlot(res.data);
+    } catch {
+      setSelectedPlot(null);
+    } finally {
+      setIsLoadingPlot(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchSelectedPlot(selectedPlotId);
+  }, [selectedPlotId, fetchSelectedPlot]);
+
+  const refetchSelectedPlot = useCallback(() => {
+    return fetchSelectedPlot(selectedPlotId);
+  }, [selectedPlotId, fetchSelectedPlot]);
 
   const handleSelectPlot = useCallback(
     (plotUuid) => {
@@ -157,6 +182,8 @@ export function MapStateProvider({ children }) {
         refetch: fetchPlots,
         selectedPlotId,
         selectedPlot,
+        isLoadingPlot,
+        refetchSelectedPlot,
         editingPlotId,
         approvalDialogOpen,
         rejectionDialogOpen,

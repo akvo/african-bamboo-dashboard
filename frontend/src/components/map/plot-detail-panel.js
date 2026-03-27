@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Map,
   User,
@@ -20,15 +20,57 @@ import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import PlotHeaderCard from "@/components/map/plot-header-card";
 import AttachmentCard from "@/components/map/attachment-card";
+import EditableField from "@/components/map/editable-field";
 import { PREFIX_FARM_ID } from "@/lib/constants";
+import { useMapState } from "@/hooks/useMapState";
 
-function SectionHeader({ icon: Icon, title }) {
+const SECTION_FIELD_MAP = {
+  enumerator: ["enumerator"],
+  farmer: ["farmer", "father_name", "grandfather_name"],
+};
+
+function SectionHeader({
+  icon: Icon,
+  title,
+  isEditing,
+  onEdit,
+  onSave,
+  onCancel,
+  isSaving,
+}) {
   return (
-    <div className="flex items-center justify-between">
+    <div className="w-full flex items-center justify-between">
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         {Icon && <Icon className="size-4" />}
         <span>{title}</span>
       </div>
+      {isEditing ? (
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="text-sm text-muted-foreground hover:text-foreground cursor-pointer"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onSave}
+            disabled={isSaving}
+            className="text-sm text-primary hover:text-primary/80 cursor-pointer font-medium disabled:opacity-50"
+          >
+            {isSaving ? "Saving..." : "Save"}
+          </button>
+        </div>
+      ) : onEdit ? (
+        <button
+          type="button"
+          onClick={onEdit}
+          className="ml-2 text-muted-foreground hover:text-foreground items-center gap-1 cursor-pointer text-sm"
+        >
+          Edit
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -66,16 +108,35 @@ function PersonSection({
   subTitle = null,
   fields = [],
   children,
+  isEditing,
+  onEdit,
+  onSave,
+  onCancel,
+  isSaving,
 }) {
-  if (!name) return null;
+  if (!name && !isEditing) return null;
   const visibleFields = fields.filter((f) => f.value);
   return (
     <div className="flex flex-col gap-3 rounded-md border border-card-foreground/10 p-3 bg-card">
-      <SectionHeader icon={Icon} title={title} />
+      <SectionHeader
+        icon={Icon}
+        title={title}
+        isEditing={isEditing}
+        onEdit={onEdit}
+        onSave={onSave}
+        onCancel={onCancel}
+        isSaving={isSaving}
+      />
       <Separator className="bg-muted-foreground/20" />
-      <p className="text-sm font-bold text-foreground">{name}</p>
-      {subTitle && <p className="text-sm text-muted-foreground">{subTitle}</p>}
-      {visibleFields.length > 0 && <DataFieldRow fields={visibleFields} />}
+      {!isEditing && name && (
+        <p className="text-sm font-bold text-foreground">{name}</p>
+      )}
+      {!isEditing && subTitle && (
+        <p className="text-sm text-muted-foreground">{subTitle}</p>
+      )}
+      {!isEditing && visibleFields.length > 0 && (
+        <DataFieldRow fields={visibleFields} />
+      )}
       {children}
     </div>
   );
@@ -92,6 +153,7 @@ function TimelineRow({ label, value }) {
 
 export default function PlotDetailPanel({
   plot,
+  isLoading = false,
   onBack,
   onApprove,
   onReject,
@@ -103,6 +165,14 @@ export default function PlotDetailPanel({
   const [isLoadingSub, setIsLoadingSub] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const [activeTab, setActiveTab] = useState("details");
+
+  // Edit mode state
+  const [editingSection, setEditingSection] = useState(null);
+  const [editValues, setEditValues] = useState({});
+  const [isSaving, setIsSaving] = useState(false);
+  const [formQuestions, setFormQuestions] = useState([]);
+
+  const mapState = useMapState();
 
   useEffect(() => {
     if (!plot?.submission_uuid) {
@@ -131,7 +201,145 @@ export default function PlotDetailPanel({
     };
   }, [plot?.submission_uuid]);
 
-  if (!plot) return null;
+  // Reset edit state when plot changes
+  useEffect(() => {
+    setEditingSection(null);
+    setEditValues({});
+  }, [plot?.submission_uuid]);
+
+  const handleFieldChange = useCallback((questionName, value) => {
+    setEditValues((prev) => ({ ...prev, [questionName]: value }));
+  }, []);
+
+  const handleStartEdit = useCallback(
+    async (section) => {
+      if (!submission) return;
+      // Fetch form questions with options (cached)
+      let questions = formQuestions;
+      if (questions.length === 0) {
+        try {
+          const res = await api.get(
+            `/v1/odk/forms/${submission.form}/form_questions/`,
+          );
+          questions = res.data;
+          setFormQuestions(questions);
+        } catch {
+          return;
+        }
+      }
+
+      const initial = {};
+      if (section === "plot") {
+        // Plot fields come from plot_field_specs
+        // (region_field / sub_region_field config)
+        const specs = submission?.plot_field_specs || {};
+        for (const fields of Object.values(specs)) {
+          for (const f of fields) {
+            if (f.question_name) {
+              initial[f.question_name] = f.raw_value ?? "";
+            }
+          }
+        }
+      } else {
+        // Other sections use field_mapped_data
+        const mapped = submission?.field_mapped_data || {};
+        const stdNames = SECTION_FIELD_MAP[section] || [];
+        for (const stdName of stdNames) {
+          const entry = mapped[stdName];
+          if (entry?.question_name) {
+            initial[entry.question_name] = entry.raw_value ?? "";
+          }
+        }
+      }
+      setEditValues(initial);
+      setEditingSection(section);
+    },
+    [submission, formQuestions],
+  );
+
+  const handleSave = useCallback(async () => {
+    if (!plot?.submission_uuid) return;
+    setIsSaving(true);
+    try {
+      const res = await api.patch(
+        `/v1/odk/submissions/${plot.submission_uuid}/edit_data/`,
+        { fields: editValues },
+      );
+      setSubmission(res.data);
+      // Refresh plot + list for updated region/sub_region
+      mapState.refetchSelectedPlot();
+      mapState.refetch();
+      setEditingSection(null);
+      setEditValues({});
+    } catch {
+      mapState.setToastMessage({
+        message: "Failed to save changes. Please try again.",
+        type: "error",
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  }, [plot?.submission_uuid, editValues, mapState]);
+
+  const handleCancelEdit = useCallback(() => {
+    setEditingSection(null);
+    setEditValues({});
+  }, []);
+
+  const getEditableFields = useCallback(
+    (section) => {
+      if (section === "plot") {
+        // Plot fields come from plot_field_specs
+        const specs = submission?.plot_field_specs || {};
+        return Object.values(specs)
+          .flat()
+          .map((f) => ({
+            questionName: f.question_name,
+            label: f.label,
+            rawValue: editValues[f.question_name] ?? "",
+            type: f.type,
+            options: f.options || [],
+          }));
+      }
+      // Other sections use field_mapped_data
+      const mapped = submission?.field_mapped_data || {};
+      const stdNames = SECTION_FIELD_MAP[section] || [];
+      return stdNames
+        .map((stdName) => {
+          const entry = mapped[stdName];
+          if (!entry?.question_name) return null;
+          const q = formQuestions.find((fq) => fq.name === entry.question_name);
+          return {
+            questionName: entry.question_name,
+            label: entry.label,
+            rawValue: editValues[entry.question_name] ?? "",
+            type: entry.type,
+            options: q?.options || [],
+          };
+        })
+        .filter(Boolean);
+    },
+    [submission, formQuestions, editValues],
+  );
+
+  if (!plot) {
+    if (isLoading) {
+      return (
+        <div className="flex h-full flex-col">
+          <div className="flex items-center gap-2 border-b border-border p-4">
+            <Skeleton className="h-8 w-8" />
+            <Skeleton className="h-6 w-48" />
+          </div>
+          <div className="space-y-3 p-4">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Skeleton key={i} className="h-10 w-full" />
+            ))}
+          </div>
+        </div>
+      );
+    }
+    return null;
+  }
 
   const status = getPlotStatus(plot);
   const resolved = submission?.resolved_data || {};
@@ -155,6 +363,14 @@ export default function PlotDetailPanel({
     attachments.length > 0 && onOpenTitleDeed
       ? () => onOpenTitleDeed(attachments)
       : undefined;
+
+  const editProps = (section) => ({
+    isEditing: editingSection === section,
+    onEdit: () => handleStartEdit(section),
+    onSave: handleSave,
+    onCancel: handleCancelEdit,
+    isSaving,
+  });
 
   return (
     <div className="flex h-full flex-col">
@@ -187,17 +403,34 @@ export default function PlotDetailPanel({
         {!isLoadingSub && activeTab === "details" && (
           <div className="flex w-full flex-col gap-2 p-4">
             {/* Plot details summary */}
-
             <div className="flex flex-col gap-3 rounded-md border border-card-foreground/10 p-3 bg-card">
-              <SectionHeader icon={Map} title="Plot details" />
-              <Separator className="bg-muted-foreground/20" />
-              <DataFieldRow
-                fields={[
-                  { label: "Region", value: plot?.region },
-                  { label: "Sub-region", value: plot?.sub_region },
-                  { label: "Area (Ha)", value: details?.area },
-                ]}
+              <SectionHeader
+                icon={Map}
+                title="Plot details"
+                {...editProps("plot")}
               />
+              <Separator className="bg-muted-foreground/20" />
+              {editingSection === "plot" ? (
+                <div className="flex flex-col gap-3">
+                  {getEditableFields("plot").map((f) => (
+                    <EditableField
+                      key={f.questionName}
+                      {...f}
+                      onChange={handleFieldChange}
+                    />
+                  ))}
+                  {/* Area is read-only (computed) */}
+                  <DataField label="Area (Ha)" value={details?.area} />
+                </div>
+              ) : (
+                <DataFieldRow
+                  fields={[
+                    { label: "Region", value: plot?.region },
+                    { label: "Sub-region", value: plot?.sub_region },
+                    { label: "Area (Ha)", value: details?.area },
+                  ]}
+                />
+              )}
             </div>
 
             {/* Timeline */}
@@ -233,51 +466,99 @@ export default function PlotDetailPanel({
             <PersonSection
               icon={User}
               title="Enumerator"
-              name={details?.enumerator?.name}
-              fields={[
-                { label: "ID number", value: details?.enumerator?.idNumber },
-              ]}
-            />
+              name={
+                editingSection === "enumerator"
+                  ? undefined
+                  : details?.enumerator?.name
+              }
+              fields={
+                editingSection === "enumerator"
+                  ? []
+                  : [
+                      {
+                        label: "ID number",
+                        value: details?.enumerator?.idNumber,
+                      },
+                    ]
+              }
+              {...editProps("enumerator")}
+            >
+              {editingSection === "enumerator" && (
+                <div className="flex flex-col gap-3">
+                  {getEditableFields("enumerator").map((f) => (
+                    <EditableField
+                      key={f.questionName}
+                      {...f}
+                      onChange={handleFieldChange}
+                    />
+                  ))}
+                </div>
+              )}
+            </PersonSection>
 
             {/* Farmer */}
             <PersonSection
               icon={User}
               title="Farmer"
-              name={details?.farmer?.name}
-              subTitle={
-                plot?.farmer_uid
-                  ? `ID number: ${PREFIX_FARM_ID}${plot.farmer_uid}`
-                  : null
+              name={
+                editingSection === "farmer" ? undefined : details?.farmer?.name
               }
-              fields={[
-                { label: "Father's name", value: details?.farmer?.fatherName },
-                {
-                  label: "Grandfather's name",
-                  value: details?.farmer?.grandfatherName,
-                },
-              ]}
+              subTitle={
+                editingSection === "farmer"
+                  ? null
+                  : plot?.farmer_uid
+                    ? `ID number: ${PREFIX_FARM_ID}${plot.farmer_uid}`
+                    : null
+              }
+              fields={
+                editingSection === "farmer"
+                  ? []
+                  : [
+                      {
+                        label: "Father's name",
+                        value: details?.farmer?.fatherName,
+                      },
+                      {
+                        label: "Grandfather's name",
+                        value: details?.farmer?.grandfatherName,
+                      },
+                    ]
+              }
+              {...editProps("farmer")}
             >
-              {/* Title deed link */}
-
-              <Separator className="bg-muted-foreground/20" />
-              {handleSeeTitleDeed ? (
-                <button
-                  type="button"
-                  onClick={handleSeeTitleDeed}
-                  className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
-                >
-                  <ImageIcon className="size-4" />
-                  <span className="flex-1 text-left">Title deed</span>
-                  <span className="flex items-center gap-1">
-                    See data
-                    <ArrowRight className="size-3.5" />
-                  </span>
-                </button>
-              ) : (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground/50">
-                  <ImageIcon className="size-4" />
-                  <span>No title deed uploaded</span>
+              {editingSection === "farmer" ? (
+                <div className="flex flex-col gap-3">
+                  {getEditableFields("farmer").map((f) => (
+                    <EditableField
+                      key={f.questionName}
+                      {...f}
+                      onChange={handleFieldChange}
+                    />
+                  ))}
                 </div>
+              ) : (
+                <>
+                  <Separator className="bg-muted-foreground/20" />
+                  {handleSeeTitleDeed ? (
+                    <button
+                      type="button"
+                      onClick={handleSeeTitleDeed}
+                      className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
+                    >
+                      <ImageIcon className="size-4" />
+                      <span className="flex-1 text-left">Title deed</span>
+                      <span className="flex items-center gap-1">
+                        See data
+                        <ArrowRight className="size-3.5" />
+                      </span>
+                    </button>
+                  ) : (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground/50">
+                      <ImageIcon className="size-4" />
+                      <span>No title deed uploaded</span>
+                    </div>
+                  )}
+                </>
               )}
             </PersonSection>
 
@@ -317,7 +598,7 @@ export default function PlotDetailPanel({
                       key={audit.id}
                       className="rounded-md border border-border p-3 space-y-1 bg-card"
                     >
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center justify-between gap-2">
                         <Badge variant="outline" className="text-xs">
                           {audit.reason_category_display}
                         </Badge>

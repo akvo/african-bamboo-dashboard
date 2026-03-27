@@ -946,41 +946,39 @@ class SubmissionViewSet(
     def _resync_farmers_if_needed(
         self, submission, fields
     ):
-        """Re-run farmer dedup if any
-        farmer-related fields were edited."""
+        """Update farmer record if any
+        farmer-related fields were edited.
+
+        Uses targeted update_farmer_for_submission
+        instead of full sync_farmers_for_form to
+        preserve the existing Plot.farmer
+        relationship and avoid generating new
+        farmer UIDs on name changes."""
         form = submission.form
         farmer_mapping = (
             form.farmer_field_mapping.first()
         )
         if not farmer_mapping:
             return
-        all_farmer_fields = set()
+        # FarmerFieldMapping stores question names
+        # (raw_data keys), so check directly
+        # against the edited field keys.
+        all_farmer_q_names = set()
         for spec in [
             farmer_mapping.unique_fields,
             farmer_mapping.values_fields,
         ]:
             if spec:
-                all_farmer_fields.update(
+                all_farmer_q_names.update(
                     f.strip()
                     for f in spec.split(",")
                     if f.strip()
                 )
-        mapped_q_names = set(
-            FieldMapping.objects.filter(
-                form=form,
-                field__name__in=(
-                    all_farmer_fields
-                ),
-            ).values_list(
-                "form_question__name",
-                flat=True,
-            )
-        )
-        if mapped_q_names & set(fields.keys()):
-            async_task(
-                "api.v1.v1_odk.utils.farmer_sync"
-                ".sync_farmers_for_form",
-                form,
+        if all_farmer_q_names & set(fields.keys()):
+            from api.v1.v1_odk.utils.farmer_sync \
+                import update_farmer_for_submission
+            update_farmer_for_submission(
+                form, submission
             )
 
     def _sync_edit_to_kobo(

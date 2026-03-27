@@ -295,7 +295,11 @@ class SubmissionEditDataTest(
         self, mock_async
     ):
         """Editing farmer-mapped field triggers
-        farmer sync."""
+        targeted farmer update (not full sync).
+
+        The farmer's lookup_key and values should
+        be updated in place — no new farmer ID
+        should be generated."""
         fs = FieldSettings.objects.create(
             name="farmer"
         )
@@ -306,25 +310,51 @@ class SubmissionEditDataTest(
         )
         FarmerFieldMapping.objects.create(
             form=self.form,
-            unique_fields="farmer",
-            values_fields="farmer",
+            unique_fields="farmer_name",
+            values_fields="farmer_name",
         )
+        # Create initial farmer linked to plot
+        from api.v1.v1_odk.models import Farmer
+        farmer = Farmer.objects.create(
+            uid="00001",
+            lookup_key="John",
+            values={"farmer_name": "John"},
+        )
+        self.plot.farmer = farmer
+        self.plot.save(update_fields=["farmer"])
+
         self.client.patch(
             self.url,
             {"fields": {"farmer_name": "Abebe"}},
             content_type="application/json",
             **self.auth,
         )
-        # async_task is called for both Kobo sync
-        # and farmer resync; find the farmer call
-        farmer_calls = [
+        # Farmer should be updated in place,
+        # NOT via async_task
+        farmer_sync_calls = [
             c for c in mock_async.call_args_list
             if c[0][0] == (
                 "api.v1.v1_odk.utils.farmer_sync"
                 ".sync_farmers_for_form"
             )
         ]
-        self.assertEqual(len(farmer_calls), 1)
         self.assertEqual(
-            farmer_calls[0][0][1], self.form
+            len(farmer_sync_calls), 0,
+            "Should not call full "
+            "sync_farmers_for_form on edit",
+        )
+        # Farmer UID should be preserved
+        farmer.refresh_from_db()
+        self.assertEqual(farmer.uid, "00001")
+        self.assertEqual(
+            farmer.lookup_key, "Abebe"
+        )
+        self.assertEqual(
+            farmer.values["farmer_name"],
+            "Abebe",
+        )
+        # Plot should still reference same farmer
+        self.plot.refresh_from_db()
+        self.assertEqual(
+            self.plot.farmer_id, farmer.pk
         )

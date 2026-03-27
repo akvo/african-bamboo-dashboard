@@ -261,3 +261,220 @@ def sync_farmers_for_form(form):
         "updated": updated,
         "linked": linked,
     }
+
+
+def update_farmer_for_submission(form, submission):
+    """Update the Farmer record for a single
+    submission after field edits.
+
+    Unlike sync_farmers_for_form (which re-processes
+    ALL submissions and creates new Farmer records
+    when lookup_keys change), this function respects
+    the existing Plot.farmer relationship:
+
+    - If the plot's farmer is used only by this plot,
+      update the farmer's lookup_key and values
+      in place (preserving the farmer UID).
+    - If the farmer is shared across multiple plots,
+      detach this plot and find-or-create a farmer
+      for the new lookup_key.
+    - If no farmer is linked yet, find-or-create one.
+
+    Args:
+        form: FormMetadata instance
+        submission: Submission instance (raw_data
+            must already be updated)
+
+    Returns:
+        dict: {"action": str, "farmer_id": int|None}
+    """
+    mapping = FarmerFieldMapping.objects.filter(
+        form=form
+    ).first()
+    if not mapping:
+        return {"action": "no_mapping", "farmer_id": None}
+
+    unique_fields = [
+        f.strip()
+        for f in mapping.unique_fields.split(",")
+        if f.strip()
+    ]
+    values_fields = [
+        f.strip()
+        for f in mapping.values_fields.split(",")
+        if f.strip()
+    ]
+
+    option_map, type_map = build_option_lookup(form)
+    raw_data = submission.raw_data or {}
+
+    new_lookup_key = build_farmer_lookup_key(
+        raw_data,
+        unique_fields,
+        option_map,
+        type_map,
+    )
+    if not new_lookup_key:
+        return {"action": "no_key", "farmer_id": None}
+
+    all_fields = list(
+        dict.fromkeys(unique_fields + values_fields)
+    )
+    new_values = build_farmer_values(
+        raw_data,
+        all_fields,
+        option_map,
+        type_map,
+    )
+
+    try:
+        plot = submission.plot
+    except Exception:
+        plot = None
+
+    existing_farmer = (
+        plot.farmer if plot and plot.farmer_id else None
+    )
+
+    if existing_farmer:
+        if existing_farmer.lookup_key == new_lookup_key:
+            # Lookup key unchanged — just refresh values
+            existing_farmer.values = new_values
+            existing_farmer.save(
+                update_fields=["values"]
+            )
+            logger.info(
+                "Updated farmer %s values in place "
+                "(key unchanged)",
+                existing_farmer.uid,
+            )
+            return {
+                "action": "updated",
+                "farmer_id": existing_farmer.pk,
+            }
+
+        # Lookup key changed — check if farmer
+        # is shared with other plots
+        other_plot_count = (
+            existing_farmer.plots.exclude(
+                pk=plot.pk
+            ).count()
+        )
+
+        if other_plot_count == 0:
+            # Farmer belongs only to this plot.
+            # Check if another farmer already has
+            # the new lookup_key.
+            try:
+                target = Farmer.objects.get(
+                    lookup_key=new_lookup_key
+                )
+                # Another farmer already has this
+                # key — link plot to that farmer
+                # and clean up the old one.
+                target.values = new_values
+                target.save(
+                    update_fields=["values"]
+                )
+                plot.farmer = target
+                plot.save(
+                    update_fields=["farmer"]
+                )
+                existing_farmer.delete()
+                logger.info(
+                    "Merged farmer %s into %s "
+                    "(key=%s)",
+                    existing_farmer.uid,
+                    target.uid,
+                    new_lookup_key,
+                )
+                return {
+                    "action": "merged",
+                    "farmer_id": target.pk,
+                }
+            except Farmer.DoesNotExist:
+                # No conflict — rename in place
+                existing_farmer.lookup_key = (
+                    new_lookup_key
+                )
+                existing_farmer.values = new_values
+                existing_farmer.save(
+                    update_fields=[
+                        "lookup_key",
+                        "values",
+                    ]
+                )
+                logger.info(
+                    "Renamed farmer %s "
+                    "lookup_key to '%s'",
+                    existing_farmer.uid,
+                    new_lookup_key,
+                )
+                return {
+                    "action": "renamed",
+                    "farmer_id": existing_farmer.pk,
+                }
+        else:
+            # Farmer is shared — detach this plot
+            # and find-or-create for the new key
+            farmer = _find_or_create_farmer(
+                new_lookup_key, new_values
+            )
+            plot.farmer = farmer
+            plot.save(update_fields=["farmer"])
+            logger.info(
+                "Detached plot %s from shared "
+                "farmer %s, linked to %s",
+                plot.pk,
+                existing_farmer.uid,
+                farmer.uid,
+            )
+            return {
+                "action": "detached",
+                "farmer_id": farmer.pk,
+            }
+
+    # No existing farmer linked — find or create
+    farmer = _find_or_create_farmer(
+        new_lookup_key, new_values
+    )
+    if plot:
+        plot.farmer = farmer
+        plot.save(update_fields=["farmer"])
+    logger.info(
+        "Linked plot to farmer %s (key=%s)",
+        farmer.uid,
+        new_lookup_key,
+    )
+    return {
+        "action": "linked",
+        "farmer_id": farmer.pk,
+    }
+
+
+def _find_or_create_farmer(lookup_key, values):
+    """Find a Farmer by lookup_key, or create one.
+
+    Returns:
+        Farmer instance
+    """
+    try:
+        farmer = Farmer.objects.get(
+            lookup_key=lookup_key
+        )
+        farmer.values = values
+        farmer.save(update_fields=["values"])
+        return farmer
+    except Farmer.DoesNotExist:
+        for attempt in range(3):
+            uid = generate_next_farmer_uid()
+            try:
+                return Farmer.objects.create(
+                    uid=uid,
+                    lookup_key=lookup_key,
+                    values=values,
+                )
+            except IntegrityError:
+                if attempt == 2:
+                    raise
+                continue

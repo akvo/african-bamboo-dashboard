@@ -16,10 +16,7 @@ import {
   SortableHeader,
   getAriaSort,
 } from "@/components/table-view";
-import {
-  PREFIX_PLOT_ID,
-  EXCLUDED_QUESTION_NAMES,
-} from "@/lib/constants";
+import { PREFIX_PLOT_ID, EXCLUDED_QUESTION_NAMES } from "@/lib/constants";
 
 const IMAGE_TYPES = new Set(["image"]);
 

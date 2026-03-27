@@ -60,10 +60,12 @@ from api.v1.v1_odk.serializers import (
     PlotOverlapQuerySerializer,
     PlotSerializer,
     SubmissionDetailSerializer,
+    SubmissionEditDataSerializer,
     SubmissionListSerializer,
     SubmissionUpdateSerializer,
     SyncTriggerSerializer,
-    build_option_lookup, resolve_value
+    build_option_lookup,
+    resolve_value,
 )
 from api.v1.v1_odk.utils.area_calc import calculate_area_ha
 from api.v1.v1_odk.utils.farmer_sync import sync_farmers_for_form
@@ -84,6 +86,17 @@ def _strip_id_prefix(value):
     if upper.startswith(PREFIX_FARM_ID):
         return value[len(PREFIX_FARM_ID):]
     return value
+
+
+def _parse_field_spec(spec):
+    """Parse a comma-separated field spec
+    into a list of stripped field names."""
+    if not spec:
+        return []
+    return [
+        f.strip() for f in spec.split(",")
+        if f.strip()
+    ]
 
 
 def _parse_date_param(params, name):
@@ -202,16 +215,28 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
         """Return FormQuestion records stored in DB
         for a given form, including their IDs."""
         form = self.get_object()
-        qs = FormQuestion.objects.filter(form=form).order_by("pk")
-        data = [
-            {
+        qs = (
+            FormQuestion.objects.filter(form=form)
+            .prefetch_related("options")
+            .order_by("pk")
+        )
+        data = []
+        for q in qs:
+            item = {
                 "id": q.pk,
                 "name": q.name,
                 "label": q.label,
                 "type": q.type,
             }
-            for q in qs
-        ]
+            if q.type.startswith("select_"):
+                item["options"] = [
+                    {
+                        "name": o.name,
+                        "label": o.label,
+                    }
+                    for o in q.options.all()
+                ]
+            data.append(item)
         return Response(data)
 
     @extend_schema(
@@ -790,6 +815,184 @@ class SubmissionViewSet(
             [instance.kobo_id],
             kobo_key,
             **task_kwargs,
+        )
+
+    @extend_schema(
+        tags=["Submissions"],
+        summary="Edit submission field data",
+        request=SubmissionEditDataSerializer,
+    )
+    @action(
+        detail=True,
+        methods=["patch"],
+        url_path="edit_data",
+    )
+    def edit_data(self, request, uuid=None):
+        """Edit submission raw_data fields and
+        sync changes to KoboToolbox."""
+        submission = self.get_object()
+        serializer = SubmissionEditDataSerializer(
+            data=request.data,
+            context={
+                "submission": submission,
+                "request": request,
+            },
+        )
+        serializer.is_valid(raise_exception=True)
+        fields = (
+            serializer.validated_data["fields"]
+        )
+
+        raw = submission.raw_data or {}
+        raw.update(fields)
+        submission.raw_data = raw
+        submission.updated_by = request.user
+        submission.updated_at = timezone.now()
+        submission.save(
+            update_fields=[
+                "raw_data",
+                "updated_by",
+                "updated_at",
+            ]
+        )
+
+        plot = getattr(submission, "plot", None)
+        if plot:
+            self._update_plot_from_edit(
+                plot, submission, fields
+            )
+
+        self._resync_farmers_if_needed(
+            submission, fields
+        )
+
+        self._sync_edit_to_kobo(
+            request.user, submission, fields
+        )
+
+        detail_serializer = (
+            SubmissionDetailSerializer(submission)
+        )
+        return Response(detail_serializer.data)
+
+    def _update_plot_from_edit(
+        self, plot, submission, fields
+    ):
+        """Update Plot.region/sub_region/plot_name
+        if corresponding raw_data fields changed."""
+        form = submission.form
+        raw = submission.raw_data or {}
+        changed = False
+
+        region_names = _parse_field_spec(
+            form.region_field
+        )
+        sub_region_names = _parse_field_spec(
+            form.sub_region_field
+        )
+        plot_name_fields = _parse_field_spec(
+            form.plot_name_field
+        )
+
+        if any(
+            f in fields for f in region_names
+        ):
+            vals = [
+                str(raw.get(f, ""))
+                for f in region_names
+                if raw.get(f)
+            ]
+            if vals:
+                plot.region = " - ".join(vals)
+                changed = True
+
+        if any(
+            f in fields
+            for f in sub_region_names
+        ):
+            vals = [
+                str(raw.get(f, ""))
+                for f in sub_region_names
+                if raw.get(f)
+            ]
+            if vals:
+                plot.sub_region = (
+                    " - ".join(vals)
+                )
+                changed = True
+
+        if any(
+            f in fields
+            for f in plot_name_fields
+        ):
+            vals = [
+                str(raw.get(f, ""))
+                for f in plot_name_fields
+                if raw.get(f)
+            ]
+            if vals:
+                plot.plot_name = " ".join(vals)
+                changed = True
+
+        if changed:
+            plot.save()
+
+    def _resync_farmers_if_needed(
+        self, submission, fields
+    ):
+        """Re-run farmer dedup if any
+        farmer-related fields were edited."""
+        form = submission.form
+        farmer_mapping = (
+            form.farmer_field_mapping.first()
+        )
+        if not farmer_mapping:
+            return
+        all_farmer_fields = set()
+        for spec in [
+            farmer_mapping.unique_fields,
+            farmer_mapping.values_fields,
+        ]:
+            if spec:
+                all_farmer_fields.update(
+                    f.strip()
+                    for f in spec.split(",")
+                    if f.strip()
+                )
+        mapped_q_names = set(
+            FieldMapping.objects.filter(
+                form=form,
+                field__name__in=(
+                    all_farmer_fields
+                ),
+            ).values_list(
+                "form_question__name",
+                flat=True,
+            )
+        )
+        if mapped_q_names & set(fields.keys()):
+            sync_farmers_for_form(form)
+
+    def _sync_edit_to_kobo(
+        self, user, submission, fields
+    ):
+        """Queue async task to push field edits
+        to KoboToolbox."""
+        if (
+            not user.kobo_url
+            or not user.kobo_username
+            or not user.kobo_password
+        ):
+            return
+        async_task(
+            "api.v1.v1_odk.tasks"
+            ".sync_kobo_submission_data",
+            user.kobo_url,
+            user.kobo_username,
+            user.kobo_password,
+            submission.form.asset_uid,
+            submission.kobo_id,
+            fields,
         )
 
     @extend_schema(tags=["ODK"])

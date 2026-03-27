@@ -882,7 +882,6 @@ class SubmissionViewSet(
         if corresponding raw_data fields changed."""
         form = submission.form
         raw = submission.raw_data or {}
-        changed = False
 
         region_names = _parse_field_spec(
             form.region_field
@@ -894,6 +893,8 @@ class SubmissionViewSet(
             form.plot_name_field
         )
 
+        update_fields = []
+
         if any(
             f in fields for f in region_names
         ):
@@ -902,9 +903,10 @@ class SubmissionViewSet(
                 for f in region_names
                 if raw.get(f)
             ]
-            if vals:
-                plot.region = " - ".join(vals)
-                changed = True
+            plot.region = (
+                " - ".join(vals) if vals else ""
+            )
+            update_fields.append("region")
 
         if any(
             f in fields
@@ -915,11 +917,10 @@ class SubmissionViewSet(
                 for f in sub_region_names
                 if raw.get(f)
             ]
-            if vals:
-                plot.sub_region = (
-                    " - ".join(vals)
-                )
-                changed = True
+            plot.sub_region = (
+                " - ".join(vals) if vals else ""
+            )
+            update_fields.append("sub_region")
 
         if any(
             f in fields
@@ -930,12 +931,15 @@ class SubmissionViewSet(
                 for f in plot_name_fields
                 if raw.get(f)
             ]
-            if vals:
-                plot.plot_name = " ".join(vals)
-                changed = True
+            plot.plot_name = (
+                " ".join(vals) if vals else None
+            )
+            update_fields.append("plot_name")
 
-        if changed:
-            plot.save()
+        if update_fields:
+            plot.save(
+                update_fields=update_fields
+            )
 
     def _resync_farmers_if_needed(
         self, submission, fields

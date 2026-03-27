@@ -34,12 +34,13 @@ export default function MapPage() {
   useEffect(() => {
     const plotId = searchParams.get("plot") || null;
     if (plotId !== selectedPlotId) {
-      mapState.setSelectedPlotId(plotId);
+      mapState.handleSelectPlot(plotId);
     }
-  }, [searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [searchParams, selectedPlotId, mapState]);
 
   const handleSelectPlot = useCallback(
     (plotUuid) => {
+      if (mapState.editingPlotId && plotUuid !== mapState.editingPlotId) return;
       mapState.handleSelectPlot(plotUuid);
       if (plotUuid) {
         router.replace(`/dashboard/map?plot=${plotUuid}`, { scroll: false });

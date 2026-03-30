@@ -19,7 +19,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StatusBadge } from "@/components/status-badge";
 import { cn } from "@/lib/utils";
 import { FlagMessages, splitFlags } from "@/lib/flag";
-import { PREFIX_PLOT_ID } from "@/lib/constants";
+import { PREFIX_SUBM_ID } from "@/lib/constants";
 
 function groupFlagsByType(flags) {
   const groups = {};
@@ -166,13 +166,13 @@ const PlotHeaderCard = ({
           </div>
         )}
 
-        {/* Plot ID */}
+        {/* Submission ID */}
 
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-1">
-            <h2 className="text-xl text-foreground">Plot ID:&nbsp;</h2>
+            <h2 className="text-xl text-foreground">Submission ID:&nbsp;</h2>
             <h2 className="text-xl font-bold text-foreground">
-              {plotId ? `${PREFIX_PLOT_ID}${plotId}` : "—"}
+              {plotId ? `${PREFIX_SUBM_ID}${plotId}` : "—"}
             </h2>
           </div>
           {lastCheckedBy && (

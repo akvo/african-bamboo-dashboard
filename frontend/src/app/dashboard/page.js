@@ -37,19 +37,33 @@ const DashboardPage = () => {
   const { forms, activeForm, setActiveForm } = useForms();
   const { startExport, isExporting } = useExport();
 
+  const {
+    region,
+    subRegion,
+    startDate,
+    endDate,
+    dynamicValues,
+    activeFilterFields,
+    setRegion,
+    setSubRegion,
+    setStartDate,
+    setEndDate,
+    setDynamicValues,
+    setActiveFilterFields,
+    setSelectedPlotId,
+    handleResetFilters,
+  } = useMapState();
+
   const [activeTab, setActiveTab] = useState("all");
   const [search, setSearch] = useState("");
-  const [region, setRegion] = useState("");
-  const [subRegion, setSubRegion] = useState("");
-  const [startDate, setStartDate] = useState(null);
-  const [endDate, setEndDate] = useState(null);
-  const [dynamicValues, setDynamicValues] = useState({});
   const [ordering, setOrdering] = useState(null);
 
-  const { regions, sub_regions, dynamic_filters } = useFilterOptions({
-    formId: activeForm?.asset_uid,
-    region,
-  });
+  const { regions, sub_regions, dynamic_filters, available_filters } =
+    useFilterOptions({
+      formId: activeForm?.asset_uid,
+      region,
+      allEligible: true,
+    });
 
   const startMs = startDate ? startDate.getTime() : null;
   const endMs = endDate ? endDate.getTime() : null;
@@ -75,19 +89,13 @@ const DashboardPage = () => {
     ordering,
   });
   const { plots } = usePlots({ formId: activeForm?.asset_uid });
-  const { setSelectedPlotId } = useMapState();
 
   const handleReset = useCallback(() => {
-    setRegion("");
-    setSubRegion("");
-    setStartDate(null);
-    setEndDate(null);
-    setDynamicValues({});
+    handleResetFilters();
     setOrdering(null);
     setSearch("");
     setActiveTab("all");
-    setSelectedPlotId(null);
-  }, [setSelectedPlotId]);
+  }, [handleResetFilters]);
 
   const handleExport = (format) => {
     startExport({
@@ -126,6 +134,8 @@ const DashboardPage = () => {
         regions={regions}
         sub_regions={sub_regions}
         dynamicFilters={dynamic_filters}
+        availableFilters={available_filters}
+        activeFilterFields={activeFilterFields}
         region={region}
         subRegion={subRegion}
         startDate={startDate}
@@ -143,6 +153,7 @@ const DashboardPage = () => {
         onDynamicFilterChange={(name, val) =>
           setDynamicValues((prev) => ({ ...prev, [name]: val }))
         }
+        onActiveFilterFieldsChange={setActiveFilterFields}
         onReset={handleReset}
       />
 

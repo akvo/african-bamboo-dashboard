@@ -47,9 +47,42 @@ export function MapStateProvider({ children }) {
   const [region, setRegion] = useState("");
   const [subRegion, setSubRegion] = useState("");
   const [dynamicValues, setDynamicValues] = useState({});
+  const [activeFilterFields, setActiveFilterFields] = useState([]);
   const [toast, setToast] = useState(null);
 
   const formId = activeForm?.asset_uid;
+
+  // Initialize activeFilterFields from form config on form change
+  const initializedRef = useRef(false);
+  useEffect(() => {
+    initializedRef.current = false;
+    const fields = activeForm?.filter_fields;
+    setActiveFilterFields(Array.isArray(fields) ? fields : []);
+  }, [activeForm]);
+
+  // Debounced save of activeFilterFields to backend
+  const saveFilterFieldsRef = useRef(null);
+  useEffect(() => {
+    // Skip the initial load from activeForm
+    if (!initializedRef.current) {
+      initializedRef.current = true;
+      return;
+    }
+    if (!formId) return;
+    if (saveFilterFieldsRef.current) clearTimeout(saveFilterFieldsRef.current);
+    saveFilterFieldsRef.current = setTimeout(() => {
+      api
+        .patch(`/v1/odk/forms/${formId}/`, {
+          filter_fields:
+            activeFilterFields.length > 0 ? activeFilterFields : null,
+        })
+        .catch(() => {});
+    }, 1000);
+    return () => {
+      if (saveFilterFieldsRef.current)
+        clearTimeout(saveFilterFieldsRef.current);
+    };
+  }, [formId, activeFilterFields]);
   const startMs = startDate ? startDate.getTime() : null;
   const endMs = endDate ? endDate.getTime() : null;
 
@@ -205,6 +238,7 @@ export function MapStateProvider({ children }) {
         region,
         subRegion,
         dynamicValues,
+        activeFilterFields,
         toast,
         setActiveTab,
         setSortBy,
@@ -214,6 +248,7 @@ export function MapStateProvider({ children }) {
         setRegion,
         setSubRegion,
         setDynamicValues,
+        setActiveFilterFields,
         setToastMessage,
         setApprovalDialogOpen,
         setRejectionDialogOpen,

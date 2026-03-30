@@ -2,7 +2,7 @@
 
 import { StatusBadge } from "@/components/status-badge";
 import { getPlotStatus } from "@/lib/plot-utils";
-import { PREFIX_PLOT_ID } from "@/lib/constants";
+import { PREFIX_SUBM_ID } from "@/lib/constants";
 
 export default function MapPopupCard({ plot }) {
   const status = getPlotStatus(plot);
@@ -11,7 +11,7 @@ export default function MapPopupCard({ plot }) {
     <div className="min-w-[200px] space-y-1.5">
       <div className="flex items-center gap-2">
         <span className="text-sm font-semibold">
-          {plot.plot_id ? `${PREFIX_PLOT_ID}${plot.plot_id}` : "—"}
+          {plot.plot_id ? `${PREFIX_SUBM_ID}${plot.plot_id}` : "—"}
         </span>
         <StatusBadge status={status} />
       </div>

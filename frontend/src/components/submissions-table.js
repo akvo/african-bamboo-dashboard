@@ -16,7 +16,7 @@ import {
   SortableHeader,
   getAriaSort,
 } from "@/components/table-view";
-import { PREFIX_PLOT_ID, EXCLUDED_QUESTION_NAMES } from "@/lib/constants";
+import { PREFIX_SUBM_ID, EXCLUDED_QUESTION_NAMES } from "@/lib/constants";
 
 const IMAGE_TYPES = new Set(["image"]);
 
@@ -64,7 +64,7 @@ export function SubmissionsTable({
             currentSort={ordering}
             onSort={onSort}
           >
-            Plot ID
+            Submission ID
           </SortableHeader>
         ),
         ariaSort: getAriaSort("kobo_id", ordering),
@@ -72,7 +72,7 @@ export function SubmissionsTable({
         className: "max-w-[240px]",
         cell: (row) => (
           <TextCell className="text-foreground font-bold">
-            {row.kobo_id ? `${PREFIX_PLOT_ID}${row.kobo_id}` : "—"}
+            {row.kobo_id ? `${PREFIX_SUBM_ID}${row.kobo_id}` : "—"}
           </TextCell>
         ),
       },

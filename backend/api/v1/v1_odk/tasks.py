@@ -13,7 +13,7 @@ from api.v1.v1_init.helpers import get_telegram_config
 from api.v1.v1_jobs.constants import JobStatus, JobTypes
 from api.v1.v1_jobs.models import Jobs
 from api.v1.v1_odk.constants import (ATTACHMENTS_FOLDER, PREFIX_FARM_ID,
-                                     PREFIX_PLOT_ID, ApprovalStatusTypes,
+                                     PREFIX_SUBM_ID, ApprovalStatusTypes,
                                      SyncStatus)
 from api.v1.v1_odk.export import (cleanup_old_exports, generate_geojson,
                                   generate_shapefile, generate_xlsx)
@@ -451,15 +451,15 @@ def send_telegram_rejection_notification(audit_id):
     plot_location = _resolve_plot_location(submission, plot)
 
     esc = _escape_markdown
-    plot_id = "N/A"
+    submission_id = "N/A"
     if submission.kobo_id:
-        plot_id = f"{PREFIX_PLOT_ID}{submission.kobo_id}"
+        submission_id = f"{PREFIX_SUBM_ID}{submission.kobo_id}"
     farm_id = "N/A"
     if plot.farmer and plot.farmer.uid:
         farm_id = f"{PREFIX_FARM_ID}{plot.farmer.uid}"
     message = (
         f"*Plot Rejected*\n\n"
-        f"*Plot ID:* {esc(plot_id)}\n"
+        f"*Submission ID:* {esc(submission_id)}\n"
         f"*Farm ID:* {esc(farm_id)}\n"
         f"*Location:* {esc(plot_location)}\n"
         f"*Reason:* {esc(reason)}\n"

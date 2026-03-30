@@ -20,7 +20,7 @@ import MapController from "@/components/map/map-controller";
 import MapEditLayer from "@/components/map/map-edit-layer";
 import MapEditToolbar from "@/components/map/map-edit-toolbar";
 import MapPopupCard from "@/components/map/map-popup-card";
-import { PREFIX_PLOT_ID } from "@/lib/constants";
+import { PREFIX_SUBM_ID } from "@/lib/constants";
 
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -159,7 +159,7 @@ export default function MapView({
             const pid = plotsWithCoords.find(
               (p) => p.uuid === editingPlotId,
             )?.plot_id;
-            return pid ? `${PREFIX_PLOT_ID}${pid}` : "—";
+            return pid ? `${PREFIX_SUBM_ID}${pid}` : "—";
           })()}
           onSave={onSaveEdit}
           onCancel={onCancelEdit}

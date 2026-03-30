@@ -26,6 +26,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { SearchableSelect } from "@/components/searchable-select";
 import { cn } from "@/lib/utils";
 
 const DATE_PRESETS = [
@@ -43,15 +46,30 @@ export function FilterBar({
   onSubRegionChange,
   onDateRangeChange,
   onDynamicFilterChange,
+  onActiveFilterFieldsChange,
   onReset,
   dynamicValues = {},
   regions = [],
   sub_regions = [],
   dynamicFilters = [],
+  availableFilters = [],
+  activeFilterFields = [],
 }) {
+  // Derive visible dynamic filters from availableFilters + activeFilterFields
+  // so toggling in "Manage Filters" is reflected instantly without a refresh.
+  // Falls back to dynamicFilters prop when availableFilters is empty.
+  const visibleDynamicFilters = useMemo(() => {
+    if (availableFilters.length > 0) {
+      return availableFilters.filter((af) =>
+        activeFilterFields.includes(af.name),
+      );
+    }
+    return dynamicFilters;
+  }, [availableFilters, activeFilterFields, dynamicFilters]);
+
   const activeChips = useMemo(() => {
     const chips = [];
-    for (const df of dynamicFilters) {
+    for (const df of visibleDynamicFilters) {
       const val = dynamicValues[df.name];
       if (val) {
         const match = df.options.find((o) => o.name === val);
@@ -63,7 +81,7 @@ export function FilterBar({
       }
     }
     return chips;
-  }, [dynamicValues, dynamicFilters, onDynamicFilterChange]);
+  }, [dynamicValues, visibleDynamicFilters, onDynamicFilterChange]);
 
   const hasActiveFilters =
     region ||
@@ -108,46 +126,62 @@ export function FilterBar({
     onDateRangeChange?.(range?.from || null, range?.to || null);
   }
 
+  const sortedRegions = useMemo(
+    () =>
+      [...regions].sort((a, b) =>
+        a.label.localeCompare(b.label, undefined, { sensitivity: "base" }),
+      ),
+    [regions],
+  );
+
+  const sortedSubRegions = useMemo(
+    () =>
+      [...sub_regions].sort((a, b) =>
+        a.label.localeCompare(b.label, undefined, { sensitivity: "base" }),
+      ),
+    [sub_regions],
+  );
+
+  const hasAdvancedFilters =
+    visibleDynamicFilters.length > 0 ||
+    regions.length > 0 ||
+    sub_regions.length > 0 ||
+    availableFilters.length > 0;
+
   return (
     <div className="w-full flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
       <div className="flex items-center gap-2">
         {regions.length > 0 && (
           <div className="hidden 3xl:block">
-            <Select value={region || ""} onValueChange={onRegionChange}>
-              <SelectTrigger className="w-[160px]">
-                <SelectValue placeholder="Region" />
-              </SelectTrigger>
-              <SelectContent>
-                {regions.map((r) => (
-                  <SelectItem key={r.value} value={r.value}>
-                    {r.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              options={sortedRegions.map((r) => ({
+                value: r.value,
+                label: r.label,
+              }))}
+              value={region || ""}
+              onValueChange={onRegionChange}
+              placeholder="Region"
+              className="w-[160px]"
+            />
           </div>
         )}
 
         {sub_regions.length > 0 && (
           <div className="hidden 3xl:block">
-            <Select value={subRegion || ""} onValueChange={onSubRegionChange}>
-              <SelectTrigger className="w-[160px]">
-                <SelectValue placeholder="Sub-region" />
-              </SelectTrigger>
-              <SelectContent>
-                {sub_regions.map((w) => (
-                  <SelectItem key={w.value} value={w.value}>
-                    {w.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              options={sortedSubRegions.map((w) => ({
+                value: w.value,
+                label: w.label,
+              }))}
+              value={subRegion || ""}
+              onValueChange={onSubRegionChange}
+              placeholder="Sub-region"
+              className="w-[160px]"
+            />
           </div>
         )}
 
-        {(dynamicFilters.length > 0 ||
-          regions.length > 0 ||
-          sub_regions.length > 0) && (
+        {hasAdvancedFilters && (
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
               <Button
@@ -177,18 +211,16 @@ export function FilterBar({
                     <label className="block text-sm font-medium mb-1">
                       Region
                     </label>
-                    <Select value={region || ""} onValueChange={onRegionChange}>
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Select region" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {regions.map((r) => (
-                          <SelectItem key={r.value} value={r.value}>
-                            {r.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <SearchableSelect
+                      options={sortedRegions.map((r) => ({
+                        value: r.value,
+                        label: r.label,
+                      }))}
+                      value={region || ""}
+                      onValueChange={onRegionChange}
+                      placeholder="Select region"
+                      className="w-full"
+                    />
                   </div>
                 )}
 
@@ -197,48 +229,75 @@ export function FilterBar({
                     <label className="block text-sm font-medium mb-1">
                       Sub-region
                     </label>
-                    <Select
+                    <SearchableSelect
+                      options={sortedSubRegions.map((w) => ({
+                        value: w.value,
+                        label: w.label,
+                      }))}
                       value={subRegion || ""}
                       onValueChange={onSubRegionChange}
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Select sub-region" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {sub_regions.map((w) => (
-                          <SelectItem key={w.value} value={w.value}>
-                            {w.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      placeholder="Select sub-region"
+                      className="w-full"
+                    />
                   </div>
                 )}
 
-                {dynamicFilters.map((df) => (
+                {visibleDynamicFilters.map((df) => (
                   <div key={df.name}>
                     <label className="block text-sm font-medium mb-1">
                       {df.label}
                     </label>
-                    <Select
+                    <SearchableSelect
+                      options={df.options.map((opt) => ({
+                        value: opt.name,
+                        label: opt.label,
+                      }))}
                       value={dynamicValues[df.name] || ""}
                       onValueChange={(val) =>
                         onDynamicFilterChange?.(df.name, val)
                       }
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder={`Select ${df.label}`} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {df.options.map((opt) => (
-                          <SelectItem key={opt.name} value={opt.name}>
-                            {opt.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      placeholder={`Select ${df.label}`}
+                      className="w-full"
+                    />
                   </div>
                 ))}
+
+                {/* Manage Filters Section */}
+                {availableFilters.length > 0 && (
+                  <div className="border-t pt-4">
+                    <h4 className="text-sm font-medium mb-3">Manage Filters</h4>
+                    <div className="space-y-3">
+                      {availableFilters.map((af) => (
+                        <div
+                          key={af.name}
+                          className="flex items-center justify-between"
+                        >
+                          <Label
+                            htmlFor={`toggle-${af.name}`}
+                            className="text-sm"
+                          >
+                            {af.label}
+                          </Label>
+                          <Switch
+                            id={`toggle-${af.name}`}
+                            checked={activeFilterFields.includes(af.name)}
+                            onCheckedChange={(checked) => {
+                              const next = checked
+                                ? [...activeFilterFields, af.name]
+                                : activeFilterFields.filter(
+                                    (n) => n !== af.name,
+                                  );
+                              if (!checked) {
+                                onDynamicFilterChange?.(af.name, "");
+                              }
+                              onActiveFilterFieldsChange?.(next);
+                            }}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
               <DialogFooter>
                 <Button

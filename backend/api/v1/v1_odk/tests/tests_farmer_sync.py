@@ -704,3 +704,295 @@ class UpdateFarmerForSubmissionTest(TestCase):
         self.assertEqual(
             result["action"], "no_mapping"
         )
+
+
+@override_settings(USE_TZ=False, TEST_ENV=True)
+class GenerateUidMinStartTest(TestCase):
+    """Tests for min_start parameter in
+    generate_next_farmer_uid."""
+
+    def test_min_start_empty_db(self):
+        """Empty DB with min_start=351
+        returns '00351'."""
+        uid = generate_next_farmer_uid(
+            min_start=351
+        )
+        self.assertEqual(uid, "00351")
+
+    def test_min_start_below_existing(self):
+        """min_start below max existing UID
+        is ignored — increments normally."""
+        Farmer.objects.create(
+            uid="00400",
+            lookup_key="test-key-400",
+        )
+        uid = generate_next_farmer_uid(
+            min_start=351
+        )
+        self.assertEqual(uid, "00401")
+
+    def test_min_start_above_existing(self):
+        """min_start above max existing UID
+        wins — jumps to min_start."""
+        Farmer.objects.create(
+            uid="00100",
+            lookup_key="test-key-100",
+        )
+        uid = generate_next_farmer_uid(
+            min_start=351
+        )
+        self.assertEqual(uid, "00351")
+
+    def test_min_start_equal_to_next(self):
+        """min_start equals max+1 — no gap."""
+        Farmer.objects.create(
+            uid="00350",
+            lookup_key="test-key-350",
+        )
+        uid = generate_next_farmer_uid(
+            min_start=351
+        )
+        self.assertEqual(uid, "00351")
+
+    def test_default_min_start_is_one(self):
+        """Default min_start=1 preserves
+        backward compatibility."""
+        uid = generate_next_farmer_uid()
+        self.assertEqual(uid, "00001")
+
+    def test_large_min_start(self):
+        """Large min_start still zero-pads
+        to at least 5 digits."""
+        uid = generate_next_farmer_uid(
+            min_start=1000
+        )
+        self.assertEqual(uid, "01000")
+
+
+@override_settings(USE_TZ=False, TEST_ENV=True)
+class SyncFarmersUidStartTest(TestCase):
+    """Tests for uid_start in sync."""
+
+    def setUp(self):
+        self.form = _create_form_with_questions()
+
+    def test_sync_uses_uid_start(self):
+        """sync_farmers_for_form creates farmers
+        starting from mapping.uid_start."""
+        FarmerFieldMapping.objects.create(
+            form=self.form,
+            unique_fields=(
+                "First_Name,"
+                "Father_s_Name,"
+                "Grandfather_s_Name"
+            ),
+            values_fields="First_Name",
+            uid_start=351,
+        )
+        _create_submission(
+            self.form,
+            "k001",
+            {
+                "First_Name": "Dara",
+                "Father_s_Name": "Hora",
+                "Grandfather_s_Name": "Daye",
+            },
+        )
+
+        result = sync_farmers_for_form(self.form)
+        self.assertEqual(result["created"], 1)
+
+        farmer = Farmer.objects.first()
+        self.assertEqual(farmer.uid, "00351")
+
+    def test_sync_increments_past_uid_start(self):
+        """After exceeding uid_start, normal
+        increment continues."""
+        FarmerFieldMapping.objects.create(
+            form=self.form,
+            unique_fields=(
+                "First_Name,"
+                "Father_s_Name,"
+                "Grandfather_s_Name"
+            ),
+            values_fields="First_Name",
+            uid_start=351,
+        )
+        Farmer.objects.create(
+            uid="00400",
+            lookup_key="existing",
+            values={},
+        )
+        _create_submission(
+            self.form,
+            "k001",
+            {
+                "First_Name": "New",
+                "Father_s_Name": "Farmer",
+                "Grandfather_s_Name": "Here",
+            },
+        )
+
+        result = sync_farmers_for_form(self.form)
+        self.assertEqual(result["created"], 1)
+
+        new_farmer = Farmer.objects.get(
+            lookup_key="New - Farmer - Here"
+        )
+        self.assertEqual(new_farmer.uid, "00401")
+
+    def test_sync_default_uid_start(self):
+        """Without uid_start, defaults to 1
+        (backward compatible)."""
+        FarmerFieldMapping.objects.create(
+            form=self.form,
+            unique_fields=(
+                "First_Name,"
+                "Father_s_Name,"
+                "Grandfather_s_Name"
+            ),
+            values_fields="First_Name",
+        )
+        _create_submission(
+            self.form,
+            "k001",
+            {
+                "First_Name": "Dara",
+                "Father_s_Name": "Hora",
+                "Grandfather_s_Name": "Daye",
+            },
+        )
+
+        sync_farmers_for_form(self.form)
+        farmer = Farmer.objects.first()
+        self.assertEqual(farmer.uid, "00001")
+
+
+@override_settings(USE_TZ=False, TEST_ENV=True)
+class SyncFarmersCleanCommandTest(TestCase):
+    """Tests for --clean flag in sync_farmers
+    management command."""
+
+    def setUp(self):
+        self.form = _create_form_with_questions()
+        FarmerFieldMapping.objects.create(
+            form=self.form,
+            unique_fields=(
+                "First_Name,"
+                "Father_s_Name,"
+                "Grandfather_s_Name"
+            ),
+            values_fields="First_Name",
+            uid_start=351,
+        )
+        _create_submission(
+            self.form,
+            "k001",
+            {
+                "First_Name": "Dara",
+                "Father_s_Name": "Hora",
+                "Grandfather_s_Name": "Daye",
+            },
+        )
+
+    def test_clean_deletes_and_resyncs(self):
+        """--clean deletes existing farmers,
+        then re-syncs with uid_start."""
+        # Initial sync
+        call_command(
+            "sync_farmers",
+            "--form", "test_form",
+            stdout=StringIO(),
+        )
+        self.assertEqual(
+            Farmer.objects.count(), 1
+        )
+        self.assertEqual(
+            Farmer.objects.first().uid, "00351"
+        )
+
+        # Clean and re-sync
+        out = StringIO()
+        call_command(
+            "sync_farmers",
+            "--form", "test_form",
+            "--clean",
+            stdout=out,
+        )
+        output = out.getvalue()
+        self.assertIn("Cleaned", output)
+        self.assertIn("created=1", output)
+
+        self.assertEqual(
+            Farmer.objects.count(), 1
+        )
+        farmer = Farmer.objects.first()
+        self.assertEqual(farmer.uid, "00351")
+
+    def test_clean_unlinks_and_relinks_plots(self):
+        """--clean unlinks plots then re-links
+        after sync."""
+        call_command(
+            "sync_farmers",
+            "--form", "test_form",
+            stdout=StringIO(),
+        )
+        plot = Plot.objects.first()
+        self.assertIsNotNone(plot.farmer)
+
+        call_command(
+            "sync_farmers",
+            "--form", "test_form",
+            "--clean",
+            stdout=StringIO(),
+        )
+
+        plot.refresh_from_db()
+        self.assertIsNotNone(plot.farmer)
+
+    def test_clean_preserves_shared_farmers(self):
+        """--clean with --form does NOT delete
+        farmers shared with other forms."""
+        call_command(
+            "sync_farmers",
+            "--form", "test_form",
+            stdout=StringIO(),
+        )
+        farmer = Farmer.objects.first()
+
+        # Create second form with a plot
+        # linked to same farmer
+        form2 = FormMetadata.objects.create(
+            asset_uid="other_form",
+            name="Other Form",
+        )
+        sub2 = Submission.objects.create(
+            uuid="uuid-other",
+            form=form2,
+            kobo_id="k-other",
+            submission_time=1700000000000,
+            raw_data={},
+        )
+        Plot.objects.create(
+            form=form2,
+            submission=sub2,
+            farmer=farmer,
+            region="R",
+            sub_region="SR",
+            created_at=1700000000000,
+        )
+
+        # Clean only test_form
+        call_command(
+            "sync_farmers",
+            "--form", "test_form",
+            "--clean",
+            stdout=StringIO(),
+        )
+
+        # Shared farmer still exists
+        self.assertTrue(
+            Farmer.objects.filter(
+                pk=farmer.pk
+            ).exists()
+        )

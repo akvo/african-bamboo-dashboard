@@ -186,3 +186,111 @@ class FarmerFieldMappingEndpointTest(
     def test_requires_auth(self):
         resp = self.client.get(self.url)
         self.assertEqual(resp.status_code, 401)
+
+    def test_get_empty_mapping_uid_start(self):
+        """GET returns uid_start=1 when no
+        mapping exists."""
+        resp = self.client.get(
+            self.url, **self.auth
+        )
+        self.assertEqual(
+            resp.data["uid_start"], 1
+        )
+
+    def test_put_uid_start(self):
+        """PUT with uid_start=351 saves and
+        returns correctly."""
+        resp = self.client.put(
+            self.url,
+            {
+                "unique_fields": ["First_Name"],
+                "values_fields": ["First_Name"],
+                "uid_start": 351,
+            },
+            content_type="application/json",
+            **self.auth,
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(
+            resp.data["uid_start"], 351
+        )
+        m = FarmerFieldMapping.objects.get(
+            form=self.form
+        )
+        self.assertEqual(m.uid_start, 351)
+
+    def test_put_without_uid_start_defaults(self):
+        """PUT without uid_start defaults to 1."""
+        resp = self.client.put(
+            self.url,
+            {
+                "unique_fields": ["First_Name"],
+                "values_fields": ["First_Name"],
+            },
+            content_type="application/json",
+            **self.auth,
+        )
+        self.assertEqual(
+            resp.data["uid_start"], 1
+        )
+
+    def test_put_uid_start_zero(self):
+        """PUT with uid_start=0 returns 400."""
+        resp = self.client.put(
+            self.url,
+            {
+                "unique_fields": ["First_Name"],
+                "values_fields": ["First_Name"],
+                "uid_start": 0,
+            },
+            content_type="application/json",
+            **self.auth,
+        )
+        self.assertEqual(resp.status_code, 400)
+
+    def test_put_uid_start_negative(self):
+        """PUT with uid_start=-5 returns 400."""
+        resp = self.client.put(
+            self.url,
+            {
+                "unique_fields": ["First_Name"],
+                "values_fields": ["First_Name"],
+                "uid_start": -5,
+            },
+            content_type="application/json",
+            **self.auth,
+        )
+        self.assertEqual(resp.status_code, 400)
+
+    def test_put_uid_start_string(self):
+        """PUT with uid_start='abc' returns 400."""
+        resp = self.client.put(
+            self.url,
+            {
+                "unique_fields": ["First_Name"],
+                "values_fields": ["First_Name"],
+                "uid_start": "abc",
+            },
+            content_type="application/json",
+            **self.auth,
+        )
+        self.assertEqual(resp.status_code, 400)
+
+    def test_get_after_put_uid_start(self):
+        """GET returns saved uid_start value."""
+        self.client.put(
+            self.url,
+            {
+                "unique_fields": ["First_Name"],
+                "values_fields": ["First_Name"],
+                "uid_start": 500,
+            },
+            content_type="application/json",
+            **self.auth,
+        )
+        resp = self.client.get(
+            self.url, **self.auth
+        )
+        self.assertEqual(
+            resp.data["uid_start"], 500
+        )

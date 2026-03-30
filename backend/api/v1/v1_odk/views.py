@@ -1246,21 +1246,42 @@ class PlotViewSet(
 
         def _resolve_label(raw_val, field_spec):
             """Resolve a raw joined value to
-            labels using option lookups."""
+            labels using option lookups.
+
+            When positional lookup fails (the
+            stored value has fewer parts than
+            fields because empty fields were
+            skipped), try all fields' options
+            as fallback.
+            """
             if not raw_val:
                 return raw_val
             fields = [
                 f.strip()
-                for f in (field_spec or "").split(",") if f.strip()
+                for f in (field_spec or "").split(",")
+                if f.strip()
             ]
             parts = raw_val.split(" - ")
             resolved = []
             for i, part in enumerate(parts):
+                label = part
                 if i < len(fields):
-                    opts = option_map.get(fields[i], {})
-                    resolved.append(opts.get(part, part))
-                else:
-                    resolved.append(part)
+                    opts = option_map.get(
+                        fields[i], {}
+                    )
+                    label = opts.get(part, part)
+                # Fallback: if positional lookup
+                # returned the raw code, search
+                # all fields in the spec.
+                if label == part:
+                    for f in fields:
+                        opts = option_map.get(
+                            f, {}
+                        )
+                        if part in opts:
+                            label = opts[part]
+                            break
+                resolved.append(label)
             return " - ".join(resolved)
 
         raw_regions = list(
@@ -1269,13 +1290,18 @@ class PlotViewSet(
             .distinct()
             .order_by("region")
         )
-        regions = [
-            {
-                "value": r,
-                "label": _resolve_label(r, form.region_field),
-            }
-            for r in raw_regions
-        ]
+        regions = sorted(
+            [
+                {
+                    "value": r,
+                    "label": _resolve_label(
+                        r, form.region_field
+                    ),
+                }
+                for r in raw_regions
+            ],
+            key=lambda x: x["label"],
+        )
 
         sub_region_qs = qs.exclude(sub_region="")
         region = request.query_params.get("region")
@@ -1286,13 +1312,18 @@ class PlotViewSet(
             .distinct()
             .order_by("sub_region")
         )
-        sub_regions = [
-            {
-                "value": w,
-                "label": _resolve_label(w, form.sub_region_field),
-            }
-            for w in raw_sub_regions
-        ]
+        sub_regions = sorted(
+            [
+                {
+                    "value": w,
+                    "label": _resolve_label(
+                        w, form.sub_region_field
+                    ),
+                }
+                for w in raw_sub_regions
+            ],
+            key=lambda x: x["label"],
+        )
 
         dynamic_filters = []
         filter_field_names = form.filter_fields or []
@@ -1307,23 +1338,78 @@ class PlotViewSet(
                         "name": q.name,
                         "label": q.label,
                         "type": q.type,
-                        "options": [
-                            {
-                                "name": o.name,
-                                "label": o.label,
-                            }
-                            for o in (q.options.all())
-                        ],
+                        "options": sorted(
+                            [
+                                {
+                                    "name": o.name,
+                                    "label": o.label,
+                                }
+                                for o in q.options.all()
+                            ],
+                            key=lambda x: x["label"],
+                        ),
                     }
                 )
 
-        return Response(
-            {
-                "regions": regions,
-                "sub_regions": sub_regions,
-                "dynamic_filters": (dynamic_filters),
-            }
+        response_data = {
+            "regions": regions,
+            "sub_regions": sub_regions,
+            "dynamic_filters": dynamic_filters,
+        }
+
+        all_eligible = (
+            request.query_params.get("all_eligible")
+            == "true"
         )
+        if all_eligible:
+            excluded = set()
+            for spec in [
+                form.region_field,
+                form.sub_region_field,
+                form.plot_name_field,
+            ]:
+                if spec:
+                    for f in spec.split(","):
+                        s = f.strip()
+                        if s:
+                            excluded.add(s)
+            eligible_qs = (
+                FormQuestion.objects.filter(
+                    form=form,
+                    type__startswith="select_",
+                )
+                .exclude(name__in=excluded)
+                .prefetch_related("options")
+                .order_by("label")
+            )
+            available = []
+            for q in eligible_qs:
+                available.append(
+                    {
+                        "name": q.name,
+                        "label": q.label,
+                        "type": q.type,
+                        "options": sorted(
+                            [
+                                {
+                                    "name": o.name,
+                                    "label": o.label,
+                                }
+                                for o in (
+                                    q.options.all()
+                                )
+                            ],
+                            key=lambda x: (
+                                x["label"]
+                            ),
+                        ),
+                    }
+                )
+            response_data[
+                "available_filters"
+            ] = available
+
+        return Response(response_data)
 
     @extend_schema(
         tags=["Plots"],

@@ -445,6 +445,18 @@ class FarmerFieldMapping(models.Model):
             "First field is used as display name."
         ),
     )
+    uid_start = models.PositiveIntegerField(
+        default=1,
+        help_text=(
+            "Minimum starting UID number. "
+            "New farmer UIDs will be "
+            "max(max_existing + 1, uid_start). "
+            "Use this to continue numbering "
+            "from a legacy system "
+            "(e.g., 351 to continue after "
+            "AB00350)."
+        ),
+    )
 
     class Meta:
         db_table = "farmer_field_mapping"

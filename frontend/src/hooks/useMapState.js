@@ -47,43 +47,23 @@ export function MapStateProvider({ children }) {
   const [region, setRegion] = useState("");
   const [subRegion, setSubRegion] = useState("");
   const [dynamicValues, setDynamicValues] = useState({});
-  const [activeFilterFields, setActiveFilterFields] = useState(() => {
-    if (typeof window === "undefined") return [];
-    try {
-      const stored = localStorage.getItem("activeFilterFields");
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
-    }
-  });
+  const [activeFilterFields, setActiveFilterFields] = useState([]);
   const [toast, setToast] = useState(null);
 
   const formId = activeForm?.asset_uid;
 
-  // Persist activeFilterFields to localStorage
+  // Initialize activeFilterFields from form config on form change
+  const initializedRef = useRef(false);
   useEffect(() => {
-    try {
-      localStorage.setItem(
-        "activeFilterFields",
-        JSON.stringify(activeFilterFields),
-      );
-    } catch {
-      // ignore storage errors
-    }
-  }, [activeFilterFields]);
-
-  // Initialize activeFilterFields from form config
-  useEffect(() => {
-    if (activeForm?.filter_fields) {
-      setActiveFilterFields(activeForm.filter_fields);
-    }
+    initializedRef.current = false;
+    const fields = activeForm?.filter_fields;
+    setActiveFilterFields(Array.isArray(fields) ? fields : []);
   }, [activeForm]);
 
   // Debounced save of activeFilterFields to backend
   const saveFilterFieldsRef = useRef(null);
-  const initializedRef = useRef(false);
   useEffect(() => {
-    // Skip the first render (initialization from activeForm)
+    // Skip the initial load from activeForm
     if (!initializedRef.current) {
       initializedRef.current = true;
       return;

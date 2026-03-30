@@ -27,7 +27,7 @@
 | `frontend/src/components/filter-bar.js` | Replaced inline Select dropdowns with `SearchableSelect`. Added `visibleDynamicFilters` memo that derives visible filters from `availableFilters` + `activeFilterFields` (instant toggle, no refresh needed). Added "Manage Filters" section with `Switch` toggles. New props: `availableFilters`, `activeFilterFields`, `onActiveFilterFieldsChange`. |
 | `frontend/__tests__/filter-bar.test.js` | Added 4 tests: manage-filters section visibility, toggle switches rendering, hidden when no available filters, advanced filters button with only availableFilters |
 | `frontend/src/hooks/useFilterOptions.js` | Added `allEligible` param. When true, passes `all_eligible=true` to API. Returns `available_filters` alongside existing fields. |
-| `frontend/src/hooks/useMapState.js` | Added `activeFilterFields` state with localStorage persistence. Added effect to initialize from `activeForm.filter_fields`. Added debounced (1s) PATCH to `/v1/odk/forms/{id}/` to persist changes to backend. Exposed `activeFilterFields` and `setActiveFilterFields` in context. |
+| `frontend/src/hooks/useMapState.js` | Added `activeFilterFields` state initialized from `activeForm.filter_fields` on form change. Added debounced (1s) PATCH to `/v1/odk/forms/{id}/` to persist changes to backend (skips initial load). Exposed `activeFilterFields` and `setActiveFilterFields` in context. |
 | `frontend/src/app/dashboard/page.js` | Removed local filter state (`region`, `subRegion`, `startDate`, `endDate`, `dynamicValues`). Now destructures these from `useMapState()`. Passes `availableFilters`, `activeFilterFields`, `onActiveFilterFieldsChange` to FilterBar. Uses `handleResetFilters` from context. |
 | `frontend/src/app/dashboard/map/page.js` | Updated `useFilterOptions` call to pass `allEligible: true`. Passes `availableFilters`, `activeFilterFields`, `onActiveFilterFieldsChange` to FilterBar. |
 | `frontend/src/app/dashboard/forms/page.js` | Removed filter_fields UI from Configure dialog (the `filterSelectFields` state, `toggleFilterField` function, filter fields dropdown, and `filter_fields` in save payload). Filter configuration now lives in FilterBar's "Manage Filters" section. |
@@ -48,7 +48,7 @@
 
 1. **Instant toggle (no refresh):** `FilterBar` derives `visibleDynamicFilters` from `availableFilters` filtered by `activeFilterFields` client-side. The backend `dynamic_filters` response is not the source of truth for which filters to show — the local `activeFilterFields` is. This means toggling a filter in "Manage Filters" instantly shows/hides the dropdown.
 
-2. **Dual persistence:** `activeFilterFields` is stored in both localStorage (primary, for instant access) and backend `FormMetadata.filter_fields` (debounced 1s PATCH, for cross-device consistency). On page load, the value initializes from `activeForm.filter_fields`.
+2. **Backend-only persistence:** `activeFilterFields` initializes from `activeForm.filter_fields` (already fetched by `useForms()`). User changes are debounce-saved (1s) via PATCH to `/v1/odk/forms/{id}/`. No localStorage — the backend is the single source of truth, avoiding namespacing/validation/stale-data complexity.
 
 3. **Label resolution fallback:** The `_resolve_label` function now searches all fields in a multi-field spec when positional lookup fails. This fixes cases where `sub_region_field="woreda_specify,woreda"` and the submission only has `woreda` filled — the stored value `ET0407` is now correctly resolved via the `woreda` field's options.
 

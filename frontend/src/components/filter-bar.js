@@ -287,6 +287,9 @@ export function FilterBar({
                                 : activeFilterFields.filter(
                                     (n) => n !== af.name,
                                   );
+                              if (!checked) {
+                                onDynamicFilterChange?.(af.name, "");
+                              }
                               onActiveFilterFieldsChange?.(next);
                             }}
                           />

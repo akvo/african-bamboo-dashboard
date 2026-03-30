@@ -191,6 +191,29 @@ describe("FilterBar - Manage Filters", () => {
     expect(screen.getByText("Variety")).toBeInTheDocument();
   });
 
+  it("clears dynamic value when toggling a filter off", () => {
+    const onDynamicFilterChange = jest.fn();
+    const onActiveFilterFieldsChange = jest.fn();
+    render(
+      <FilterBar
+        dynamicFilters={mockDynamicFilters}
+        availableFilters={mockAvailableFilters}
+        activeFilterFields={["species", "variety"]}
+        dynamicValues={{ species: "bamboo" }}
+        onDynamicFilterChange={onDynamicFilterChange}
+        onActiveFilterFieldsChange={onActiveFilterFieldsChange}
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: /advanced filters/i }),
+    );
+    // Toggle off the "Species" switch
+    const speciesSwitch = screen.getByRole("switch", { name: /species/i });
+    fireEvent.click(speciesSwitch);
+    expect(onDynamicFilterChange).toHaveBeenCalledWith("species", "");
+    expect(onActiveFilterFieldsChange).toHaveBeenCalledWith(["variety"]);
+  });
+
   it("does not show manage filters when no available filters", () => {
     render(
       <FilterBar

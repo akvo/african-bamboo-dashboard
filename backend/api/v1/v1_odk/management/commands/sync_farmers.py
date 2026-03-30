@@ -1,6 +1,10 @@
 from django.core.management.base import BaseCommand
 
-from api.v1.v1_odk.models import FormMetadata
+from api.v1.v1_odk.models import (
+    Farmer,
+    FormMetadata,
+    Plot,
+)
 from api.v1.v1_odk.utils.farmer_sync import (
     sync_farmers_for_form,
 )
@@ -19,9 +23,21 @@ class Command(BaseCommand):
             default=None,
             help="asset_uid of a specific form",
         )
+        parser.add_argument(
+            "--clean",
+            action="store_true",
+            default=False,
+            help=(
+                "Delete existing Farmer records "
+                "and unlink plots before syncing. "
+                "Use with --form to scope cleanup "
+                "to a specific form's farmers."
+            ),
+        )
 
     def handle(self, *args, **options):
         form_uid = options["form"]
+        clean = options["clean"]
 
         if form_uid:
             try:
@@ -38,6 +54,15 @@ class Command(BaseCommand):
             forms = [form]
         else:
             forms = FormMetadata.objects.all()
+
+        if clean:
+            deleted = self._clean_farmers(forms)
+            self.stdout.write(
+                self.style.WARNING(
+                    f"Cleaned {deleted} farmer(s), "
+                    f"unlinked their plots"
+                )
+            )
 
         total_created = 0
         total_updated = 0
@@ -62,3 +87,48 @@ class Command(BaseCommand):
                 f"linked={total_linked}"
             )
         )
+
+    def _clean_farmers(self, forms):
+        """Delete Farmer records linked to the
+        given forms' plots and unlink those plots.
+
+        Only deletes farmers that are exclusively
+        linked to plots from these forms. Shared
+        farmers (linked to plots from other forms)
+        are unlinked but not deleted.
+
+        Returns:
+            int: number of farmers deleted
+        """
+        form_ids = [f.pk for f in forms]
+
+        # Find all farmers linked to plots
+        # from these forms
+        farmer_ids = set(
+            Plot.objects.filter(
+                form_id__in=form_ids,
+                farmer__isnull=False,
+            ).values_list(
+                "farmer_id", flat=True
+            )
+        )
+
+        if not farmer_ids:
+            return 0
+
+        # Unlink all plots from these forms
+        Plot.objects.filter(
+            form_id__in=form_ids,
+            farmer__isnull=False,
+        ).update(farmer=None)
+
+        # Delete farmers that have no remaining
+        # plot references (safe for shared farmers)
+        orphaned = Farmer.objects.filter(
+            pk__in=farmer_ids,
+            plots__isnull=True,
+        )
+        deleted_count = orphaned.count()
+        orphaned.delete()
+
+        return deleted_count

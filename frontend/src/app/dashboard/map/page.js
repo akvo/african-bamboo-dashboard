@@ -25,10 +25,12 @@ export default function MapPage() {
   const mapState = useMapState();
   const { plots, count, isLoading, refetch, selectedPlotId } = mapState;
 
-  const { regions, sub_regions, dynamic_filters } = useFilterOptions({
-    formId: activeForm?.asset_uid,
-    region: mapState.region,
-  });
+  const { regions, sub_regions, dynamic_filters, available_filters } =
+    useFilterOptions({
+      formId: activeForm?.asset_uid,
+      region: mapState.region,
+      allEligible: true,
+    });
 
   // Sync URL plot param → selectedPlotId (URL is source of truth)
   useEffect(() => {
@@ -228,6 +230,8 @@ export default function MapPage() {
               regions={regions}
               sub_regions={sub_regions}
               dynamicFilters={dynamic_filters}
+              availableFilters={available_filters}
+              activeFilterFields={mapState.activeFilterFields}
               region={mapState.region}
               subRegion={mapState.subRegion}
               startDate={mapState.startDate}
@@ -255,6 +259,7 @@ export default function MapPage() {
                 router.replace("/dashboard/map", { scroll: false });
                 mapState.setDynamicValues((prev) => ({ ...prev, [name]: val }));
               }}
+              onActiveFilterFieldsChange={mapState.setActiveFilterFields}
               onReset={() => {
                 mapState.handleResetFilters();
                 router.replace("/dashboard/map", { scroll: false });

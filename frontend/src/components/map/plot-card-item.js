@@ -6,7 +6,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { getPlotStatus } from "@/lib/plot-utils";
 import { Separator } from "@/components/ui/separator";
 import { splitFlags } from "@/lib/flag";
-import { PREFIX_PLOT_ID } from "@/lib/constants";
+import { PREFIX_SUBM_ID } from "@/lib/constants";
 
 const PlotCardItem = ({
   plot,
@@ -34,12 +34,12 @@ const PlotCardItem = ({
       )}
       data-status={status}
     >
-      {/* Header: Plot ID + Status badge */}
+      {/* Header: Submission ID + Status badge */}
       <div className="flex w-full items-center justify-between px-3 py-2.5">
         <div className="flex min-w-0 gap-1">
-          <span>Plot ID:&nbsp;</span>
+          <span>Submission ID:&nbsp;</span>
           <span className="truncate text-sm font-bold text-foreground">
-            {plot.plot_id ? `${PREFIX_PLOT_ID}${plot.plot_id}` : "—"}
+            {plot.plot_id ? `${PREFIX_SUBM_ID}${plot.plot_id}` : "—"}
           </span>
         </div>
         <StatusBadge status={status} />

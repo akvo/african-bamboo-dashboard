@@ -30,7 +30,7 @@ from api.v1.v1_jobs.serializers import JobSerializer
 from api.v1.v1_odk.constants import (
     EXCLUDED_QUESTION_TYPES,
     PREFIX_FARM_ID,
-    PREFIX_PLOT_ID,
+    PREFIX_SUBM_ID,
     ApprovalStatusTypes
 )
 from api.v1.v1_odk.export import _wkt_to_kml
@@ -75,13 +75,13 @@ from utils.polygon import extract_plot_data, wkt_to_odk_geoshape
 
 
 def _strip_id_prefix(value):
-    """Strip PLT or AB prefix from a search term
+    """Strip # or AB prefix from a search term
     so users can search with or without prefix."""
     if not value:
         return value
     upper = value.upper()
-    if upper.startswith(PREFIX_PLOT_ID):
-        return value[len(PREFIX_PLOT_ID):]
+    if upper.startswith(PREFIX_SUBM_ID):
+        return value[len(PREFIX_SUBM_ID):]
     if upper.startswith(PREFIX_FARM_ID):
         return value[len(PREFIX_FARM_ID):]
     return value

@@ -29,7 +29,7 @@ from api.v1.v1_odk.serializers import (
 )
 from api.v1.v1_odk.constants import (
     PREFIX_FARM_ID,
-    PREFIX_PLOT_ID,
+    PREFIX_SUBM_ID,
 )
 from api.v1.v1_users.models import SystemUser
 from utils import storage
@@ -189,7 +189,7 @@ def resolve_plot_attributes(
 
     return {
         "PLOT_ID": (
-            f"{PREFIX_PLOT_ID}"
+            f"{PREFIX_SUBM_ID}"
             f"{plot.submission.kobo_id}"
             if plot.submission
             else ""
@@ -582,7 +582,7 @@ def _extract_avg_altitude(raw_data, form):
 
 
 PLOT_TABLE_HEADERS = [
-    "Plot ID",
+    "Submission ID",
     "Farmer ID",
     "Title Deed First Page",
     "Title Deed Second Page",
@@ -784,8 +784,8 @@ def generate_xlsx(queryset, form, filename):
             except Exception:
                 pass
 
-        plot_id = (
-            f"{PREFIX_PLOT_ID}{sub.kobo_id}" if sub else ""
+        submission_id = (
+            f"{PREFIX_SUBM_ID}{sub.kobo_id}" if sub else ""
         )
 
         altitude = _extract_avg_altitude(
@@ -793,7 +793,7 @@ def generate_xlsx(queryset, form, filename):
         )
 
         plot_rows.append([
-            plot_id,
+            submission_id,
             farmer_id,
             td1_url,
             td2_url,

@@ -527,7 +527,7 @@ class GenerateXlsxTest(TestCase):
         wb, _ = self._generate_and_load()
         ws = wb["Plot Table"]
         headers = [c.value for c in ws[1]]
-        self.assertEqual(headers[0], "Plot ID")
+        self.assertEqual(headers[0], "Submission ID")
         self.assertEqual(headers[1], "Farmer ID")
         self.assertEqual(
             headers[2], "Title Deed First Page"
@@ -539,15 +539,15 @@ class GenerateXlsxTest(TestCase):
         # header + 2 plots
         self.assertEqual(ws.max_row, 3)
 
-    def test_plot_id_prefix(self):
+    def test_submission_id_prefix(self):
         wb, _ = self._generate_and_load()
         ws = wb["Plot Table"]
         ids = [
             ws.cell(row=r, column=1).value
             for r in range(2, ws.max_row + 1)
         ]
-        self.assertIn("PLT101", ids)
-        self.assertIn("PLT102", ids)
+        self.assertIn("#101", ids)
+        self.assertIn("#102", ids)
 
     def test_plot_references_farmer(self):
         wb, _ = self._generate_and_load()

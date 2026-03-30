@@ -87,6 +87,7 @@ export default function FormsPage() {
   // Farmer Fields tab state
   const [farmerUniqueFields, setFarmerUniqueFields] = useState([]);
   const [farmerValuesFields, setFarmerValuesFields] = useState([]);
+  const [farmerUidStart, setFarmerUidStart] = useState(1);
   const [isLoadingFarmerMapping, setIsLoadingFarmerMapping] = useState(false);
 
   async function handleRegister(e) {
@@ -236,12 +237,14 @@ export default function FormsPage() {
       setDetailMappings(mappingsMap);
       setFarmerUniqueFields(farmerRes.data?.unique_fields || []);
       setFarmerValuesFields(farmerRes.data?.values_fields || []);
+      setFarmerUidStart(farmerRes.data?.uid_start || 1);
     } catch {
       setFieldSettings([]);
       setFormQuestions([]);
       setDetailMappings({});
       setFarmerUniqueFields([]);
       setFarmerValuesFields([]);
+      setFarmerUidStart(1);
     } finally {
       setIsLoadingDetailFields(false);
       setIsLoadingFarmerMapping(false);
@@ -285,6 +288,7 @@ export default function FormsPage() {
               farmerValuesFields.length > 0
                 ? farmerValuesFields
                 : farmerUniqueFields,
+            uid_start: farmerUidStart,
           },
         );
       }
@@ -1047,6 +1051,31 @@ export default function FormsPage() {
                       <p className="text-xs text-muted-foreground">
                         Fields to store as key-value pairs on the farmer record.
                         If empty, defaults to the unique fields above.
+                      </p>
+                    </div>
+
+                    {/* Starting Farmer ID Number */}
+                    <div className="space-y-2">
+                      <Label htmlFor="uid-start">
+                        Starting Farmer ID Number
+                      </Label>
+                      <Input
+                        id="uid-start"
+                        type="number"
+                        min={1}
+                        value={farmerUidStart}
+                        onChange={(e) =>
+                          setFarmerUidStart(
+                            Math.max(1, parseInt(e.target.value, 10) || 1),
+                          )
+                        }
+                        className="w-40"
+                        placeholder="1"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Minimum starting number for new farmer IDs. Use this to
+                        continue from legacy data (e.g., enter 351 to start
+                        after AB00350). Only affects new farmers.
                       </p>
                     </div>
                   </>

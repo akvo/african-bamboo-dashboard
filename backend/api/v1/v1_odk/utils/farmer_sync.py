@@ -84,14 +84,22 @@ def build_farmer_lookup_key(
     return " - ".join(parts) if parts else None
 
 
-def generate_next_farmer_uid():
+def generate_next_farmer_uid(min_start=1):
     """Generate the next sequential farmer UID.
 
     Uses numeric Cast + Max to avoid lexicographic
     ordering issues with string UIDs (e.g. "99999"
     sorting after "100000").
 
-    Returns zero-padded string with minimum 5 digits.
+    Args:
+        min_start: Minimum UID number. The result
+            will be at least this value. Use this
+            to continue numbering from a legacy
+            system (e.g., 351 to start after
+            AB00350).
+
+    Returns zero-padded string with minimum
+    5 digits.
 
     Returns:
         str: e.g. "00001", "00042", "100000"
@@ -103,8 +111,9 @@ def generate_next_farmer_uid():
     )
     max_uid = result["max_uid"]
     if max_uid is None:
-        return "00001"
-    return str(max_uid + 1).zfill(5)
+        return str(min_start).zfill(5)
+    next_uid = max(max_uid + 1, min_start)
+    return str(next_uid).zfill(5)
 
 
 def build_farmer_values(
@@ -174,6 +183,7 @@ def sync_farmers_for_form(form):
         for f in mapping.values_fields.split(",")
         if f.strip()
     ]
+    uid_start = mapping.uid_start
 
     option_map, type_map = build_option_lookup(form)
 
@@ -222,7 +232,9 @@ def sync_farmers_for_form(form):
             # Retry on IntegrityError to handle
             # concurrent UID generation races
             for attempt in range(3):
-                uid = generate_next_farmer_uid()
+                uid = generate_next_farmer_uid(
+                    min_start=uid_start,
+                )
                 try:
                     farmer = (
                         Farmer.objects.create(
@@ -304,6 +316,7 @@ def update_farmer_for_submission(form, submission):
         for f in mapping.values_fields.split(",")
         if f.strip()
     ]
+    uid_start = mapping.uid_start
 
     option_map, type_map = build_option_lookup(form)
     raw_data = submission.raw_data or {}
@@ -418,7 +431,9 @@ def update_farmer_for_submission(form, submission):
             # Farmer is shared — detach this plot
             # and find-or-create for the new key
             farmer = _find_or_create_farmer(
-                new_lookup_key, new_values
+                new_lookup_key,
+                new_values,
+                min_start=uid_start,
             )
             plot.farmer = farmer
             plot.save(update_fields=["farmer"])
@@ -436,7 +451,9 @@ def update_farmer_for_submission(form, submission):
 
     # No existing farmer linked — find or create
     farmer = _find_or_create_farmer(
-        new_lookup_key, new_values
+        new_lookup_key,
+        new_values,
+        min_start=uid_start,
     )
     if plot:
         plot.farmer = farmer
@@ -452,8 +469,16 @@ def update_farmer_for_submission(form, submission):
     }
 
 
-def _find_or_create_farmer(lookup_key, values):
+def _find_or_create_farmer(
+    lookup_key, values, min_start=1
+):
     """Find a Farmer by lookup_key, or create one.
+
+    Args:
+        lookup_key: Unique farmer identifier string
+        values: Dict of field name to resolved value
+        min_start: Minimum UID number for new
+            farmers
 
     Returns:
         Farmer instance
@@ -467,7 +492,9 @@ def _find_or_create_farmer(lookup_key, values):
         return farmer
     except Farmer.DoesNotExist:
         for attempt in range(3):
-            uid = generate_next_farmer_uid()
+            uid = generate_next_farmer_uid(
+                min_start=min_start,
+            )
             try:
                 return Farmer.objects.create(
                     uid=uid,

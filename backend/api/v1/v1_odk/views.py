@@ -258,20 +258,30 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
                     {
                         "unique_fields": [],
                         "values_fields": [],
+                        "uid_start": 1,
                     }
                 )
             return Response(
                 {
                     "unique_fields": [
                         f.strip()
-                        for f in (mapping.unique_fields.split(","))
+                        for f in (
+                            mapping.unique_fields
+                            .split(",")
+                        )
                         if f.strip()
                     ],
                     "values_fields": [
                         f.strip()
-                        for f in (mapping.values_fields.split(","))
+                        for f in (
+                            mapping.values_fields
+                            .split(",")
+                        )
                         if f.strip()
                     ],
+                    "uid_start": (
+                        mapping.uid_start
+                    ),
                 }
             )
 
@@ -314,23 +324,62 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
         unique_str = ",".join(unique)
         values_str = ",".join(values)
 
-        mapping, _ = FarmerFieldMapping.objects.update_or_create(
-            form=form,
-            defaults={
-                "unique_fields": unique_str,
-                "values_fields": (values_str or unique_str),
-            },
+        # Validate uid_start (optional)
+        raw_uid_start = request.data.get(
+            "uid_start", None
+        )
+        uid_start = 1
+        if raw_uid_start is not None:
+            try:
+                uid_start = int(raw_uid_start)
+                if uid_start < 1:
+                    raise ValueError
+            except (TypeError, ValueError):
+                return Response(
+                    {
+                        "detail": (
+                            "uid_start must be a "
+                            "positive integer"
+                        )
+                    },
+                    status=(
+                        status.HTTP_400_BAD_REQUEST
+                    ),
+                )
+
+        mapping, _ = (
+            FarmerFieldMapping.objects.update_or_create(
+                form=form,
+                defaults={
+                    "unique_fields": unique_str,
+                    "values_fields": (
+                        values_str or unique_str
+                    ),
+                    "uid_start": uid_start,
+                },
+            )
         )
         return Response(
             {
                 "unique_fields": [
                     f.strip()
-                    for f in (mapping.unique_fields.split(",")) if f.strip()
+                    for f in (
+                        mapping.unique_fields
+                        .split(",")
+                    )
+                    if f.strip()
                 ],
                 "values_fields": [
                     f.strip()
-                    for f in (mapping.values_fields.split(",")) if f.strip()
+                    for f in (
+                        mapping.values_fields
+                        .split(",")
+                    )
+                    if f.strip()
                 ],
+                "uid_start": (
+                    mapping.uid_start
+                ),
             }
         )
 

@@ -132,4 +132,76 @@ describe("FilterBar", () => {
     expect(screen.getByText("Select region")).toBeInTheDocument();
     expect(screen.getByText("Select sub-region")).toBeInTheDocument();
   });
+
+  it("renders advanced filters button when only availableFilters are provided", () => {
+    render(<FilterBar availableFilters={mockAvailableFilters} />);
+    expect(
+      screen.getByRole("button", { name: /advanced filters/i }),
+    ).toBeInTheDocument();
+  });
+});
+
+const mockAvailableFilters = [
+  {
+    name: "species",
+    label: "Species",
+    type: "select_one",
+    options: [
+      { name: "bamboo", label: "Bamboo" },
+      { name: "eucalyptus", label: "Eucalyptus" },
+    ],
+  },
+  {
+    name: "variety",
+    label: "Variety",
+    type: "select_one",
+    options: [
+      { name: "highland", label: "Highland" },
+      { name: "lowland", label: "Lowland" },
+    ],
+  },
+];
+
+describe("FilterBar - Manage Filters", () => {
+  it("shows manage filters section in advanced filters dialog", () => {
+    render(
+      <FilterBar
+        dynamicFilters={mockDynamicFilters}
+        availableFilters={mockAvailableFilters}
+        activeFilterFields={["species"]}
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: /advanced filters/i }),
+    );
+    expect(screen.getByText("Manage Filters")).toBeInTheDocument();
+  });
+
+  it("shows toggle switches for available filters", () => {
+    render(
+      <FilterBar
+        dynamicFilters={mockDynamicFilters}
+        availableFilters={mockAvailableFilters}
+        activeFilterFields={["species"]}
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: /advanced filters/i }),
+    );
+    expect(screen.getByText("Variety")).toBeInTheDocument();
+  });
+
+  it("does not show manage filters when no available filters", () => {
+    render(
+      <FilterBar
+        dynamicFilters={mockDynamicFilters}
+        availableFilters={[]}
+        activeFilterFields={[]}
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: /advanced filters/i }),
+    );
+    expect(screen.queryByText("Manage Filters")).not.toBeInTheDocument();
+  });
 });

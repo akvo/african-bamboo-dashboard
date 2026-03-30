@@ -47,9 +47,62 @@ export function MapStateProvider({ children }) {
   const [region, setRegion] = useState("");
   const [subRegion, setSubRegion] = useState("");
   const [dynamicValues, setDynamicValues] = useState({});
+  const [activeFilterFields, setActiveFilterFields] = useState(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const stored = localStorage.getItem("activeFilterFields");
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
   const [toast, setToast] = useState(null);
 
   const formId = activeForm?.asset_uid;
+
+  // Persist activeFilterFields to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        "activeFilterFields",
+        JSON.stringify(activeFilterFields),
+      );
+    } catch {
+      // ignore storage errors
+    }
+  }, [activeFilterFields]);
+
+  // Initialize activeFilterFields from form config
+  useEffect(() => {
+    if (activeForm?.filter_fields) {
+      setActiveFilterFields(activeForm.filter_fields);
+    }
+  }, [activeForm]);
+
+  // Debounced save of activeFilterFields to backend
+  const saveFilterFieldsRef = useRef(null);
+  const initializedRef = useRef(false);
+  useEffect(() => {
+    // Skip the first render (initialization from activeForm)
+    if (!initializedRef.current) {
+      initializedRef.current = true;
+      return;
+    }
+    if (!formId) return;
+    if (saveFilterFieldsRef.current) clearTimeout(saveFilterFieldsRef.current);
+    saveFilterFieldsRef.current = setTimeout(() => {
+      api
+        .patch(`/v1/odk/forms/${formId}/`, {
+          filter_fields:
+            activeFilterFields.length > 0 ? activeFilterFields : null,
+        })
+        .catch(() => {});
+    }, 1000);
+    return () => {
+      if (saveFilterFieldsRef.current)
+        clearTimeout(saveFilterFieldsRef.current);
+    };
+  }, [formId, activeFilterFields]);
   const startMs = startDate ? startDate.getTime() : null;
   const endMs = endDate ? endDate.getTime() : null;
 
@@ -205,6 +258,7 @@ export function MapStateProvider({ children }) {
         region,
         subRegion,
         dynamicValues,
+        activeFilterFields,
         toast,
         setActiveTab,
         setSortBy,
@@ -214,6 +268,7 @@ export function MapStateProvider({ children }) {
         setRegion,
         setSubRegion,
         setDynamicValues,
+        setActiveFilterFields,
         setToastMessage,
         setApprovalDialogOpen,
         setRejectionDialogOpen,

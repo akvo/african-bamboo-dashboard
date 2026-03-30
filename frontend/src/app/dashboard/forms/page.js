@@ -66,7 +66,6 @@ export default function FormsPage() {
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
   const [configForm, setConfigForm] = useState(null);
   const [formFields, setFormFields] = useState([]);
-  const [filterSelectFields, setFilterSelectFields] = useState([]);
   const [isLoadingFields, setIsLoadingFields] = useState(false);
   const [isSavingMapping, setIsSavingMapping] = useState(false);
   const [mappingStatus, setMappingStatus] = useState(null);
@@ -76,7 +75,6 @@ export default function FormsPage() {
   const [regionFields, setRegionFields] = useState([]);
   const [subRegionFields, setSubRegionFields] = useState([]);
   const [plotNameFields, setPlotNameFields] = useState([]);
-  const [filterFields, setFilterFields] = useState([]);
   const [sortableFields, setSortableFields] = useState([]);
 
   // Detail Fields tab state
@@ -197,32 +195,21 @@ export default function FormsPage() {
             .filter(Boolean)
         : [],
     );
-    setFilterFields(
-      Array.isArray(form.filter_fields) ? form.filter_fields : [],
-    );
     setSortableFields(
       Array.isArray(form.sortable_fields) ? form.sortable_fields : [],
     );
 
-    // Fetch all fields and filter-eligible fields in parallel
+    // Fetch all fields
     setIsLoadingFields(true);
     try {
-      const [allFields, filterFields_] = await Promise.all([
-        fetchFormFields(form.asset_uid),
-        fetchFormFields(form.asset_uid, { is_filter: true }),
-      ]);
+      const allFields = await fetchFormFields(form.asset_uid);
       setFormFields(allFields || []);
-      const selects = (filterFields_ || []).filter(
-        (f) => f.type === "select_one" || f.type === "select_multiple",
-      );
-      setFilterSelectFields(selects);
     } catch (err) {
       setMappingStatus({
         type: "error",
         message: err.response?.data?.detail || "Failed to fetch form fields.",
       });
       setFormFields([]);
-      setFilterSelectFields([]);
     } finally {
       setIsLoadingFields(false);
     }
@@ -273,7 +260,6 @@ export default function FormsPage() {
         region_field: regionFields.join(",") || null,
         sub_region_field: subRegionFields.join(",") || null,
         plot_name_field: plotNameFields.join(","),
-        filter_fields: filterFields.length > 0 ? filterFields : null,
         sortable_fields: sortableFields.length > 0 ? sortableFields : null,
       });
 
@@ -349,12 +335,6 @@ export default function FormsPage() {
       prev.includes(fullPath)
         ? prev.filter((f) => f !== fullPath)
         : [...prev, fullPath],
-    );
-  }
-
-  function toggleFilterField(name) {
-    setFilterFields((prev) =>
-      prev.includes(name) ? prev.filter((f) => f !== name) : [...prev, name],
     );
   }
 
@@ -818,62 +798,6 @@ export default function FormsPage() {
                         Multiple fields will be joined with spaces
                       </p>
                     </div>
-
-                    {/* Filter fields - select_one/select_multiple only */}
-                    {filterSelectFields.length > 0 && (
-                      <div className="space-y-2">
-                        <Label>Additional Filter fields</Label>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="outline"
-                              className="w-full justify-between h-auto min-h-[2.25rem] px-3 py-2"
-                            >
-                              <div className="flex flex-wrap gap-1">
-                                {filterFields.length === 0 ? (
-                                  <span className="text-muted-foreground">
-                                    Select filter fields...
-                                  </span>
-                                ) : (
-                                  filterFields.map((name) => {
-                                    const field = formFields.find(
-                                      (f) =>
-                                        f.name === name || f.full_path === name,
-                                    );
-                                    return (
-                                      <Badge key={name} variant="secondary">
-                                        {field?.label || name}
-                                      </Badge>
-                                    );
-                                  })
-                                )}
-                              </div>
-                              <ChevronDown className="size-4 opacity-50 shrink-0" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
-                            {filterSelectFields.map((field) => (
-                              <DropdownMenuCheckboxItem
-                                key={field.name}
-                                checked={filterFields.includes(field.name)}
-                                onCheckedChange={() =>
-                                  toggleFilterField(field.name)
-                                }
-                              >
-                                {field.label} ({field.type})
-                              </DropdownMenuCheckboxItem>
-                            ))}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                        <p className="text-xs text-muted-foreground">
-                          Additional fields to filter by in the plot list view.
-                          These will be added as separate filters alongside the
-                          region/sub-region filters, so best to choose fields
-                          with a limited number of options (e.g. select_one or
-                          select_multiple fields).
-                        </p>
-                      </div>
-                    )}
 
                     {/* Sortable fields - only questions visible as table columns */}
                     {sortableEligibleFields.length > 0 && (

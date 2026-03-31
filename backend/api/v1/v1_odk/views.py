@@ -1,3 +1,4 @@
+import logging
 import re
 import time
 from datetime import datetime
@@ -71,7 +72,10 @@ from api.v1.v1_odk.utils.area_calc import calculate_area_ha
 from api.v1.v1_odk.utils.warning_rules import evaluate_warnings
 from utils.encryption import decrypt
 from utils.kobo_client import KoboClient, KoboUnauthorizedError
+from requests.exceptions import RequestException
 from utils.polygon import extract_plot_data, wkt_to_odk_geoshape
+
+logger = logging.getLogger(__name__)
 
 
 def _strip_id_prefix(value):
@@ -148,6 +152,37 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
             decrypt(user.kobo_password),
         )
 
+    def _try_sync_questions(self, form, user):
+        """Fetch form structure from Kobo and
+        populate FormQuestion/FormOption.
+
+        Logs and suppresses network errors so the
+        caller can proceed without questions.
+        """
+        client = self._make_kobo_client(user)
+        if client is None:
+            return
+        try:
+            content = client.get_asset_detail(
+                form.asset_uid
+            )
+            sync_form_questions(form, content)
+        except (
+            RequestException,
+            KoboUnauthorizedError,
+        ):
+            logger.warning(
+                "Sync questions failed for %s",
+                form.asset_uid,
+                exc_info=True,
+            )
+
+    def perform_create(self, serializer):
+        instance = serializer.save()
+        self._try_sync_questions(
+            instance, self.request.user
+        )
+
     def perform_update(self, serializer):
         form = self.get_object()
         old = {f: getattr(form, f) for f in MAPPING_FIELDS}
@@ -173,10 +208,18 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
     def form_fields(self, request, asset_uid=None):
         """List locally-stored form questions.
 
-        Questions are populated during sync; no
-        Kobo API call is needed.
+        If no questions exist yet, attempts a
+        one-time fetch from KoboToolbox.
         """
         form = self.get_object()
+
+        if not FormQuestion.objects.filter(
+            form=form
+        ).exists():
+            self._try_sync_questions(
+                form, request.user
+            )
+
         qs = FormQuestion.objects.filter(form=form).order_by("pk")
 
         if request.query_params.get("is_filter") == "true":

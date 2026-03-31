@@ -2,9 +2,11 @@ from unittest.mock import patch
 
 from django.test import TestCase
 from django.test.utils import override_settings
+from requests.exceptions import ConnectionError
 
 from api.v1.v1_odk.models import (
     FormMetadata,
+    FormOption,
     FormQuestion,
     Plot,
     Submission,
@@ -39,7 +41,15 @@ class FormMetadataViewTest(TestCase, OdkTestHelperMixin):
         data = resp.json()
         self.assertEqual(len(data["results"]), 1)
 
-    def test_create_form(self):
+    @patch("api.v1.v1_odk.views.KoboClient")
+    def test_create_form(self, mock_client_cls):
+        (
+            mock_client_cls.return_value
+            .get_asset_detail
+        ).return_value = {
+            "survey": [],
+            "choices": [],
+        }
         resp = self.client.post(
             "/api/v1/odk/forms/",
             {
@@ -51,7 +61,108 @@ class FormMetadataViewTest(TestCase, OdkTestHelperMixin):
         )
         self.assertEqual(resp.status_code, 201)
         self.assertTrue(
-            FormMetadata.objects.filter(asset_uid="formB").exists()
+            FormMetadata.objects.filter(
+                asset_uid="formB"
+            ).exists()
+        )
+
+    @patch("api.v1.v1_odk.views.KoboClient")
+    def test_create_form_auto_syncs_questions(
+        self, mock_client_cls
+    ):
+        """POST creates FormQuestion and
+        FormOption from KoboToolbox."""
+        mock = mock_client_cls.return_value
+        mock.get_asset_detail.return_value = {
+            "survey": [
+                {
+                    "name": "region",
+                    "type": "select_one",
+                    "select_from_list_name": (
+                        "regions"
+                    ),
+                    "label": ["Region"],
+                    "$xpath": "region",
+                },
+                {
+                    "name": "full_name",
+                    "type": "text",
+                    "label": ["Full name"],
+                    "$xpath": "full_name",
+                },
+            ],
+            "choices": [
+                {
+                    "list_name": "regions",
+                    "name": "ET04",
+                    "label": ["Oromia"],
+                },
+                {
+                    "list_name": "regions",
+                    "name": "ET07",
+                    "label": ["SNNPR"],
+                },
+            ],
+        }
+        resp = self.client.post(
+            "/api/v1/odk/forms/",
+            {
+                "asset_uid": "formC",
+                "name": "Form C",
+            },
+            content_type="application/json",
+            **self.auth,
+        )
+        self.assertEqual(resp.status_code, 201)
+        form = FormMetadata.objects.get(
+            asset_uid="formC"
+        )
+        self.assertEqual(
+            FormQuestion.objects.filter(
+                form=form
+            ).count(),
+            2,
+        )
+        region_q = FormQuestion.objects.get(
+            form=form, name="region"
+        )
+        self.assertEqual(
+            FormOption.objects.filter(
+                question=region_q
+            ).count(),
+            2,
+        )
+
+    @patch("api.v1.v1_odk.views.KoboClient")
+    def test_create_form_succeeds_on_kobo_error(
+        self, mock_client_cls
+    ):
+        """Form is still created even when
+        KoboToolbox API fails."""
+        mock = mock_client_cls.return_value
+        mock.get_asset_detail.side_effect = (
+            ConnectionError("Connection refused")
+        )
+        resp = self.client.post(
+            "/api/v1/odk/forms/",
+            {
+                "asset_uid": "formD",
+                "name": "Form D",
+            },
+            content_type="application/json",
+            **self.auth,
+        )
+        self.assertEqual(resp.status_code, 201)
+        self.assertTrue(
+            FormMetadata.objects.filter(
+                asset_uid="formD"
+            ).exists()
+        )
+        self.assertEqual(
+            FormQuestion.objects.filter(
+                form__asset_uid="formD"
+            ).count(),
+            0,
         )
 
     def test_retrieve_form(self):
@@ -177,9 +288,54 @@ class FormMetadataViewTest(TestCase, OdkTestHelperMixin):
             boundary["full_path"],
         )
 
-    def test_form_fields_empty_before_sync(self):
-        """Returns empty list when no questions
-        have been synced yet."""
+    @patch("api.v1.v1_odk.views.KoboClient")
+    def test_form_fields_lazy_fetches(
+        self, mock_client_cls
+    ):
+        """form_fields auto-fetches questions
+        from Kobo when none exist locally."""
+        mock = mock_client_cls.return_value
+        mock.get_asset_detail.return_value = {
+            "survey": [
+                {
+                    "name": "age",
+                    "type": "integer",
+                    "label": ["Age"],
+                    "$xpath": "age",
+                },
+            ],
+            "choices": [],
+        }
+        resp = self.client.get(
+            "/api/v1/odk/forms/formA/form_fields/",
+            **self.auth,
+        )
+        self.assertEqual(resp.status_code, 200)
+        fields = resp.json()["fields"]
+        self.assertEqual(len(fields), 1)
+        self.assertEqual(fields[0]["name"], "age")
+
+        # Second call should NOT hit Kobo again
+        mock.get_asset_detail.reset_mock()
+        resp2 = self.client.get(
+            "/api/v1/odk/forms/formA/form_fields/",
+            **self.auth,
+        )
+        self.assertEqual(resp2.status_code, 200)
+        self.assertEqual(
+            len(resp2.json()["fields"]), 1
+        )
+        mock.get_asset_detail.assert_not_called()
+
+    @patch("api.v1.v1_odk.views.KoboClient")
+    def test_form_fields_empty_when_kobo_fails(
+        self, mock_client_cls
+    ):
+        """Returns empty when lazy-fetch fails."""
+        mock = mock_client_cls.return_value
+        mock.get_asset_detail.side_effect = (
+            ConnectionError("timeout")
+        )
         resp = self.client.get(
             "/api/v1/odk/forms/formA/form_fields/",
             **self.auth,

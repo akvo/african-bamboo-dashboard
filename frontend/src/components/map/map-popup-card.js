@@ -15,6 +15,11 @@ export default function MapPopupCard({ plot }) {
         </span>
         <StatusBadge status={status} />
       </div>
+      {plot.main_plot_uid && (
+        <p className="text-xs font-semibold text-primary">
+          Plot ID: {plot.main_plot_uid}
+        </p>
+      )}
       <p className="text-xs text-gray-600">{plot.instance_name}</p>
       <p className="text-xs text-gray-500">
         {plot.region} / {plot.sub_region}

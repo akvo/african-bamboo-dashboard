@@ -380,6 +380,7 @@ export default function PlotDetailPanel({
       {/* Header card with tabs */}
       <PlotHeaderCard
         plotId={plot?.plot_id}
+        mainPlotUid={plot?.main_plot_uid}
         status={status}
         flaggedReason={plot?.flagged_reason}
         lastCheckedBy={submission?.updated_by_name}

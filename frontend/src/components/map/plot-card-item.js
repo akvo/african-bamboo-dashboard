@@ -34,13 +34,27 @@ const PlotCardItem = ({
       )}
       data-status={status}
     >
-      {/* Header: Submission ID + Status badge */}
+      {/* Header: Submission ID + Plot ID + Status badge */}
       <div className="flex w-full items-center justify-between px-3 py-2.5">
-        <div className="flex min-w-0 gap-1">
-          <span>Submission ID:&nbsp;</span>
-          <span className="truncate text-sm font-bold text-foreground">
-            {plot.plot_id ? `${PREFIX_SUBM_ID}${plot.plot_id}` : "—"}
-          </span>
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <div className="flex min-w-0 gap-1">
+            <span className="text-xs text-muted-foreground">
+              Submission ID:&nbsp;
+            </span>
+            <span className="truncate text-sm font-bold text-foreground">
+              {plot.plot_id ? `${PREFIX_SUBM_ID}${plot.plot_id}` : "—"}
+            </span>
+          </div>
+          {plot.main_plot_uid && (
+            <div className="flex min-w-0 gap-1">
+              <span className="text-xs text-muted-foreground">
+                Plot ID:&nbsp;
+              </span>
+              <span className="truncate text-sm font-bold text-primary">
+                {plot.main_plot_uid}
+              </span>
+            </div>
+          )}
         </div>
         <StatusBadge status={status} />
       </div>

@@ -83,6 +83,17 @@ class FormMetadata(models.Model):
             "submissions table."
         ),
     )
+    plot_uid_start = models.PositiveIntegerField(
+        default=1,
+        help_text=(
+            "Minimum starting UID number for plots. "
+            "New plot UIDs will be "
+            "max(max_existing + 1, plot_uid_start). "
+            "Use this to continue numbering from a "
+            "legacy system (e.g., 351 to continue "
+            "after PLT00350)."
+        ),
+    )
 
     class Meta:
         db_table = "form_metadata"
@@ -494,3 +505,43 @@ class Farmer(models.Model):
 
     def __str__(self):
         return self.uid or f"Farmer {self.pk}"
+
+
+class MainPlot(models.Model):
+    form = models.ForeignKey(
+        FormMetadata,
+        on_delete=models.CASCADE,
+        related_name="main_plots",
+    )
+    uid = models.CharField(
+        max_length=255,
+        unique=True,
+        db_index=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "main_plots"
+
+    def __str__(self):
+        return self.uid
+
+
+class MainPlotSubmission(models.Model):
+    main_plot = models.ForeignKey(
+        MainPlot,
+        on_delete=models.CASCADE,
+        related_name="submissions",
+    )
+    submission = models.ForeignKey(
+        Submission,
+        on_delete=models.CASCADE,
+        related_name="main_plot_submissions",
+    )
+
+    class Meta:
+        db_table = "main_plot_submissions"
+        unique_together = ("main_plot", "submission")
+
+    def __str__(self):
+        return f"{self.main_plot.uid} - {self.submission.kobo_id}"

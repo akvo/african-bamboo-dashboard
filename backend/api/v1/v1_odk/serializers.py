@@ -109,6 +109,15 @@ class SubmissionListSerializer(serializers.ModelSerializer):
     area_ha = serializers.CharField(
         source="plot.area_ha", read_only=True, default=None
     )
+    main_plot_uid = (
+        serializers.SerializerMethodField()
+    )
+
+    def get_main_plot_uid(self, obj):
+        mps = obj.main_plot_submissions.first()
+        if mps:
+            return mps.main_plot.uid
+        return None
 
     class Meta:
         model = Submission
@@ -125,6 +134,7 @@ class SubmissionListSerializer(serializers.ModelSerializer):
             "approval_status",
             "resolved_data",
             "area_ha",
+            "main_plot_uid",
         ]
 
     def get_resolved_data(self, obj):
@@ -326,10 +336,19 @@ class SubmissionDetailSerializer(
     updated_by_name = (
         serializers.SerializerMethodField()
     )
+    main_plot_uid = (
+        serializers.SerializerMethodField()
+    )
 
     class Meta:
         model = Submission
         fields = "__all__"
+
+    def get_main_plot_uid(self, obj):
+        mps = obj.main_plot_submissions.first()
+        if mps:
+            return mps.main_plot.uid
+        return None
 
     def get_reviewer_notes(self, obj):
         audit = (
@@ -712,6 +731,9 @@ class PlotSerializer(serializers.ModelSerializer):
     plot_id = serializers.CharField(
         source="submission.kobo_id", read_only=True
     )
+    main_plot_uid = (
+        serializers.SerializerMethodField()
+    )
     submission_uuid = serializers.CharField(
         source="submission.uuid",
         read_only=True,
@@ -825,10 +847,22 @@ class PlotSerializer(serializers.ModelSerializer):
             obj, "enumerator_id"
         )
 
+    def get_main_plot_uid(self, obj):
+        if not obj.submission:
+            return None
+        mps = (
+            obj.submission.main_plot_submissions
+            .first()
+        )
+        if mps:
+            return mps.main_plot.uid
+        return None
+
     class Meta:
         model = Plot
         fields = [
             "plot_id",
+            "main_plot_uid",
             "uuid",
             "plot_name",
             "instance_name",
@@ -854,6 +888,7 @@ class PlotSerializer(serializers.ModelSerializer):
 
         read_only_fields = [
             "plot_id",
+            "main_plot_uid",
             "area_ha",
             "uuid",
             "created_at",

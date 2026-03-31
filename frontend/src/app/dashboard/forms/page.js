@@ -755,7 +755,7 @@ export default function FormsPage() {
                     </div>
 
                     {/* Plot name field(s) - Multi-select */}
-                    <div className="space-y-2">
+                    {/* <div className="space-y-2">
                       <Label>Plot name field(s)</Label>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -801,7 +801,7 @@ export default function FormsPage() {
                       <p className="text-xs text-muted-foreground">
                         Multiple fields will be joined with spaces
                       </p>
-                    </div>
+                    </div> */}
 
                     {/* Sortable fields - only questions visible as table columns */}
                     {sortableEligibleFields.length > 0 && (

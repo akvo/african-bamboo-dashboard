@@ -2,9 +2,14 @@ import logging
 
 from django_q.tasks import async_task
 
+from rest_framework.exceptions import ValidationError
+
 from api.v1.v1_odk.constants import (
     FlagSeverity,
     FlagType,
+    PREFIX_FARM_ID,
+    PREFIX_PLOT_ID,
+    PREFIX_SUBM_ID,
 )
 from api.v1.v1_odk.models import (
     FieldMapping,
@@ -573,3 +578,76 @@ def dispatch_kobo_geometry_sync(
         polygon_field_name,
         odk_geoshape,
     )
+
+
+def strip_id_prefix(value):
+    """Strip #, AB, or PLT prefix from a search
+    term so users can search with or without
+    prefix.  Returns the original value when
+    stripping would produce an empty string."""
+    if not value:
+        return value
+    upper = value.upper()
+    for prefix in (
+        PREFIX_SUBM_ID,
+        PREFIX_FARM_ID,
+        PREFIX_PLOT_ID,
+    ):
+        if upper.startswith(prefix):
+            stripped = value[len(prefix):]
+            return stripped if stripped else value
+    return value
+
+
+def parse_field_spec(spec):
+    """Parse a comma-separated field spec
+    into a list of stripped field names."""
+    if not spec:
+        return []
+    return [
+        f.strip() for f in spec.split(",")
+        if f.strip()
+    ]
+
+
+def _parse_date_param(params, name):
+    """Parse an integer timestamp query param.
+
+    Returns None when the param is absent.
+    Raises ValidationError for non-integer values.
+    """
+    raw = params.get(name)
+    if raw is None:
+        return None
+    try:
+        return int(raw)
+    except (ValueError, TypeError):
+        raise ValidationError(
+            {name: "Must be an integer timestamp."}
+        )
+
+
+def parse_date_range(params):
+    """Return (start, end) integer timestamps.
+
+    Raises ValidationError when values are not
+    integers or when start_date > end_date.
+    """
+    start = _parse_date_param(
+        params, "start_date"
+    )
+    end = _parse_date_param(params, "end_date")
+    if (
+        start is not None
+        and end is not None
+        and start > end
+    ):
+        raise ValidationError(
+            {
+                "start_date": (
+                    "start_date must be "
+                    "<= end_date."
+                )
+            }
+        )
+    return start, end

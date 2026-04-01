@@ -619,7 +619,7 @@ class ExportXlsxEndpointTest(
         self.ctx = _setup_form()
 
     @patch(
-        "api.v1.v1_odk.views.async_task",
+        "api.v1.v1_odk.plot_views.async_task",
         return_value="fake-task-id",
     )
     def test_export_xlsx_creates_job(
@@ -644,7 +644,7 @@ class ExportXlsxEndpointTest(
         )
 
     @patch(
-        "api.v1.v1_odk.views.async_task",
+        "api.v1.v1_odk.plot_views.async_task",
         return_value="fake-task-id",
     )
     def test_xlsx_format_accepted(

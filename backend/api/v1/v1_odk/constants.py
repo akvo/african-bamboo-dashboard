@@ -22,15 +22,6 @@ class SyncStatus:
     FAILED = "failed"
 
 
-ATTACHMENTS_FOLDER = "attachments"
-
-EXCLUDED_QUESTION_TYPES = [
-    "geoshape",
-    "geotrace",
-    "geopoint",
-]
-
-
 class RejectionCategory:
     POLYGON_ERROR = "polygon_error"
     OVERLAP = "overlap"
@@ -107,3 +98,27 @@ DEFAULT_FIELDS = [
 PREFIX_PLOT_ID = "PLT"
 PREFIX_FARM_ID = "AB"
 PREFIX_SUBM_ID = "#"
+
+
+ATTACHMENTS_FOLDER = "attachments"
+
+EXCLUDED_QUESTION_TYPES = [
+    "geoshape",
+    "geotrace",
+    "geopoint",
+]
+
+STATUS_MAP = {
+    "approved": ApprovalStatusTypes.APPROVED,
+    "rejected": ApprovalStatusTypes.REJECTED,
+}
+
+ALLOWED_ORDERINGS = {
+    "kobo_id": "kobo_id",
+    "reviewed_by": "updated_by__name",
+    "start": "sort_start",
+    "end": "sort_end",
+    "area_ha": "plot__area_ha",
+    "region": "plot__region",
+    "sub_region": "plot__sub_region",
+}

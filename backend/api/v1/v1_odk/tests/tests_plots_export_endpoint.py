@@ -118,7 +118,7 @@ class PlotExportEndpointTest(
         )
 
     @patch(
-        "api.v1.v1_odk.views.async_task",
+        "api.v1.v1_odk.plot_views.async_task",
         return_value="fake-task-id",
     )
     def test_export_requires_form_id(
@@ -135,7 +135,7 @@ class PlotExportEndpointTest(
         )
 
     @patch(
-        "api.v1.v1_odk.views.async_task",
+        "api.v1.v1_odk.plot_views.async_task",
         return_value="fake-task-id",
     )
     def test_export_invalid_form_id(
@@ -152,7 +152,7 @@ class PlotExportEndpointTest(
         )
 
     @patch(
-        "api.v1.v1_odk.views.async_task",
+        "api.v1.v1_odk.plot_views.async_task",
         return_value="fake-task-id",
     )
     def test_export_invalid_format(
@@ -174,7 +174,7 @@ class PlotExportEndpointTest(
     # --- Job Creation Tests ---
 
     @patch(
-        "api.v1.v1_odk.views.async_task",
+        "api.v1.v1_odk.plot_views.async_task",
         return_value="fake-task-id",
     )
     def test_export_creates_job(
@@ -210,7 +210,7 @@ class PlotExportEndpointTest(
         mock_task.assert_called_once()
 
     @patch(
-        "api.v1.v1_odk.views.async_task",
+        "api.v1.v1_odk.plot_views.async_task",
         return_value="fake-task-id",
     )
     def test_export_geojson_format(
@@ -235,7 +235,7 @@ class PlotExportEndpointTest(
         )
 
     @patch(
-        "api.v1.v1_odk.views.async_task",
+        "api.v1.v1_odk.plot_views.async_task",
         return_value="fake-task-id",
     )
     def test_export_stores_filters(

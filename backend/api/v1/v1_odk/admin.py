@@ -6,6 +6,8 @@ from api.v1.v1_odk.models import (
     FormMetadata,
     FormOption,
     FormQuestion,
+    MainPlot,
+    MainPlotSubmission,
     Plot,
     Submission,
 )
@@ -17,3 +19,5 @@ admin.site.register(FormQuestion)
 admin.site.register(FormOption)
 admin.site.register(FieldSettings)
 admin.site.register(FieldMapping)
+admin.site.register(MainPlot)
+admin.site.register(MainPlotSubmission)

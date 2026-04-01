@@ -77,6 +77,15 @@ export function SubmissionsTable({
         ),
       },
       {
+        key: "main_plot_uid",
+        header: "Plot ID",
+        cell: (row) => (
+          <TextCell className="font-bold text-primary">
+            {row.main_plot_uid || "—"}
+          </TextCell>
+        ),
+      },
+      {
         key: "status",
         header: "Status",
         cell: (row) => (

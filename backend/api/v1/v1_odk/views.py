@@ -5,7 +5,7 @@ from datetime import datetime
 from datetime import timezone as tz
 
 from django.conf import settings as django_settings
-from django.db.models import Count, F, OuterRef, Q, Subquery
+from django.db.models import Count, Exists, F, OuterRef, Q, Subquery
 from django.db.models.fields.json import KeyTextTransform
 from django.http import HttpResponse
 from django.utils import timezone
@@ -31,8 +31,9 @@ from api.v1.v1_jobs.serializers import JobSerializer
 from api.v1.v1_odk.constants import (
     EXCLUDED_QUESTION_TYPES,
     PREFIX_FARM_ID,
+    PREFIX_PLOT_ID,
     PREFIX_SUBM_ID,
-    ApprovalStatusTypes
+    ApprovalStatusTypes,
 )
 from api.v1.v1_odk.export import _wkt_to_kml
 from api.v1.v1_odk.funcs import (
@@ -50,9 +51,10 @@ from api.v1.v1_odk.models import (
     FormMetadata,
     FormOption,
     FormQuestion,
+    MainPlotSubmission,
     Plot,
     RejectionAudit,
-    Submission
+    Submission,
 )
 from api.v1.v1_odk.serializers import (
     FieldMappingSerializer,
@@ -69,6 +71,10 @@ from api.v1.v1_odk.serializers import (
     resolve_value,
 )
 from api.v1.v1_odk.utils.area_calc import calculate_area_ha
+from api.v1.v1_odk.utils.plot_id import (
+    create_main_plot_for_submission,
+    unlink_main_plot_submission,
+)
 from api.v1.v1_odk.utils.warning_rules import evaluate_warnings
 from utils.encryption import decrypt
 from utils.kobo_client import KoboClient, KoboUnauthorizedError
@@ -79,15 +85,21 @@ logger = logging.getLogger(__name__)
 
 
 def _strip_id_prefix(value):
-    """Strip # or AB prefix from a search term
-    so users can search with or without prefix."""
+    """Strip #, AB, or PLT prefix from a search
+    term so users can search with or without
+    prefix.  Returns the original value when
+    stripping would produce an empty string."""
     if not value:
         return value
     upper = value.upper()
-    if upper.startswith(PREFIX_SUBM_ID):
-        return value[len(PREFIX_SUBM_ID):]
-    if upper.startswith(PREFIX_FARM_ID):
-        return value[len(PREFIX_FARM_ID):]
+    for prefix in (
+        PREFIX_SUBM_ID,
+        PREFIX_FARM_ID,
+        PREFIX_PLOT_ID,
+    ):
+        if upper.startswith(prefix):
+            stripped = value[len(prefix):]
+            return stripped if stripped else value
     return value
 
 
@@ -741,7 +753,9 @@ class SubmissionViewSet(
     }
 
     def get_queryset(self):
-        qs = super().get_queryset()
+        qs = super().get_queryset().prefetch_related(
+            "main_plot_submission__main_plot"
+        )
         params = self.request.query_params
         asset_uid = params.get("asset_uid")
         if asset_uid:
@@ -761,10 +775,20 @@ class SubmissionViewSet(
         search = params.get("search")
         if search:
             stripped = _strip_id_prefix(search)
+            plot_uid_match = Exists(
+                MainPlotSubmission.objects.filter(
+                    submission=OuterRef("pk"),
+                    main_plot__uid__icontains=(
+                        stripped
+                    ),
+                )
+            )
             qs = qs.filter(
-                Q(plot__plot_name__icontains=(search))
-                | Q(instance_name__icontains=(search))
+                Q(
+                    instance_name__icontains=search
+                )
                 | Q(kobo_id__icontains=stripped)
+                | Q(plot_uid_match)
             )
         start_date, end_date = _parse_date_range(params)
         if start_date is not None:
@@ -861,6 +885,16 @@ class SubmissionViewSet(
             updated_at=timezone.now(),
         )
         approval = instance.approval_status
+
+        # Generate Plot ID on approval
+        if approval == ApprovalStatusTypes.APPROVED:
+            create_main_plot_for_submission(instance)
+
+        # Unlink Plot ID on revert or rejection
+        if approval is None or (
+            approval == ApprovalStatusTypes.REJECTED
+        ):
+            unlink_main_plot_submission(instance)
 
         # Re-check polygon & overlaps on revert
         if approval is None:
@@ -1134,7 +1168,16 @@ class PlotViewSet(
     }
 
     def get_queryset(self):
-        qs = super().get_queryset().select_related("submission")
+        qs = (
+            super()
+            .get_queryset()
+            .select_related("submission")
+            .prefetch_related(
+                "submission__"
+                "main_plot_submission__"
+                "main_plot"
+            )
+        )
         params = self.request.query_params
         form_id = params.get("form_id")
         status_param = params.get("status")
@@ -1154,10 +1197,24 @@ class PlotViewSet(
         search = params.get("search")
         if search:
             stripped = _strip_id_prefix(search)
+            plot_uid_match = Exists(
+                MainPlotSubmission.objects.filter(
+                    submission=OuterRef(
+                        "submission_id"
+                    ),
+                    main_plot__uid__icontains=(
+                        stripped
+                    ),
+                )
+            )
             qs = qs.filter(
-                Q(plot_name__icontains=search)
-                | Q(submission__instance_name__icontains=search)  # noqa: E501
-                | Q(submission__kobo_id__icontains=stripped)  # noqa: E501
+                Q(
+                    submission__instance_name__icontains=search  # noqa: E501
+                )
+                | Q(
+                    submission__kobo_id__icontains=stripped  # noqa: E501
+                )
+                | Q(plot_uid_match)
             )
         region = params.get("region")
         if region:

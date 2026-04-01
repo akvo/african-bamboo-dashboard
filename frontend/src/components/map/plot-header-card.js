@@ -116,6 +116,7 @@ function FlagList({ flags }) {
 
 const PlotHeaderCard = ({
   plotId,
+  mainPlotUid,
   status,
   flaggedReason,
   lastCheckedBy,
@@ -166,7 +167,7 @@ const PlotHeaderCard = ({
           </div>
         )}
 
-        {/* Submission ID */}
+        {/* Submission ID & Plot ID */}
 
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-1">
@@ -175,6 +176,16 @@ const PlotHeaderCard = ({
               {plotId ? `${PREFIX_SUBM_ID}${plotId}` : "—"}
             </h2>
           </div>
+          {mainPlotUid && (
+            <div className="flex items-center gap-1">
+              <span className="text-sm text-muted-foreground">
+                Plot ID:&nbsp;
+              </span>
+              <span className="text-sm font-bold text-primary">
+                {mainPlotUid}
+              </span>
+            </div>
+          )}
           {lastCheckedBy && (
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <span>Last checked by:</span>

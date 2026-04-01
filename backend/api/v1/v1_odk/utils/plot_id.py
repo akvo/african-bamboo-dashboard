@@ -1,6 +1,6 @@
 import logging
 
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.db.models import IntegerField, Max
 from django.db.models.functions import Cast, Substr
 
@@ -82,14 +82,15 @@ def create_main_plot_for_submission(submission):
     for attempt in range(_MAX_RETRIES):
         uid = generate_next_plot_uid(form)
         try:
-            main_plot = MainPlot.objects.create(
-                uid=uid,
-                form=form,
-            )
-            MainPlotSubmission.objects.create(
-                main_plot=main_plot,
-                submission=submission,
-            )
+            with transaction.atomic():
+                main_plot = MainPlot.objects.create(
+                    uid=uid,
+                    form=form,
+                )
+                MainPlotSubmission.objects.create(
+                    main_plot=main_plot,
+                    submission=submission,
+                )
             return main_plot
         except IntegrityError:
             if attempt == _MAX_RETRIES - 1:

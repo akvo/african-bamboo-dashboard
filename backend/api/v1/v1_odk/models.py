@@ -515,13 +515,13 @@ class MainPlot(models.Model):
     )
     uid = models.CharField(
         max_length=255,
-        unique=True,
         db_index=True,
     )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         db_table = "main_plots"
+        unique_together = ("form", "uid")
 
     def __str__(self):
         return self.uid

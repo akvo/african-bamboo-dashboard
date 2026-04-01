@@ -75,3 +75,23 @@ class GenerateNextPlotUidTest(TestCase):
         )
         uid = generate_next_plot_uid(self.form)
         self.assertEqual(uid, "PLT00001")
+
+    def test_two_forms_same_uid_allowed(self):
+        """Two forms can each have PLT00001
+        (unique per form, not global)."""
+        other_form = FormMetadata.objects.create(
+            asset_uid="formTwo",
+            name="Form Two",
+        )
+        MainPlot.objects.create(
+            uid="PLT00001", form=self.form,
+        )
+        MainPlot.objects.create(
+            uid="PLT00001", form=other_form,
+        )
+        self.assertEqual(
+            MainPlot.objects.filter(
+                uid="PLT00001",
+            ).count(),
+            2,
+        )

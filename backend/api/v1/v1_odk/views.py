@@ -785,9 +785,6 @@ class SubmissionViewSet(
             )
             qs = qs.filter(
                 Q(
-                    plot__plot_name__icontains=search
-                )
-                | Q(
                     instance_name__icontains=search
                 )
                 | Q(kobo_id__icontains=stripped)
@@ -1211,8 +1208,7 @@ class PlotViewSet(
                 )
             )
             qs = qs.filter(
-                Q(plot_name__icontains=search)
-                | Q(
+                Q(
                     submission__instance_name__icontains=search  # noqa: E501
                 )
                 | Q(

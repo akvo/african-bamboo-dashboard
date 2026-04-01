@@ -754,7 +754,7 @@ class SubmissionViewSet(
 
     def get_queryset(self):
         qs = super().get_queryset().prefetch_related(
-            "main_plot_submissions__main_plot"
+            "main_plot_submission__main_plot"
         )
         params = self.request.query_params
         asset_uid = params.get("asset_uid")
@@ -1177,7 +1177,7 @@ class PlotViewSet(
             .select_related("submission")
             .prefetch_related(
                 "submission__"
-                "main_plot_submissions__"
+                "main_plot_submission__"
                 "main_plot"
             )
         )

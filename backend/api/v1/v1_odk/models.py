@@ -533,15 +533,11 @@ class MainPlotSubmission(models.Model):
         on_delete=models.CASCADE,
         related_name="submissions",
     )
-    submission = models.ForeignKey(
+    submission = models.OneToOneField(
         Submission,
         on_delete=models.CASCADE,
-        related_name="main_plot_submissions",
+        related_name="main_plot_submission",
     )
-
-    class Meta:
-        db_table = "main_plot_submissions"
-        unique_together = ("main_plot", "submission")
 
     def __str__(self):
         return f"{self.main_plot.uid} - {self.submission.kobo_id}"

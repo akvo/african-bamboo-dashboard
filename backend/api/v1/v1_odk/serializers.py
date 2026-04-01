@@ -114,7 +114,9 @@ class SubmissionListSerializer(serializers.ModelSerializer):
     )
 
     def get_main_plot_uid(self, obj):
-        mps = obj.main_plot_submissions.first()
+        mps = getattr(
+            obj, "main_plot_submission", None
+        )
         if mps:
             return mps.main_plot.uid
         return None
@@ -345,7 +347,9 @@ class SubmissionDetailSerializer(
         fields = "__all__"
 
     def get_main_plot_uid(self, obj):
-        mps = obj.main_plot_submissions.first()
+        mps = getattr(
+            obj, "main_plot_submission", None
+        )
         if mps:
             return mps.main_plot.uid
         return None
@@ -850,9 +854,10 @@ class PlotSerializer(serializers.ModelSerializer):
     def get_main_plot_uid(self, obj):
         if not obj.submission:
             return None
-        mps = (
-            obj.submission.main_plot_submissions
-            .first()
+        mps = getattr(
+            obj.submission,
+            "main_plot_submission",
+            None,
         )
         if mps:
             return mps.main_plot.uid

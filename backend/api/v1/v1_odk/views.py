@@ -5,7 +5,7 @@ from datetime import datetime
 from datetime import timezone as tz
 
 from django.conf import settings as django_settings
-from django.db.models import Count, F, OuterRef, Q, Subquery
+from django.db.models import Count, Exists, F, OuterRef, Q, Subquery
 from django.db.models.fields.json import KeyTextTransform
 from django.http import HttpResponse
 from django.utils import timezone
@@ -51,9 +51,10 @@ from api.v1.v1_odk.models import (
     FormMetadata,
     FormOption,
     FormQuestion,
+    MainPlotSubmission,
     Plot,
     RejectionAudit,
-    Submission
+    Submission,
 )
 from api.v1.v1_odk.serializers import (
     FieldMappingSerializer,
@@ -86,16 +87,19 @@ logger = logging.getLogger(__name__)
 def _strip_id_prefix(value):
     """Strip #, AB, or PLT prefix from a search
     term so users can search with or without
-    prefix."""
+    prefix.  Returns the original value when
+    stripping would produce an empty string."""
     if not value:
         return value
     upper = value.upper()
-    if upper.startswith(PREFIX_SUBM_ID):
-        return value[len(PREFIX_SUBM_ID):]
-    if upper.startswith(PREFIX_FARM_ID):
-        return value[len(PREFIX_FARM_ID):]
-    if upper.startswith(PREFIX_PLOT_ID):
-        return value[len(PREFIX_PLOT_ID):]
+    for prefix in (
+        PREFIX_SUBM_ID,
+        PREFIX_FARM_ID,
+        PREFIX_PLOT_ID,
+    ):
+        if upper.startswith(prefix):
+            stripped = value[len(prefix):]
+            return stripped if stripped else value
     return value
 
 
@@ -771,6 +775,14 @@ class SubmissionViewSet(
         search = params.get("search")
         if search:
             stripped = _strip_id_prefix(search)
+            plot_uid_match = Exists(
+                MainPlotSubmission.objects.filter(
+                    submission=OuterRef("pk"),
+                    main_plot__uid__icontains=(
+                        stripped
+                    ),
+                )
+            )
             qs = qs.filter(
                 Q(
                     plot__plot_name__icontains=search
@@ -779,10 +791,8 @@ class SubmissionViewSet(
                     instance_name__icontains=search
                 )
                 | Q(kobo_id__icontains=stripped)
-                | Q(
-                    main_plot_submissions__main_plot__uid__icontains=stripped  # noqa: E501
-                )
-            ).distinct()
+                | Q(plot_uid_match)
+            )
         start_date, end_date = _parse_date_range(params)
         if start_date is not None:
             qs = qs.filter(submission_time__gte=start_date)
@@ -1190,6 +1200,16 @@ class PlotViewSet(
         search = params.get("search")
         if search:
             stripped = _strip_id_prefix(search)
+            plot_uid_match = Exists(
+                MainPlotSubmission.objects.filter(
+                    submission=OuterRef(
+                        "submission_id"
+                    ),
+                    main_plot__uid__icontains=(
+                        stripped
+                    ),
+                )
+            )
             qs = qs.filter(
                 Q(plot_name__icontains=search)
                 | Q(
@@ -1198,10 +1218,8 @@ class PlotViewSet(
                 | Q(
                     submission__kobo_id__icontains=stripped  # noqa: E501
                 )
-                | Q(
-                    submission__main_plot_submissions__main_plot__uid__icontains=stripped  # noqa: E501
-                )
-            ).distinct()
+                | Q(plot_uid_match)
+            )
         region = params.get("region")
         if region:
             qs = qs.filter(region=region)

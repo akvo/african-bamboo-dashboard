@@ -157,13 +157,13 @@ export default function PlotDetailPanel({
   onBack,
   onApprove,
   onReject,
-  onRevertToPending,
+  // onRevertToPending,
   onStartEditing,
   onOpenTitleDeed,
 }) {
   const [submission, setSubmission] = useState(null);
   const [isLoadingSub, setIsLoadingSub] = useState(false);
-  const [isResetting, setIsResetting] = useState(false);
+  // const [isResetting, setIsResetting] = useState(false);
   const [activeTab, setActiveTab] = useState("details");
 
   // Edit mode state
@@ -661,7 +661,8 @@ export default function PlotDetailPanel({
       </ScrollArea>
 
       {/* Action buttons */}
-      {(["pending", "flagged"].includes(status) || isResetting) && (
+      {/* {(["pending", "flagged"].includes(status) || isResetting) && ( */}
+      {["pending", "flagged"].includes(status) && (
         <div className="flex gap-2 border-t border-border p-4 position-sticky bottom-0 bg-card">
           <Button
             className="flex-1 bg-status-approved text-white hover:bg-status-approved/90"
@@ -674,7 +675,7 @@ export default function PlotDetailPanel({
           </Button>
         </div>
       )}
-      {["approved", "rejected"].includes(status) && !isResetting && (
+      {/* {["approved", "rejected"].includes(status) && !isResetting && (
         <div className="flex flex-col gap-2 border-t border-border p-4 position-sticky bottom-0 bg-card">
           <Button
             variant="outline"
@@ -691,7 +692,7 @@ export default function PlotDetailPanel({
             Revert to Pending
           </Button>
         </div>
-      )}
+      )} */}
     </div>
   );
 }

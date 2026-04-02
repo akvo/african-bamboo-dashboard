@@ -57,6 +57,7 @@ APPROVAL_LABELS = {
 # Shapefile field definitions:
 # (name, type, size, decimal)
 SHP_FIELDS = [
+    ("SUBMISSION_ID", "C", 40, 0),
     ("PLOT_ID", "C", 40, 0),
     ("FARMER_ID", "C", 254, 0),
     ("ENUMERATOR", "C", 254, 0),
@@ -186,14 +187,30 @@ def resolve_plot_attributes(
         needs_recl = "No"
     else:
         needs_recl = ""
+    plot_uid = ""
+    if (
+        plot.submission
+        and hasattr(
+            plot.submission,
+            "main_plot_submission",
+        )
+        and plot.submission.main_plot_submission
+    ):
+        plot_uid = (
+            plot.submission
+            .main_plot_submission
+            .main_plot
+            .uid
+        )
 
     return {
-        "PLOT_ID": (
+        "SUBMISSION_ID": (
             f"{PREFIX_SUBM_ID}"
             f"{plot.submission.kobo_id}"
             if plot.submission
             else ""
         ),
+        "PLOT_ID": plot_uid,
         "FARMER_ID": (
             f"{PREFIX_FARM_ID}{plot.farmer.uid}"
             if plot.farmer
@@ -382,7 +399,11 @@ def generate_shapefile(
 
         count = 0
         qs = queryset.select_related(
-            "submission", "form"
+            "submission__"
+            "main_plot_submission__"
+            "main_plot",
+            "farmer",
+            "form",
         ).iterator()
         for plot in qs:
             parts = _wkt_to_pyshp_parts(
@@ -401,6 +422,7 @@ def generate_shapefile(
             )
             w.poly(parts)
             w.record(
+                attrs["SUBMISSION_ID"],
                 attrs["PLOT_ID"],
                 attrs["FARMER_ID"],
                 attrs["ENUMERATOR"],
@@ -481,7 +503,11 @@ def generate_geojson(
 
     features = []
     qs = queryset.select_related(
-        "submission", "form"
+        "submission__"
+        "main_plot_submission__"
+        "main_plot",
+        "farmer",
+        "form",
     ).iterator()
     for plot in qs:
         try:
@@ -583,6 +609,7 @@ def _extract_avg_altitude(raw_data, form):
 
 PLOT_TABLE_HEADERS = [
     "Submission ID",
+    "Plot ID",
     "Farmer ID",
     "Title Deed First Page",
     "Title Deed Second Page",
@@ -746,7 +773,11 @@ def generate_xlsx(queryset, form, filename):
     plot_rows = []
 
     qs = queryset.select_related(
-        "submission", "farmer", "form"
+        "submission__"
+        "main_plot_submission__"
+        "main_plot",
+        "farmer",
+        "form",
     )
 
     for plot in qs.iterator():
@@ -785,8 +816,21 @@ def generate_xlsx(queryset, form, filename):
                 pass
 
         submission_id = (
-            f"{PREFIX_SUBM_ID}{sub.kobo_id}" if sub else ""
+            f"{PREFIX_SUBM_ID}{sub.kobo_id}"
+            if sub
+            else ""
         )
+
+        plot_uid = ""
+        if (
+            sub
+            and hasattr(sub, "main_plot_submission")
+            and sub.main_plot_submission
+        ):
+            plot_uid = (
+                sub.main_plot_submission
+                .main_plot.uid
+            )
 
         altitude = _extract_avg_altitude(
             raw, form
@@ -794,6 +838,7 @@ def generate_xlsx(queryset, form, filename):
 
         plot_rows.append([
             submission_id,
+            plot_uid,
             farmer_id,
             td1_url,
             td2_url,

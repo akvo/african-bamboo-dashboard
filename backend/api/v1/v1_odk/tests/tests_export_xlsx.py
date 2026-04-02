@@ -528,9 +528,10 @@ class GenerateXlsxTest(TestCase):
         ws = wb["Plot Table"]
         headers = [c.value for c in ws[1]]
         self.assertEqual(headers[0], "Submission ID")
-        self.assertEqual(headers[1], "Farmer ID")
+        self.assertEqual(headers[1], "Plot ID")
+        self.assertEqual(headers[2], "Farmer ID")
         self.assertEqual(
-            headers[2], "Title Deed First Page"
+            headers[3], "Title Deed First Page"
         )
 
     def test_plot_sheet_one_row_per_plot(self):
@@ -553,7 +554,7 @@ class GenerateXlsxTest(TestCase):
         wb, _ = self._generate_and_load()
         ws = wb["Plot Table"]
         farmer_ids = [
-            ws.cell(row=r, column=2).value
+            ws.cell(row=r, column=3).value
             for r in range(2, ws.max_row + 1)
         ]
         self.assertIn("AB00001", farmer_ids)
@@ -562,17 +563,17 @@ class GenerateXlsxTest(TestCase):
     def test_altitude_from_geoshape(self):
         wb, _ = self._generate_and_load()
         ws = wb["Plot Table"]
-        # Column 7 = Altitude
-        alt = ws.cell(row=2, column=7).value
+        # Column 8 = Altitude
+        alt = ws.cell(row=2, column=8).value
         self.assertIsNotNone(alt)
         self.assertAlmostEqual(alt, 2984.0)
 
     def test_centroid_coordinates(self):
         wb, _ = self._generate_and_load()
         ws = wb["Plot Table"]
-        # Column 5 = Latitude, 6 = Longitude
-        lat = ws.cell(row=2, column=5).value
-        lon = ws.cell(row=2, column=6).value
+        # Column 6 = Latitude, 7 = Longitude
+        lat = ws.cell(row=2, column=6).value
+        lon = ws.cell(row=2, column=7).value
         self.assertIsNotNone(lat)
         self.assertIsNotNone(lon)
         self.assertAlmostEqual(
@@ -585,7 +586,7 @@ class GenerateXlsxTest(TestCase):
     def test_polygon_kml_url(self):
         wb, _ = self._generate_and_load()
         ws = wb["Plot Table"]
-        url = ws.cell(row=2, column=8).value
+        url = ws.cell(row=2, column=9).value
         self.assertIn(
             "/api/v1/odk/plots/", url
         )

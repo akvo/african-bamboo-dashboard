@@ -121,4 +121,5 @@ ALLOWED_ORDERINGS = {
     "area_ha": "plot__area_ha",
     "region": "plot__region",
     "sub_region": "plot__sub_region",
+    "main_plot_uid": "sort_main_plot_uid",
 }

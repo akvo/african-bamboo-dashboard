@@ -826,8 +826,17 @@ class SubmissionViewSet(
             qs = self._apply_dynamic_filters(qs, params, asset_uid)
         # Sorting
         qs = qs.annotate(
-            sort_start=KeyTextTransform("start", "raw_data"),
-            sort_end=KeyTextTransform("end", "raw_data"),
+            sort_start=KeyTextTransform(
+                "start", "raw_data"
+            ),
+            sort_end=KeyTextTransform(
+                "end", "raw_data"
+            ),
+            sort_main_plot_uid=Subquery(
+                MainPlotSubmission.objects.filter(
+                    submission=OuterRef("pk"),
+                ).values("main_plot__uid")[:1]
+            ),
         )
         ordering = params.get("ordering")
         if ordering:

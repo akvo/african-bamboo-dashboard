@@ -78,7 +78,16 @@ export function SubmissionsTable({
       },
       {
         key: "main_plot_uid",
-        header: "Plot ID",
+        header: (
+          <SortableHeader
+            columnKey="main_plot_uid"
+            currentSort={ordering}
+            onSort={onSort}
+          >
+            Plot ID
+          </SortableHeader>
+        ),
+        ariaSort: getAriaSort("main_plot_uid", ordering),
         cell: (row) => (
           <TextCell className="font-bold text-primary">
             {row.main_plot_uid || "—"}

@@ -208,13 +208,13 @@ export function SubmissionsTable({
           {q.label}
         </SortableHeader>
       ) : (
-        q.label
+        <span>{`${q.label} (${q.type})`}</span>
       ),
       ariaSort: sortableFields.includes(q.name)
         ? getAriaSort(q.name, ordering)
         : undefined,
-      headerClassName: "max-w-[250px] truncate",
-      className: "max-w-[250px] truncate text-muted-foreground",
+      headerClassName: "min-w-[200px] whitespace-normal break-words py-2",
+      className: "max-w-[200px] truncate text-muted-foreground",
       cell: (row) => {
         const resolved = row.resolved_data || {};
         const attachments = resolved._attachments;

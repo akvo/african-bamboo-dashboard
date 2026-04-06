@@ -5,7 +5,15 @@ import {
   CardTitle,
   CardDescription,
 } from "@/components/ui/card";
-import { LifeBuoy, Mail, BookOpen, FolderCode, Smartphone } from "lucide-react";
+import ValidationRulesContent from "@/components/validation-rules-content";
+import {
+  LifeBuoy,
+  Mail,
+  BookOpen,
+  FolderCode,
+  Smartphone,
+  ShieldCheck,
+} from "lucide-react";
 
 const supportEmail = process.env.NEXT_PUBLIC_SUPPORT_EMAIL;
 
@@ -71,6 +79,22 @@ export default function SupportPage() {
               administrator.
             </p>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Validation Rules */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <ShieldCheck className="size-5" />
+            Validation Rules
+          </CardTitle>
+          <CardDescription>
+            Active validation rules for data collection and quality checks
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ValidationRulesContent />
         </CardContent>
       </Card>
 

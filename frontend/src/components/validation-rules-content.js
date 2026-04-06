@@ -37,7 +37,9 @@ const markdownComponents = {
   ol: ({ children }) => (
     <ol className="list-decimal pl-5 space-y-1 text-sm mb-3">{children}</ol>
   ),
-  li: ({ children }) => <li className="text-sm">{children}</li>,
+  li: ({ children }) => (
+    <li className="text-sm [&>p]:mb-0">{children}</li>
+  ),
   strong: ({ children }) => (
     <strong className="font-semibold">{children}</strong>
   ),
@@ -46,6 +48,22 @@ const markdownComponents = {
       {children}
     </blockquote>
   ),
+  a: ({ href, children }) => (
+    <a
+      href={href}
+      className="text-primary underline hover:text-primary/80"
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      {children}
+    </a>
+  ),
+  code: ({ children }) => (
+    <code className="rounded bg-muted px-1.5 py-0.5 text-xs font-mono">
+      {children}
+    </code>
+  ),
+  hr: () => <hr className="my-4 border-border" />,
 };
 
 const ValidationRulesContent = () => {
@@ -92,7 +110,7 @@ const ValidationRulesContent = () => {
   }
 
   return (
-    <div className="prose prose-sm dark:prose-invert max-w-none">
+    <div className="max-w-none">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={markdownComponents}

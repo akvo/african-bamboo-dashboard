@@ -70,6 +70,9 @@ class FlagSeverity:
     WARNING = "warning"
 
 
+OVERLAP_THRESHOLD_PERCENT = 20.0
+
+
 class WarningThresholds:
     """Configurable thresholds for warning rules.
 
@@ -122,4 +125,5 @@ ALLOWED_ORDERINGS = {
     "region": "plot__region",
     "sub_region": "plot__sub_region",
     "main_plot_uid": "sort_main_plot_uid",
+    "instance_name": "instance_name",
 }

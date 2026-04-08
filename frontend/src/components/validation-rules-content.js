@@ -37,9 +37,7 @@ const markdownComponents = {
   ol: ({ children }) => (
     <ol className="list-decimal pl-5 space-y-1 text-sm mb-3">{children}</ol>
   ),
-  li: ({ children }) => (
-    <li className="text-sm [&>p]:mb-0">{children}</li>
-  ),
+  li: ({ children }) => <li className="text-sm [&>p]:mb-0">{children}</li>,
   strong: ({ children }) => (
     <strong className="font-semibold">{children}</strong>
   ),

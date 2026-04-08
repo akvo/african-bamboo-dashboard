@@ -95,6 +95,20 @@ export function SubmissionsTable({
         ),
       },
       {
+        key: "instance_name",
+        header: (
+          <SortableHeader
+            columnKey="instance_name"
+            currentSort={ordering}
+            onSort={onSort}
+          >
+            Instance name
+          </SortableHeader>
+        ),
+        ariaSort: getAriaSort("instance_name", ordering),
+        cell: (row) => <TextCell>{row.instance_name || "-"}</TextCell>,
+      },
+      {
         key: "status",
         header: "Status",
         cell: (row) => (

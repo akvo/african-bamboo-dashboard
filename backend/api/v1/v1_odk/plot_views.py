@@ -159,7 +159,13 @@ class PlotViewSet(
         if sort == "name":
             qs = qs.order_by("plot_name")
         elif sort == "date":
-            qs = qs.order_by("-created_at")
+            qs = qs.order_by(
+                "-submission__submission_time"
+            )
+        else:
+            qs = qs.order_by(
+                "-submission__submission_time"
+            )
         # Dynamic raw_data filters
         if form_id:
             filter_keys = [

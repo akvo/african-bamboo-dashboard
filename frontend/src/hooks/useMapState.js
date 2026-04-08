@@ -25,7 +25,7 @@ export function MapStateProvider({ children }) {
   const [approvalDialogOpen, setApprovalDialogOpen] = useState(false);
   const [rejectionDialogOpen, setRejectionDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("all");
-  const [sortBy, setSortBy] = useState("priority");
+  const [sortBy, setSortBy] = useState("date");
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const searchTimeoutRef = useRef(null);

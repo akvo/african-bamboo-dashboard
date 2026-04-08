@@ -1,7 +1,14 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { ChevronDown, Download, Loader2, Search } from "lucide-react";
+import {
+  ChevronDown,
+  Download,
+  Loader2,
+  Map,
+  Search,
+  MoreVertical,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,7 +20,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DashboardHeader } from "@/components/dashboard-header";
-import { StatCard } from "@/components/stat-card";
 import { FilterBar } from "@/components/filter-bar";
 import { SubmissionsTable } from "@/components/submissions-table";
 import { TablePagination } from "@/components/table-pagination";
@@ -30,8 +36,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useMapState } from "@/hooks/useMapState";
-
-const stats = [];
+import { useStats } from "@/hooks/useStats";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardAction,
+} from "@/components/ui/card";
 
 const DashboardPage = () => {
   const { forms, activeForm, setActiveForm } = useForms();
@@ -50,11 +62,20 @@ const DashboardPage = () => {
     setEndDate,
     setDynamicValues,
     setActiveFilterFields,
-    setSelectedPlotId,
     handleResetFilters,
   } = useMapState();
 
+  const { stats } = useStats({
+    formId: activeForm?.asset_uid,
+    region,
+    subRegion,
+    startDate: startDate ? startDate.getTime() : null,
+    endDate: endDate ? endDate.getTime() : null,
+    dynamicFilters: dynamicValues,
+  });
+
   const [activeTab, setActiveTab] = useState("all");
+  const [statsTab, setStatsTab] = useState("plot");
   const [search, setSearch] = useState("");
   const [ordering, setOrdering] = useState(null);
 
@@ -123,10 +144,90 @@ const DashboardPage = () => {
     <div className="space-y-6">
       <DashboardHeader />
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {stats.map((stat) => (
-          <StatCard key={stat.title} {...stat} />
-        ))}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-md font-medium text-foreground">
+              Total submissions
+            </CardTitle>
+            <CardAction>
+              <div className="inline-flex rounded-md border border-border overflow-hidden">
+                <button
+                  onClick={() => setStatsTab("plot")}
+                  className={`cursor-pointer flex items-center justify-center h-[34px] px-2.5 transition-colors ${
+                    statsTab === "plot"
+                      ? "bg-white"
+                      : "bg-muted text-muted-foreground"
+                  }`}
+                >
+                  <Map className="size-4" />
+                </button>
+                <button
+                  onClick={() => setStatsTab("ha")}
+                  className={`cursor-pointer flex items-center justify-center h-[34px] px-2.5 border-l border-border text-sm font-semibold transition-colors ${
+                    statsTab === "ha"
+                      ? "bg-white text-foreground"
+                      : "bg-muted text-muted-foreground"
+                  }`}
+                >
+                  Ha
+                </button>
+              </div>
+            </CardAction>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold">
+              {statsTab === "plot"
+                ? (stats?.total_plots ?? 0).toLocaleString()
+                : (stats?.total_area_ha ?? 0).toLocaleString()}
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {statsTab === "plot"
+                ? "Amount of plots mapped"
+                : "Amount of hectares mapped"}
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-md font-medium text-foreground">
+              Percentage approved on first submission
+            </CardTitle>
+            <CardAction>
+              <Button variant="ghost" size="icon-xs">
+                <MoreVertical className="size-4" />
+              </Button>
+            </CardAction>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold">
+              {stats?.approval_percentage ?? 0}%
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Of plots out of 100%
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-md font-medium text-foreground">
+              Number of items currently requiring review
+            </CardTitle>
+            <CardAction>
+              <Button variant="ghost" size="icon-xs">
+                <MoreVertical className="size-4" />
+              </Button>
+            </CardAction>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold">
+              {(stats?.pending_count ?? 0).toLocaleString()}
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {(stats?.pending_area_ha ?? 0).toLocaleString()} hectares to map
+            </p>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Filters */}

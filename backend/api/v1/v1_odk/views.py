@@ -1,7 +1,6 @@
 import logging
 import time
 from datetime import datetime
-from datetime import timezone as tz
 
 from django.db.models import (
     Exists,
@@ -434,15 +433,17 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_502_BAD_GATEWAY,
             )
 
-        since_iso = None
-        if form.last_sync_timestamp > 0:
-            since_iso = datetime.fromtimestamp(
-                form.last_sync_timestamp / 1000,
-                tz=tz.utc,
-            ).strftime("%Y-%m-%dT%H:%M:%S")
-
+        # Always fetch ALL submissions — Kobo does
+        # not expose a per-submission modified
+        # timestamp, so incremental sync by
+        # _submission_time misses edits and
+        # validation-status changes.
         try:
-            results = client.fetch_all_submissions(form.asset_uid, since_iso)
+            results = (
+                client.fetch_all_submissions(
+                    form.asset_uid
+                )
+            )
         except KoboUnauthorizedError:
             return Response(
                 {
@@ -458,6 +459,7 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
 
         counts = {
             "created": 0,
+            "updated": 0,
             "plots_created": 0,
             "plots_updated": 0,
             "plots_flagged": 0,
@@ -469,6 +471,8 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
             )
             if is_new:
                 counts["created"] += 1
+            else:
+                counts["updated"] += 1
             self._upsert_plot(
                 form, sub, item, counts
             )
@@ -608,9 +612,6 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
             "region": plot_data["region"],
             "sub_region": plot_data["sub_region"],
             "area_ha": area,
-            "created_at": int(
-                time.time() * 1000
-            ),
         }
         if all_flags:
             defaults["flagged_for_review"] = True
@@ -620,6 +621,22 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
             defaults["flagged_reason"] = (
                 plot_data["flagged_reason"]
             )
+
+        # Preserve created_at on re-sync: fetch
+        # existing value before update_or_create
+        # overwrites it.  Django 4.2 lacks
+        # create_defaults so we include created_at
+        # in defaults for both paths.
+        existing = Plot.objects.filter(
+            submission=sub
+        ).values_list(
+            "created_at", flat=True
+        ).first()
+        defaults["created_at"] = (
+            existing
+            if existing is not None
+            else int(time.time() * 1000)
+        )
 
         plot, plot_is_new = (
             Plot.objects.update_or_create(

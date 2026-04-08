@@ -104,23 +104,3 @@ def create_main_plot_for_submission(submission):
                 raise
             continue
     return None
-
-
-def unlink_main_plot_submission(submission):
-    """Remove MainPlotSubmission link on revert.
-
-    The MainPlot itself is retained to prevent
-    UID gaps and support future resubmission
-    linking.
-
-    Args:
-        submission: Submission instance being
-            reverted.
-
-    Returns:
-        int: Number of links deleted.
-    """
-    deleted, _ = MainPlotSubmission.objects.filter(
-        submission=submission,
-    ).delete()
-    return deleted

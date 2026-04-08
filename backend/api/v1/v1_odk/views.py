@@ -81,7 +81,6 @@ from api.v1.v1_odk.utils.farmer_sync import (
 )
 from api.v1.v1_odk.utils.plot_id import (
     create_main_plot_for_submission,
-    unlink_main_plot_submission,
 )
 from api.v1.v1_odk.utils.warning_rules import (
     evaluate_warnings,
@@ -921,15 +920,10 @@ class SubmissionViewSet(
         )
         approval = instance.approval_status
 
-        # Generate Plot ID on approval
+        # Generate Plot ID on first approval
+        # (kept permanently — never unlinked on revert/reject)
         if approval == ApprovalStatusTypes.APPROVED:
             create_main_plot_for_submission(instance)
-
-        # Unlink Plot ID on revert or rejection
-        if approval is None or (
-            approval == ApprovalStatusTypes.REJECTED
-        ):
-            unlink_main_plot_submission(instance)
 
         # Re-check polygon & overlaps on revert
         if approval is None:

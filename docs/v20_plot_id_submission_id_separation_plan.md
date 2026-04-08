@@ -74,19 +74,17 @@ class MainPlotSubmission(models.Model):
 - Both creates wrapped in `transaction.atomic()` — no orphaned `MainPlot` rows on failure
 - Retries up to 3 times on `IntegrityError` (concurrent UID race)
 
-**`unlink_main_plot_submission(submission)`**:
-- Deletes the `MainPlotSubmission` link
-- Retains the `MainPlot` itself (prevents UID gaps, supports future resubmission linking)
-
 ### Approval Flow Hook (`views.py` — `perform_update`)
 
 | Transition | Action |
 |-----------|--------|
 | Pending → Approved | `create_main_plot_for_submission()` |
 | Pending → Rejected | No action |
-| Approved → Pending (revert) | `unlink_main_plot_submission()` |
-| Approved → Rejected | `unlink_main_plot_submission()` |
+| Approved → Pending (revert) | No action (Plot ID kept permanently) |
+| Approved → Rejected | No action (Plot ID kept permanently) |
 | Rejected → Pending | No action |
+
+> **Design decision**: Once a Plot ID is assigned on first approval, it is permanent. Status changes (revert, reject) never remove the Plot ID. This ensures Plot IDs remain stable identifiers for physical plots regardless of submission workflow state.
 
 ### Serializers
 
@@ -153,7 +151,7 @@ Options: `--dry-run`, `--form-id`. Processes in `submission_time` order.
 }
 ```
 
-`main_plot_uid` is `null` when the submission is not approved.
+`main_plot_uid` is `null` when the submission has never been approved. Once assigned, it persists through all status changes.
 
 ---
 
@@ -163,7 +161,7 @@ Options: `--dry-run`, `--form-id`. Processes in `submission_time` order.
 |------|--------|
 | `models.py` | `MainPlot` (form FK, uid per-form unique), `MainPlotSubmission` (OneToOneField) |
 | `admin.py` | Register `MainPlot`, `MainPlotSubmission` |
-| `utils/plot_id.py` | `generate_next_plot_uid`, `create_main_plot_for_submission`, `unlink_main_plot_submission` |
+| `utils/plot_id.py` | `generate_next_plot_uid`, `create_main_plot_for_submission` |
 | `views.py` | Approval hook, Exists subquery search, prefetch, `_strip_id_prefix` PLT support |
 | `serializers.py` | `main_plot_uid` on 3 serializers |
 | `management/commands/backfill_plot_ids.py` | Backfill command |
@@ -186,9 +184,9 @@ Options: `--dry-run`, `--form-id`. Processes in `submission_time` order.
 | `test_approve_respects_uid_start` | Respects `plot_uid_start=351` |
 | `test_approve_sequential` | Sequential UID increment |
 | `test_approve_idempotent` | Double-approve doesn't duplicate |
-| `test_revert_deletes_link_keeps_main_plot` | Revert unlinks, retains MainPlot |
+| `test_revert_keeps_plot_id` | Revert keeps Plot ID link permanently |
 | `test_reject_no_main_plot` | Rejection creates nothing |
-| `test_reject_after_approve_unlinks` | Approve then reject unlinks |
+| `test_reject_after_approve_keeps_plot_id` | Approve then reject keeps Plot ID |
 | `test_approve_without_plot_no_error` | No crash without Plot |
 | `test_search_by_plot_id` | Search matches MainPlot.uid |
 | `test_plot_serializer_includes_main_plot_uid` | PlotSerializer returns field |

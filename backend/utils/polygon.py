@@ -8,6 +8,8 @@ from shapely.geometry import (
 )
 
 from api.v1.v1_odk.constants import (
+    OVERLAP_THRESHOLD_PERCENT,
+    PREFIX_SUBM_ID,
     FlagSeverity,
     FlagType,
 )
@@ -158,8 +160,6 @@ def _is_valid_geometry(coords):
     """Check polygon for self-intersections
     using Shapely."""
     try:
-        from shapely.geometry import Polygon as ShapelyPolygon
-
         poly = ShapelyPolygon(coords)
         return poly.is_valid
     except Exception:
@@ -245,10 +245,12 @@ def _build_plot_name(raw_data, plot_name_field):
 
 
 def _polygons_overlap(wkt_a, wkt_b):
-    """Check if two WKT polygons truly overlap.
+    """Check if two WKT polygons overlap significantly.
 
-    Returns True if they share area (not just
-    an edge or corner). Returns False on error.
+    Returns True when the intersection area is
+    >= OVERLAP_THRESHOLD_PERCENT of the smaller
+    polygon's area. Matches the ODK app
+    OverlapChecker logic.
     """
     try:
         poly_a = shapely_wkt.loads(wkt_a)
@@ -263,8 +265,22 @@ def _polygons_overlap(wkt_a, wkt_b):
             return False
         if not poly_a.intersects(poly_b):
             return False
-        # Touching edges/corners only -> no overlap
-        return not poly_a.touches(poly_b)
+        intersection = poly_a.intersection(poly_b)
+        intersection_area = intersection.area
+        if intersection_area <= 0:
+            return False
+        smaller_area = min(
+            poly_a.area, poly_b.area
+        )
+        if smaller_area <= 0:
+            return False
+        overlap_pct = (
+            intersection_area / smaller_area
+        ) * 100
+        return (
+            overlap_pct
+            >= OVERLAP_THRESHOLD_PERCENT
+        )
     except Exception:
         return False
 
@@ -307,28 +323,13 @@ def find_overlapping_plots(
     return overlapping
 
 
-def _format_plot_label(plot_name, instance_name):
-    """Format a plot label for overlap reasons.
-
-    Shows 'plot_name (instance)' only when they
-    differ; otherwise just the identifier."""
-    if plot_name and plot_name != instance_name:
-        return f"{plot_name} ({instance_name})"
-    return instance_name
-
-
 def build_overlap_reason(overlapping_plots):
     """Build a reason string listing overlapping
     plots. Truncates to 500 chars if needed."""
     parts = []
     for p in overlapping_plots:
-        inst = (
-            p.submission.instance_name
-            if p.submission
-            else None
-        ) or str(p.uuid)
         parts.append(
-            _format_plot_label(p.plot_name, inst)
+            PREFIX_SUBM_ID + p.submission.kobo_id
         )
     msg = (
         "Polygon overlaps with: "
@@ -337,37 +338,6 @@ def build_overlap_reason(overlapping_plots):
     if len(msg) > 500:
         msg = msg[:497] + "..."
     return msg
-
-
-def append_overlap_reason(
-    existing_reason, new_plot_name, new_instance
-):
-    """Append overlap info to an existing reason.
-
-    Skips if the instance already appears
-    in the reason (duplicate prevention).
-    Truncates to 500 chars.
-    """
-    if (
-        existing_reason
-        and new_instance in existing_reason
-    ):
-        return existing_reason
-
-    label = _format_plot_label(
-        new_plot_name, new_instance
-    )
-    overlap_msg = (
-        f"Polygon overlaps with: {label}"
-    )
-
-    if not existing_reason:
-        return overlap_msg
-
-    combined = f"{existing_reason}; {overlap_msg}"
-    if len(combined) > 500:
-        combined = combined[:497] + "..."
-    return combined
 
 
 def _geometry_error_type(error_msg):

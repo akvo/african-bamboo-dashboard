@@ -181,11 +181,11 @@ class PlotIdGenerationTest(
         )
 
     @patch("api.v1.v1_odk.views.async_task")
-    def test_revert_deletes_link_keeps_main_plot(
+    def test_revert_keeps_plot_id(
         self, mock_async
     ):
-        """Reverting to pending deletes
-        MainPlotSubmission but keeps MainPlot."""
+        """Reverting to pending keeps
+        MainPlotSubmission and MainPlot."""
         sub, _ = self._create_sub_and_plot(
             "pid-006", "105",
         )
@@ -196,7 +196,7 @@ class PlotIdGenerationTest(
 
         self._revert("pid-006")
         self.assertEqual(
-            MainPlotSubmission.objects.count(), 0,
+            MainPlotSubmission.objects.count(), 1,
         )
         self.assertEqual(MainPlot.objects.count(), 1)
 
@@ -211,11 +211,11 @@ class PlotIdGenerationTest(
         self.assertEqual(MainPlot.objects.count(), 0)
 
     @patch("api.v1.v1_odk.views.async_task")
-    def test_reject_after_approve_unlinks(
+    def test_reject_after_approve_keeps_plot_id(
         self, mock_async
     ):
-        """Approving then rejecting unlinks the
-        MainPlotSubmission."""
+        """Approving then rejecting keeps the
+        MainPlotSubmission link."""
         sub, _ = self._create_sub_and_plot(
             "pid-008", "107",
         )
@@ -226,7 +226,7 @@ class PlotIdGenerationTest(
 
         self._reject("pid-008")
         self.assertEqual(
-            MainPlotSubmission.objects.count(), 0,
+            MainPlotSubmission.objects.count(), 1,
         )
         self.assertEqual(MainPlot.objects.count(), 1)
 

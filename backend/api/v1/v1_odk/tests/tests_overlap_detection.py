@@ -14,12 +14,11 @@ from api.v1.v1_odk.tests.mixins import (
 )
 from utils.polygon import (
     _polygons_overlap,
-    append_overlap_reason,
     build_overlap_reason,
     find_overlapping_plots,
 )
 
-# Two overlapping squares
+# Two overlapping squares (25% of smaller area)
 WKT_SQUARE_A = (
     "POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))"
 )
@@ -47,6 +46,16 @@ WKT_CONTAINED = (
     "0.2 0.2, 0.8 0.2, "
     "0.8 0.8, 0.2 0.8, "
     "0.2 0.2))"
+)
+# Minor overlap below 20% threshold
+# Intersection = 0.1 * 1.0 = 0.1
+# Smaller area = min(1, 1) = 1
+# Overlap pct = 10% < 20%
+WKT_MINOR_OVERLAP = (
+    "POLYGON(("
+    "0.9 0, 1.9 0, "
+    "1.9 1, 0.9 1, "
+    "0.9 0))"
 )
 
 # Valid ODK geoshape for sync tests
@@ -110,6 +119,15 @@ class PolygonsOverlapTest(TestCase):
         self.assertTrue(
             _polygons_overlap(
                 WKT_SQUARE_A, WKT_CONTAINED
+            )
+        )
+
+    def test_minor_overlap_below_threshold(self):
+        """Overlap < 20% of smaller area is
+        not flagged."""
+        self.assertFalse(
+            _polygons_overlap(
+                WKT_SQUARE_A, WKT_MINOR_OVERLAP
             )
         )
 
@@ -285,7 +303,7 @@ class BuildOverlapReasonTest(TestCase):
         self.assertEqual(
             reason,
             "Polygon overlaps with: "
-            "Abebe (inst1)",
+            "#k-inst1",
         )
 
     def test_multiple_overlaps(self):
@@ -294,8 +312,8 @@ class BuildOverlapReasonTest(TestCase):
             self._make_plot("Kebede", "inst2"),
         ]
         reason = build_overlap_reason(plots)
-        self.assertIn("Abebe (inst1)", reason)
-        self.assertIn("Kebede (inst2)", reason)
+        self.assertIn("#k-inst1", reason)
+        self.assertIn("#k-inst2", reason)
 
     def test_no_duplicate_when_name_matches(self):
         plots = [
@@ -304,7 +322,7 @@ class BuildOverlapReasonTest(TestCase):
         reason = build_overlap_reason(plots)
         self.assertEqual(
             reason,
-            "Polygon overlaps with: enum-001",
+            "Polygon overlaps with: #k-enum-001",
         )
 
     def test_shows_both_when_name_differs(self):
@@ -317,71 +335,8 @@ class BuildOverlapReasonTest(TestCase):
         self.assertEqual(
             reason,
             "Polygon overlaps with: "
-            "Farmer A (enum-001)",
+            "#k-enum-001",
         )
-
-    def test_truncation(self):
-        plots = [
-            self._make_plot(
-                "X" * 100, f"i{i}"
-            )
-            for i in range(10)
-        ]
-        reason = build_overlap_reason(plots)
-        self.assertLessEqual(len(reason), 500)
-        self.assertTrue(reason.endswith("..."))
-
-
-class AppendOverlapReasonTest(TestCase):
-    """Unit tests for append_overlap_reason."""
-
-    def test_append_to_none(self):
-        result = append_overlap_reason(
-            None, "Abebe", "inst1"
-        )
-        self.assertEqual(
-            result,
-            "Polygon overlaps with: "
-            "Abebe (inst1)",
-        )
-
-    def test_append_no_duplicate_when_same(self):
-        result = append_overlap_reason(
-            None, "enum-001", "enum-001"
-        )
-        self.assertEqual(
-            result,
-            "Polygon overlaps with: enum-001",
-        )
-
-    def test_append_to_existing(self):
-        existing = "No polygon data found."
-        result = append_overlap_reason(
-            existing, "Abebe", "inst1"
-        )
-        self.assertIn(
-            "No polygon data found.", result
-        )
-        self.assertIn("Abebe (inst1)", result)
-        self.assertIn("; ", result)
-
-    def test_duplicate_prevention(self):
-        existing = (
-            "Polygon overlaps with: "
-            "Abebe (inst1)"
-        )
-        result = append_overlap_reason(
-            existing, "Abebe", "inst1"
-        )
-        self.assertEqual(result, existing)
-
-    def test_truncation_on_append(self):
-        existing = "X" * 490
-        result = append_overlap_reason(
-            existing, "Abebe", "inst1"
-        )
-        self.assertLessEqual(len(result), 500)
-        self.assertTrue(result.endswith("..."))
 
 
 @override_settings(USE_TZ=False, TEST_ENV=True)

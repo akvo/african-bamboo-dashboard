@@ -67,10 +67,17 @@ class KoboClient:
         start: int = 0,
     ):
         """Fetch a page of submissions."""
-        url = f"{self.base_url}" f"/api/v2/assets/{asset_uid}/data.json"
+        url = (
+            f"{self.base_url}"
+            f"/api/v2/assets/{asset_uid}/data.json"
+        )
         resp = self.session.get(
             url,
-            params={"limit": limit, "start": start},
+            params={
+                "limit": limit,
+                "start": start,
+                "sort": '{"_id": 1}',
+            },
             timeout=self.timeout,
         )
         self._check_response(resp)
@@ -162,25 +169,24 @@ class KoboClient:
     def fetch_all_submissions(
         self,
         asset_uid: str,
-        since_iso: str = None,
     ):
-        """Paginate through all submissions."""
+        """Paginate through all submissions.
+
+        Always fetches every submission so that
+        edits and validation-status changes made
+        on Kobo are picked up.  Sorted by _id for
+        deterministic offset-based pagination.
+        """
         all_results = []
         start = 0
         page_size = 300
 
         while True:
-            if since_iso:
-                data = self.get_submissions_since(
-                    asset_uid,
-                    since_iso,
-                    page_size,
-                    start,
-                )
-            else:
-                data = self.get_submissions(asset_uid, page_size, start)
-
-            all_results.extend(data["results"])
+            data = self.get_submissions(
+                asset_uid, page_size, start
+            )
+            results = data.get("results", [])
+            all_results.extend(results)
             start += page_size
 
             if data.get("next") is None:

@@ -73,17 +73,17 @@ const ValidationRulesContent = () => {
     let cancelled = false;
     fetch(VALIDATION_RULES_URL)
       .then((res) => {
-        if (!res.ok) throw new Error("Failed to load");
+        if (!res.ok) {throw new Error("Failed to load");}
         return res.text();
       })
       .then((text) => {
-        if (!cancelled) setContent(text);
+        if (!cancelled) {setContent(text);}
       })
       .catch((err) => {
-        if (!cancelled) setError(err.message);
+        if (!cancelled) {setError(err.message);}
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {setLoading(false);}
       });
     return () => {
       cancelled = true;

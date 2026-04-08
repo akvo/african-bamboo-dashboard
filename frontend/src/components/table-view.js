@@ -168,9 +168,9 @@ export function SortableHeader({ children, columnKey, currentSort, onSort }) {
  * Use in column definitions: { ariaSort: getAriaSort("kobo_id", ordering) }
  */
 export function getAriaSort(columnKey, currentSort) {
-  if (!currentSort) return undefined;
+  if (!currentSort) {return undefined;}
   const field = currentSort.replace("-", "");
-  if (field !== columnKey) return undefined;
+  if (field !== columnKey) {return undefined;}
   return currentSort.startsWith("-") ? "descending" : "ascending";
 }
 

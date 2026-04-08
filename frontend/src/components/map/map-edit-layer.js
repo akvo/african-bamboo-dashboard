@@ -23,10 +23,10 @@ export default function MapEditLayer({ plot, setEditedGeo, onNotify }) {
   }, [onNotify]);
 
   useEffect(() => {
-    if (!plot || !map) return;
+    if (!plot || !map) {return;}
 
     const coords = plot.coords || parseWktPolygon(plot.polygon_wkt);
-    if (coords.length === 0) return;
+    if (coords.length === 0) {return;}
 
     // Create polygon imperatively so react-leaflet re-renders
     // cannot reset latLngs and fight with leaflet-editable drag state

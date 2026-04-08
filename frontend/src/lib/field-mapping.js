@@ -1,8 +1,8 @@
 function formatDate(isoString) {
-  if (!isoString) return null;
+  if (!isoString) {return null;}
   try {
     const date = new Date(isoString);
-    if (isNaN(date.getTime())) return isoString;
+    if (isNaN(date.getTime())) {return isoString;}
     return date.toLocaleDateString("en-GB", {
       day: "2-digit",
       month: "2-digit",

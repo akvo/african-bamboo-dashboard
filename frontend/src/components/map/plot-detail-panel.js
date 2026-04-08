@@ -76,7 +76,7 @@ function SectionHeader({
 }
 
 function DataField({ label, value }) {
-  if (!value) return null;
+  if (!value) {return null;}
   return (
     <div className="flex flex-1 flex-col gap-1">
       <span className="text-sm text-muted-foreground">{label}</span>
@@ -87,7 +87,7 @@ function DataField({ label, value }) {
 
 function DataFieldRow({ fields }) {
   const visibleFields = fields.filter((f) => f.value);
-  if (visibleFields.length === 0) return null;
+  if (visibleFields.length === 0) {return null;}
   return (
     <div
       className={cn("flex items-start", "divide-x divide-muted-foreground/20")}
@@ -114,7 +114,7 @@ function PersonSection({
   onCancel,
   isSaving,
 }) {
-  if (!name && !isEditing) return null;
+  if (!name && !isEditing) {return null;}
   const visibleFields = fields.filter((f) => f.value);
   return (
     <div className="flex flex-col gap-3 rounded-md border border-card-foreground/10 p-3 bg-card">
@@ -194,7 +194,7 @@ export default function PlotDetailPanel({
         }
       })
       .finally(() => {
-        if (!cancelled) setIsLoadingSub(false);
+        if (!cancelled) {setIsLoadingSub(false);}
       });
     return () => {
       cancelled = true;
@@ -213,7 +213,7 @@ export default function PlotDetailPanel({
 
   const handleStartEdit = useCallback(
     async (section) => {
-      if (!submission) return;
+      if (!submission) {return;}
       // Fetch form questions with options (cached)
       // Only needed for non-plot sections (plot uses plot_field_specs)
       if (section !== "plot" && formQuestions.length === 0) {
@@ -261,7 +261,7 @@ export default function PlotDetailPanel({
   );
 
   const handleSave = useCallback(async () => {
-    if (!plot?.submission_uuid) return;
+    if (!plot?.submission_uuid) {return;}
     setIsSaving(true);
     try {
       const res = await api.patch(
@@ -310,7 +310,7 @@ export default function PlotDetailPanel({
       return stdNames
         .map((stdName) => {
           const entry = mapped[stdName];
-          if (!entry?.question_name) return null;
+          if (!entry?.question_name) {return null;}
           const q = formQuestions.find((fq) => fq.name === entry.question_name);
           return {
             questionName: entry.question_name,

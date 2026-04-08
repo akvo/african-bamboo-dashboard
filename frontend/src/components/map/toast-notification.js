@@ -25,14 +25,14 @@ export default function ToastNotification({
   onDismiss,
 }) {
   useEffect(() => {
-    if (!message) return;
+    if (!message) {return;}
     const timer = setTimeout(() => {
       onDismiss();
     }, 3000);
     return () => clearTimeout(timer);
   }, [message, onDismiss]);
 
-  if (!message) return null;
+  if (!message) {return null;}
 
   const style = TOAST_STYLES[type] || TOAST_STYLES.success;
   const Icon = style.icon;

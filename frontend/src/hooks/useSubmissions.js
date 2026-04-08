@@ -43,22 +43,22 @@ export function useSubmissions({
   const page = Math.floor(offset / limit) + 1;
 
   const fetchSubmissions = useCallback(async () => {
-    if (!assetUid) return;
+    if (!assetUid) {return;}
     setIsLoading(true);
     setError(null);
     try {
       const params = { asset_uid: assetUid, limit, offset };
-      if (ordering) params.ordering = ordering;
-      if (status && status !== "all") params.status = status;
-      if (search) params.search = search;
-      if (region) params.region = region;
-      if (subRegion) params.sub_region = subRegion;
-      if (startDate) params.start_date = startDate;
-      if (endDate) params.end_date = endDate;
+      if (ordering) {params.ordering = ordering;}
+      if (status && status !== "all") {params.status = status;}
+      if (search) {params.search = search;}
+      if (region) {params.region = region;}
+      if (subRegion) {params.sub_region = subRegion;}
+      if (startDate) {params.start_date = startDate;}
+      if (endDate) {params.end_date = endDate;}
       // Dynamic filters: filter__<name>=<value>
       const parsed = JSON.parse(dynamicKey);
       for (const [key, val] of Object.entries(parsed)) {
-        if (val) params[`filter__${key}`] = val;
+        if (val) {params[`filter__${key}`] = val;}
       }
       const res = await api.get("/v1/odk/submissions/", { params });
       setData(res.data.results);

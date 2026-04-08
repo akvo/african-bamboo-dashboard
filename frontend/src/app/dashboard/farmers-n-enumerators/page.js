@@ -55,7 +55,7 @@ function usePaginatedData(endpoint, formId) {
         offset: String(offset),
         form_id: formId,
       });
-      if (search) params.set("search", search);
+      if (search) {params.set("search", search);}
       const res = await api.get(`${endpoint}?${params}`);
       setData(res.data?.results || []);
       setCount(res.data?.count ?? 0);

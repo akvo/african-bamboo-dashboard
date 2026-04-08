@@ -28,7 +28,7 @@ export default function TitleDeedViewer({ open, onClose, attachments = [] }) {
   const clampPosition = useCallback((x, y) => {
     const img = imgRef.current;
     const container = containerRef.current;
-    if (!img || !container) return { x, y };
+    if (!img || !container) {return { x, y };}
 
     const cRect = container.getBoundingClientRect();
     const iRect = img.getBoundingClientRect();
@@ -52,7 +52,7 @@ export default function TitleDeedViewer({ open, onClose, attachments = [] }) {
 
   const handlePointerMove = useCallback(
     (e) => {
-      if (!dragging) return;
+      if (!dragging) {return;}
       const newX = e.clientX - dragStart.x;
       const newY = e.clientY - dragStart.y;
       setPosition(clampPosition(newX, newY));
@@ -67,7 +67,7 @@ export default function TitleDeedViewer({ open, onClose, attachments = [] }) {
   // Keyboard navigation
   const handleKeyDown = useCallback(
     (e) => {
-      if (!open) return;
+      if (!open) {return;}
       if (e.key === "Escape") {
         onClose();
       } else if (e.key === "ArrowLeft" && currentIndex > 0) {
@@ -87,7 +87,7 @@ export default function TitleDeedViewer({ open, onClose, attachments = [] }) {
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [handleKeyDown]);
 
-  if (!open || attachments.length === 0) return null;
+  if (!open || attachments.length === 0) {return null;}
 
   const current = attachments[currentIndex];
   const hasMultiple = attachments.length > 1;

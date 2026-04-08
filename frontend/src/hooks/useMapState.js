@@ -68,8 +68,8 @@ export function MapStateProvider({ children }) {
       initializedRef.current = true;
       return;
     }
-    if (!formId) return;
-    if (saveFilterFieldsRef.current) clearTimeout(saveFilterFieldsRef.current);
+    if (!formId) {return;}
+    if (saveFilterFieldsRef.current) {clearTimeout(saveFilterFieldsRef.current);}
     saveFilterFieldsRef.current = setTimeout(() => {
       api
         .patch(`/v1/odk/forms/${formId}/`, {
@@ -80,7 +80,7 @@ export function MapStateProvider({ children }) {
     }, 1000);
     return () => {
       if (saveFilterFieldsRef.current)
-        clearTimeout(saveFilterFieldsRef.current);
+        {clearTimeout(saveFilterFieldsRef.current);}
     };
   }, [formId, activeFilterFields]);
   const startMs = startDate ? startDate.getTime() : null;
@@ -95,15 +95,15 @@ export function MapStateProvider({ children }) {
     setError(null);
     try {
       const params = { form_id: formId, limit: 200 };
-      if (activeTab && activeTab !== "all") params.status = activeTab;
-      if (search) params.search = search;
-      if (sortBy && sortBy !== "priority") params.sort = sortBy;
-      if (startMs) params.start_date = startMs;
-      if (endMs) params.end_date = endMs;
-      if (region) params.region = region;
-      if (subRegion) params.sub_region = subRegion;
+      if (activeTab && activeTab !== "all") {params.status = activeTab;}
+      if (search) {params.search = search;}
+      if (sortBy && sortBy !== "priority") {params.sort = sortBy;}
+      if (startMs) {params.start_date = startMs;}
+      if (endMs) {params.end_date = endMs;}
+      if (region) {params.region = region;}
+      if (subRegion) {params.sub_region = subRegion;}
       Object.entries(dynamicValues).forEach(([k, v]) => {
-        if (v) params[`filter__${k}`] = v;
+        if (v) {params[`filter__${k}`] = v;}
       });
       const res = await api.get("/v1/odk/plots/", { params });
       setPlots(res.data.results || []);
@@ -177,7 +177,7 @@ export function MapStateProvider({ children }) {
 
   const handleSelectPlot = useCallback(
     (plotUuid) => {
-      if (editingPlotId && plotUuid !== editingPlotId) return;
+      if (editingPlotId && plotUuid !== editingPlotId) {return;}
       setSelectedPlotId(plotUuid);
     },
     [editingPlotId],

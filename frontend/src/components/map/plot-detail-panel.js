@@ -594,13 +594,14 @@ export default function PlotDetailPanel({
 
             {/* Rejection audit trail */}
             {submission?.rejection_audits?.length > 0 && (
-              <div className="space-y-2">
-                <h3 className="text-sm font-medium">Rejection History</h3>
-                <div className="space-y-2">
+              <div className="flex flex-col gap-3 rounded-md border border-card-foreground/10 p-3 bg-card">
+                <SectionHeader title="Rejection History" />
+                <Separator className="bg-muted-foreground/20" />
+                <div className="flex flex-col gap-2">
                   {submission.rejection_audits.map((audit) => (
                     <div
                       key={audit.id}
-                      className="rounded-md border border-border p-3 space-y-1 bg-card"
+                      className="rounded-md border border-muted-foreground/10 p-3 space-y-2 bg-muted/50"
                     >
                       <div className="flex items-center justify-between gap-2">
                         <Badge variant="outline" className="text-xs">
@@ -613,7 +614,7 @@ export default function PlotDetailPanel({
                         </span>
                       </div>
                       {audit.reason_text && (
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-sm text-foreground">
                           {audit.reason_text}
                         </p>
                       )}

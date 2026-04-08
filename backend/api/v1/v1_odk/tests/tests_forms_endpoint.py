@@ -527,6 +527,9 @@ class FormMetadataViewTest(TestCase, OdkTestHelperMixin):
             **self.auth,
         )
 
+        plot = Plot.objects.first()
+        original_created_at = plot.created_at
+
         # Re-sync with updated name
         submission_data["farmer_name"] = "Updated"
         mock_client.fetch_all_submissions.return_value = [submission_data]
@@ -538,9 +541,14 @@ class FormMetadataViewTest(TestCase, OdkTestHelperMixin):
         data = resp.json()
         self.assertEqual(data["plots_updated"], 1)
         self.assertEqual(data["plots_created"], 0)
+        self.assertEqual(data["updated"], 1)
+        self.assertEqual(data["created"], 0)
         self.assertEqual(Plot.objects.count(), 1)
         plot = Plot.objects.first()
         self.assertEqual(plot.plot_name, "Updated")
+        self.assertEqual(
+            plot.created_at, original_created_at
+        )
 
 
 @override_settings(USE_TZ=False, TEST_ENV=True)

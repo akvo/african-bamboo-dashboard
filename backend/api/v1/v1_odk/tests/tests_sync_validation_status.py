@@ -179,3 +179,73 @@ class SyncValidationStatusTest(
             obj.approval_status,
             ApprovalStatusTypes.APPROVED,
         )
+
+    def test_full_sync_captures_status_change(
+        self,
+    ):
+        """Full sync picks up validation-status
+        changes even when _submission_time is
+        unchanged (the bug that incremental sync
+        missed)."""
+        sub = _make_kobo_submission(
+            "uuid-full", 7,
+            {
+                "uid": (
+                    "validation_status_approved"
+                ),
+                "label": "Approved",
+            },
+        )
+        self._sync([sub])
+        obj = Submission.objects.get(
+            uuid="uuid-full"
+        )
+        self.assertEqual(
+            obj.approval_status,
+            ApprovalStatusTypes.APPROVED,
+        )
+
+        # Status changed on Kobo to rejected,
+        # _submission_time stays the same
+        sub["_validation_status"] = {
+            "uid": (
+                "validation_status"
+                "_not_approved"
+            ),
+            "label": "Not Approved",
+        }
+        resp = self._sync([sub])
+        data = resp.json()
+        self.assertEqual(data["updated"], 1)
+        self.assertEqual(data["created"], 0)
+        obj.refresh_from_db()
+        self.assertEqual(
+            obj.approval_status,
+            ApprovalStatusTypes.REJECTED,
+        )
+
+    def test_full_sync_updates_raw_data(self):
+        """Full sync updates raw_data when field
+        values change on Kobo."""
+        sub = _make_kobo_submission(
+            "uuid-raw", 8
+        )
+        sub["farmer_name"] = "Original"
+        self._sync([sub])
+        obj = Submission.objects.get(
+            uuid="uuid-raw"
+        )
+        self.assertEqual(
+            obj.raw_data["farmer_name"],
+            "Original",
+        )
+
+        # Field edited on Kobo, same
+        # _submission_time
+        sub["farmer_name"] = "Edited"
+        self._sync([sub])
+        obj.refresh_from_db()
+        self.assertEqual(
+            obj.raw_data["farmer_name"],
+            "Edited",
+        )

@@ -9,10 +9,16 @@ The dashboard shows 3 stats cards with hardcoded values (5,023 / 80% / 1,000). W
 
 **File:** `backend/api/v1/v1_odk/plot_views.py`
 
-Add `Sum` to the existing `django.db.models` import on line 5:
+Add `Sum` to the existing `django.db.models` import:
 
 ```python
-from django.db.models import Count, Exists, OuterRef, Q, Sum
+from django.db.models import (
+    Count,
+    Exists,
+    OuterRef,
+    Q,
+    Sum,
+)
 ```
 
 Add the `stats` action method to `PlotViewSet` (after `filter_options`, before `export`):
@@ -28,9 +34,16 @@ def stats(self, request):
 
     Reuses get_queryset() so all filters
     (form_id, region, sub_region, date range,
-    dynamic filters) are applied automatically.
-    """
+    dynamic filters) are applied."""
     qs = self.get_queryset().order_by()
+
+    pending_q = Q(
+        submission__approval_status__isnull=True  # noqa: E501
+    ) | Q(
+        submission__approval_status=(
+            ApprovalStatusTypes.PENDING
+        )
+    )
 
     result = qs.aggregate(
         total_plots=Count("id"),
@@ -45,15 +58,11 @@ def stats(self, request):
         ),
         pending_count=Count(
             "id",
-            filter=Q(
-                submission__approval_status__isnull=True  # noqa: E501
-            ),
+            filter=pending_q,
         ),
         pending_area_ha=Sum(
             "area_ha",
-            filter=Q(
-                submission__approval_status__isnull=True  # noqa: E501
-            ),
+            filter=pending_q,
         ),
     )
 
@@ -69,18 +78,25 @@ def stats(self, request):
         {
             "total_plots": total,
             "total_area_ha": round(
-                result["total_area_ha"] or 0, 2
+                result["total_area_ha"] or 0,
+                2,
             ),
-            "approval_percentage": approval_pct,
+            "approval_percentage": (
+                approval_pct
+            ),
             "pending_count": (
                 result["pending_count"] or 0
             ),
             "pending_area_ha": round(
-                result["pending_area_ha"] or 0, 2
+                result["pending_area_ha"]
+                or 0,
+                2,
             ),
         }
     )
 ```
+
+**Note:** Pending matches both `NULL` (database convention) and `PENDING=0` (constant) for safety.
 
 **No URL changes needed** - DRF router auto-registers `@action` as `GET /api/v1/odk/plots/stats/`
 
@@ -93,7 +109,7 @@ def stats(self, request):
 ```javascript
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import api from "@/lib/api";
 
 export function useStats({
@@ -121,13 +137,23 @@ export function useStats({
     setIsLoading(true);
     try {
       const params = { form_id: formId };
-      if (region) params.region = region;
-      if (subRegion) params.sub_region = subRegion;
-      if (startDate) params.start_date = startDate;
-      if (endDate) params.end_date = endDate;
+      if (region) {
+        params.region = region;
+      }
+      if (subRegion) {
+        params.sub_region = subRegion;
+      }
+      if (startDate) {
+        params.start_date = startDate;
+      }
+      if (endDate) {
+        params.end_date = endDate;
+      }
       const parsed = JSON.parse(dynamicKey);
       for (const [key, val] of Object.entries(parsed)) {
-        if (val) params[`filter__${key}`] = val;
+        if (val) {
+          params[`filter__${key}`] = val;
+        }
       }
       const res = await api.get("/v1/odk/plots/stats/", { params });
       setStats(res.data);
@@ -158,15 +184,15 @@ Add import:
 import { useStats } from "@/hooks/useStats";
 ```
 
-Add hook call (after `useMapState`):
+Add hook call (after `useMapState`, before `startMs`/`endMs` declarations):
 
 ```javascript
 const { stats } = useStats({
   formId: activeForm?.asset_uid,
   region,
   subRegion,
-  startDate: startMs,
-  endDate: endMs,
+  startDate: startDate ? startDate.getTime() : null,
+  endDate: endDate ? endDate.getTime() : null,
   dynamicFilters: dynamicValues,
 });
 ```
@@ -220,9 +246,10 @@ const { stats } = useStats({
 
 **File (new):** `backend/api/v1/v1_odk/tests/tests_stats_endpoint.py`
 
+Uses `OdkTestHelperMixin` for auth (consistent with existing test patterns). Submissions require `raw_data={}` and plots require `created_at` as both are non-null fields.
+
 ```python
 from django.test import TestCase
-from rest_framework.test import APIClient
 
 from api.v1.v1_odk.constants import (
     ApprovalStatusTypes,
@@ -232,30 +259,31 @@ from api.v1.v1_odk.models import (
     Plot,
     Submission,
 )
-from api.v1.v1_users.models import SystemUser
+from api.v1.v1_odk.tests.mixins import (
+    OdkTestHelperMixin,
+)
 
 
-class StatsEndpointTestCase(TestCase):
+class StatsEndpointTestCase(
+    OdkTestHelperMixin, TestCase
+):
     def setUp(self):
-        self.client = APIClient()
-        self.user = SystemUser.objects.create_user(
-            email="test@example.com",
-            password="testpass123",
-        )
-        self.client.force_authenticate(
-            user=self.user
-        )
+        self.user = self.create_kobo_user()
+        self.auth = self.get_auth_header()
         self.form = FormMetadata.objects.create(
-            asset_uid="test_form_001",
-            name="Test Form",
+            asset_uid="stats_form_001",
+            name="Stats Test Form",
         )
-        # Create submissions + plots
+        # 3 approved, 2 pending (NULL)
         for i in range(5):
             sub = Submission.objects.create(
-                uuid=f"sub-{i}",
+                uuid=f"stats-sub-{i}",
                 form=self.form,
                 kobo_id=str(i),
-                submission_time=1700000000000 + i,
+                submission_time=(
+                    1700000000000 + i
+                ),
+                raw_data={},
                 approval_status=(
                     ApprovalStatusTypes.APPROVED
                     if i < 3
@@ -263,37 +291,38 @@ class StatsEndpointTestCase(TestCase):
                 ),
             )
             Plot.objects.create(
-                uuid=f"plot-{i}",
+                uuid=f"stats-plot-{i}",
                 form=self.form,
                 submission=sub,
                 area_ha=10.0 + i,
                 region="Region A",
+                created_at=1700000000000 + i,
             )
 
     def test_stats_totals(self):
         url = "/api/v1/odk/plots/stats/"
         res = self.client.get(
             url,
-            {"form_id": "test_form_001"},
+            {"form_id": "stats_form_001"},
+            **self.auth,
         )
         self.assertEqual(res.status_code, 200)
         data = res.json()
         self.assertEqual(
             data["total_plots"], 5
         )
-        self.assertEqual(
-            data["approved_count"],  # derived
-            None,  # not in response
-        ) if False else None
+        # 10+11+12+13+14 = 60
         self.assertAlmostEqual(
             data["total_area_ha"], 60.0
         )
+        # 3 approved / 5 total = 60%
         self.assertAlmostEqual(
             data["approval_percentage"], 60.0
         )
         self.assertEqual(
             data["pending_count"], 2
         )
+        # pending: 13 + 14 = 27
         self.assertAlmostEqual(
             data["pending_area_ha"], 27.0
         )
@@ -303,25 +332,39 @@ class StatsEndpointTestCase(TestCase):
         res = self.client.get(
             url,
             {
-                "form_id": "test_form_001",
-                "region": "Region B",
+                "form_id": "stats_form_001",
+                "region": "No Match",
             },
+            **self.auth,
         )
         self.assertEqual(res.status_code, 200)
         data = res.json()
         self.assertEqual(
             data["total_plots"], 0
         )
+        self.assertEqual(
+            data["total_area_ha"], 0
+        )
+        self.assertEqual(
+            data["approval_percentage"], 0
+        )
 
     def test_stats_requires_auth(self):
-        self.client.logout()
         url = "/api/v1/odk/plots/stats/"
         res = self.client.get(
             url,
-            {"form_id": "test_form_001"},
+            {"form_id": "stats_form_001"},
         )
         self.assertEqual(res.status_code, 401)
 ```
+
+---
+
+## Step 5: ESLint curly rule enforcement
+
+**File:** `frontend/eslint.config.mjs`
+
+Added `curly: ["error", "all"]` rule to enforce braces on all `if`/`else` statements. Applied `yarn lint --fix` to auto-fix 86 existing violations across the codebase.
 
 ---
 
@@ -339,18 +382,21 @@ class StatsEndpointTestCase(TestCase):
 
 ---
 
-## Files to Modify/Create
+## Files Modified/Created
 
 | Action | File |
 |--------|------|
 | Modify | `backend/api/v1/v1_odk/plot_views.py` |
+| Create | `backend/api/v1/v1_odk/tests/tests_stats_endpoint.py` |
 | Create | `frontend/src/hooks/useStats.js` |
 | Modify | `frontend/src/app/dashboard/page.js` |
-| Create | `backend/api/v1/v1_odk/tests/tests_stats_endpoint.py` |
+| Modify | `frontend/eslint.config.mjs` |
+| Modify | 20+ frontend files (curly brace auto-fix) |
 
 ## Verification
 
 1. `cd backend && black . && isort . && flake8` - linting
-2. `python manage.py test api.v1.v1_odk` - backend tests
-3. Hit `GET /api/v1/odk/plots/stats/?form_id=<uid>` in Swagger UI
-4. Check dashboard cards show real values and update when filters change
+2. `python manage.py test api.v1.v1_odk.tests.tests_stats_endpoint` - 3 tests pass
+3. `yarn lint` in frontend container - no errors
+4. Hit `GET /api/v1/odk/plots/stats/?form_id=<uid>` in Swagger UI
+5. Check dashboard cards show real values and update when filters change

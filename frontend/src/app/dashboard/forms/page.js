@@ -128,16 +128,14 @@ export default function FormsPage() {
     try {
       const result = await syncForm(form.asset_uid);
       const parts = [];
-      parts.push(
-        `Synced ${result.synced} submission(s), ${result.created} new`,
-      );
+      parts.push(`Synced ${result.synced} submission(s)`);
       if (
         result.plots_created !== undefined ||
         result.plots_updated !== undefined
       ) {
         const plotsCreated = result.plots_created || 0;
         const plotsUpdated = result.plots_updated || 0;
-        parts.push(`${plotsCreated} plot(s) created, ${plotsUpdated} updated`);
+        parts.push(`${plotsCreated} created, ${plotsUpdated} updated`);
       }
       setStatus({
         type: "success",

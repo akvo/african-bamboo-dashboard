@@ -7,7 +7,6 @@ import {
   Loader2,
   Map,
   Search,
-  MoreVertical,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -151,8 +150,11 @@ const DashboardPage = () => {
               Total submissions
             </CardTitle>
             <CardAction>
-              <div className="inline-flex rounded-md border border-border overflow-hidden">
+              <div className="inline-flex rounded-md border border-border overflow-hidden" role="group" aria-label="Stats unit toggle">
                 <button
+                  type="button"
+                  aria-label="Show plot count"
+                  aria-pressed={statsTab === "plot"}
                   onClick={() => setStatsTab("plot")}
                   className={`cursor-pointer flex items-center justify-center h-[34px] px-2.5 transition-colors ${
                     statsTab === "plot"
@@ -163,6 +165,9 @@ const DashboardPage = () => {
                   <Map className="size-4" />
                 </button>
                 <button
+                  type="button"
+                  aria-label="Show hectares"
+                  aria-pressed={statsTab === "ha"}
                   onClick={() => setStatsTab("ha")}
                   className={`cursor-pointer flex items-center justify-center h-[34px] px-2.5 border-l border-border text-sm font-semibold transition-colors ${
                     statsTab === "ha"
@@ -193,11 +198,13 @@ const DashboardPage = () => {
             <CardTitle className="text-md font-medium text-foreground">
               Percentage approved on first submission
             </CardTitle>
+            {/* TODO: wire up MoreVertical menu actions
             <CardAction>
-              <Button variant="ghost" size="icon-xs">
+              <Button variant="ghost" size="icon-xs" aria-label="More options">
                 <MoreVertical className="size-4" />
               </Button>
             </CardAction>
+            */}
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold">
@@ -213,11 +220,13 @@ const DashboardPage = () => {
             <CardTitle className="text-md font-medium text-foreground">
               Number of items currently requiring review
             </CardTitle>
+            {/* TODO: wire up MoreVertical menu actions
             <CardAction>
-              <Button variant="ghost" size="icon-xs">
+              <Button variant="ghost" size="icon-xs" aria-label="More options">
                 <MoreVertical className="size-4" />
               </Button>
             </CardAction>
+            */}
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold">

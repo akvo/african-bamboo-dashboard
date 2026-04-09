@@ -4,9 +4,9 @@
  */
 
 export function parseWktPolygon(wkt) {
-  if (!wkt) return [];
+  if (!wkt) {return [];}
   const match = wkt.match(/POLYGON\s*\(\((.+)\)\)/i);
-  if (!match) return [];
+  if (!match) {return [];}
   return match[1].split(",").reduce((acc, pair) => {
     const [lon, lat] = pair.trim().split(/\s+/).map(Number);
     if (Number.isFinite(lat) && Number.isFinite(lon)) {
@@ -17,7 +17,7 @@ export function parseWktPolygon(wkt) {
 }
 
 export function toWktPolygon(coords) {
-  if (!coords || coords.length === 0) return "";
+  if (!coords || coords.length === 0) {return "";}
   const ring = coords.map(([lat, lon]) => `${lon} ${lat}`).join(", ");
   return `POLYGON((${ring}))`;
 }

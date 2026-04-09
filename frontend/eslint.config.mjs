@@ -20,6 +20,11 @@ const eslintConfig = [
       "next-env.d.ts",
     ],
   },
+  {
+    rules: {
+      curly: ["error", "all"],
+    },
+  },
 ];
 
 export default eslintConfig;

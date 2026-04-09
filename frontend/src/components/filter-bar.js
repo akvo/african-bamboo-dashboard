@@ -97,10 +97,10 @@ export function FilterBar({
   const activeFilterCount = activeChips.length;
 
   const dateLabel = useMemo(() => {
-    if (!startDate && !endDate) return null;
+    if (!startDate && !endDate) {return null;}
     const fmt = (d) => format(d, "dd MMM yyyy");
-    if (startDate && endDate) return `${fmt(startDate)} - ${fmt(endDate)}`;
-    if (startDate) return `From ${fmt(startDate)}`;
+    if (startDate && endDate) {return `${fmt(startDate)} - ${fmt(endDate)}`;}
+    if (startDate) {return `From ${fmt(startDate)}`;}
     return `Until ${fmt(endDate)}`;
   }, [startDate, endDate]);
 
@@ -113,7 +113,7 @@ export function FilterBar({
 
   function handlePreset(preset) {
     const match = DATE_PRESETS.find((p) => p.value === preset);
-    if (!match) return;
+    if (!match) {return;}
     const end = new Date();
     const start = new Date();
     start.setDate(start.getDate() - match.days);

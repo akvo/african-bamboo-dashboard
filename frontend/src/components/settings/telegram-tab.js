@@ -35,7 +35,7 @@ export default function TelegramTab() {
   });
 
   const fetchGroups = useCallback(async (token) => {
-    if (!token) return;
+    if (!token) {return;}
     setLoadingGroups(true);
     try {
       const params = token ? { bot_token: token } : {};

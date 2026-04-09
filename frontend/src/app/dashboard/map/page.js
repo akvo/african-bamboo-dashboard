@@ -42,7 +42,7 @@ export default function MapPage() {
 
   const handleSelectPlot = useCallback(
     (plotUuid) => {
-      if (mapState.editingPlotId && plotUuid !== mapState.editingPlotId) return;
+      if (mapState.editingPlotId && plotUuid !== mapState.editingPlotId) {return;}
       mapState.handleSelectPlot(plotUuid);
       if (plotUuid) {
         router.replace(`/dashboard/map?plot=${plotUuid}`, { scroll: false });
@@ -138,7 +138,7 @@ export default function MapPage() {
   }, [mapState, refetch]);
 
   const handleSaveEdit = useCallback(async () => {
-    if (!editedGeo || !mapState.editingPlotId) return;
+    if (!editedGeo || !mapState.editingPlotId) {return;}
     const wkt = toWktPolygon(editedGeo);
     const bbox = calculateBbox(editedGeo);
     try {
@@ -169,7 +169,7 @@ export default function MapPage() {
   }, [mapState]);
 
   const handleResetPolygon = useCallback(async () => {
-    if (!mapState.editingPlotId) return;
+    if (!mapState.editingPlotId) {return;}
     setIsResetting(true);
     try {
       await api.post(`/v1/odk/plots/${mapState.editingPlotId}/reset_polygon/`);

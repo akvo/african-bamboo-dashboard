@@ -41,8 +41,8 @@ const FlagMessages = {
  * into a list of flag objects.
  */
 function parseFlags(flaggedReason) {
-  if (Array.isArray(flaggedReason)) return flaggedReason;
-  if (typeof flaggedReason !== "string" || !flaggedReason.trim()) return [];
+  if (Array.isArray(flaggedReason)) {return flaggedReason;}
+  if (typeof flaggedReason !== "string" || !flaggedReason.trim()) {return [];}
 
   const trimmed = flaggedReason.trim();
 
@@ -50,8 +50,8 @@ function parseFlags(flaggedReason) {
   if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
     try {
       const parsed = JSON.parse(trimmed);
-      if (Array.isArray(parsed)) return parsed;
-      if (parsed && typeof parsed === "object") return [parsed];
+      if (Array.isArray(parsed)) {return parsed;}
+      if (parsed && typeof parsed === "object") {return [parsed];}
     } catch {
       // fall through to legacy handling
     }
@@ -60,13 +60,13 @@ function parseFlags(flaggedReason) {
   // Legacy plain-text string — infer flag type by keyword
   const lower = trimmed.toLowerCase();
   let type;
-  if (lower.includes("overlap")) type = FlagType.OVERLAP;
+  if (lower.includes("overlap")) {type = FlagType.OVERLAP;}
   else if (lower.includes("too few vertices"))
-    type = FlagType.GEOMETRY_TOO_FEW_VERTICES;
-  else if (lower.includes("intersect")) type = FlagType.GEOMETRY_SELF_INTERSECT;
-  else if (lower.includes("too small")) type = FlagType.GEOMETRY_AREA_TOO_SMALL;
-  else if (lower.includes("no polygon data")) type = FlagType.GEOMETRY_NO_DATA;
-  else type = FlagType.GEOMETRY_PARSE_FAIL;
+    {type = FlagType.GEOMETRY_TOO_FEW_VERTICES;}
+  else if (lower.includes("intersect")) {type = FlagType.GEOMETRY_SELF_INTERSECT;}
+  else if (lower.includes("too small")) {type = FlagType.GEOMETRY_AREA_TOO_SMALL;}
+  else if (lower.includes("no polygon data")) {type = FlagType.GEOMETRY_NO_DATA;}
+  else {type = FlagType.GEOMETRY_PARSE_FAIL;}
 
   return [{ type, severity: FlagSeverity.ERROR, note: trimmed }];
 }

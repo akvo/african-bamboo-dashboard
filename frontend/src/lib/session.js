@@ -55,7 +55,7 @@ export async function updateSession() {
   const cookieStore = await cookies();
   const currentSession = cookieStore.get("session")?.value;
   const payload = await decrypt(currentSession);
-  if (!currentSession || !payload) return null;
+  if (!currentSession || !payload) {return null;}
 
   const expiresAt = new Date(Date.now() + 12 * 60 * 60 * 1000);
   const session = await encrypt(

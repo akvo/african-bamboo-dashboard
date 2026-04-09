@@ -24,8 +24,8 @@ export function useFilterOptions({ formId, region, allEligible = false } = {}) {
     }
     setIsLoading(true);
     const params = { form_id: formId };
-    if (region) params.region = region;
-    if (allEligible) params.all_eligible = "true";
+    if (region) {params.region = region;}
+    if (allEligible) {params.all_eligible = "true";}
     api
       .get("/v1/odk/plots/filter_options/", { params })
       .then((res) =>

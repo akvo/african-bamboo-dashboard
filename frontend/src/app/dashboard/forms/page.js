@@ -92,7 +92,7 @@ export default function FormsPage() {
 
   async function handleRegister(e) {
     e.preventDefault();
-    if (!assetUid.trim() || !formName.trim()) return;
+    if (!assetUid.trim() || !formName.trim()) {return;}
 
     setIsRegistering(true);
     setStatus(null);
@@ -250,7 +250,7 @@ export default function FormsPage() {
   }
 
   async function handleSaveMapping() {
-    if (!configForm) return;
+    if (!configForm) {return;}
 
     setIsSavingMapping(true);
     setMappingStatus(null);
@@ -373,8 +373,8 @@ export default function FormsPage() {
   const sortedFieldsForPolygon = [...formFields].sort((a, b) => {
     const aIsGeo = a.type === "geoshape" || a.type === "geotrace";
     const bIsGeo = b.type === "geoshape" || b.type === "geotrace";
-    if (aIsGeo && !bIsGeo) return -1;
-    if (!aIsGeo && bIsGeo) return 1;
+    if (aIsGeo && !bIsGeo) {return -1;}
+    if (!aIsGeo && bIsGeo) {return 1;}
     return 0;
   });
 

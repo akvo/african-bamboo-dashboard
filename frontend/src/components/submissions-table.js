@@ -21,13 +21,13 @@ import { PREFIX_SUBM_ID, EXCLUDED_QUESTION_NAMES } from "@/lib/constants";
 const IMAGE_TYPES = new Set(["image"]);
 
 function getApprovalLabel(approvalStatus) {
-  if (approvalStatus === 1) return "approved";
-  if (approvalStatus === 2) return "rejected";
+  if (approvalStatus === 1) {return "approved";}
+  if (approvalStatus === 2) {return "rejected";}
   return "pending";
 }
 
 function getAttachmentUrl(attachments, questionName) {
-  if (!attachments?.length) return null;
+  if (!attachments?.length) {return null;}
   const att = attachments.find((a) => a.question_xpath === questionName);
   return att?.local_url || null;
 }
@@ -273,7 +273,7 @@ export function SubmissionsTable({
       emptyMessage="No submissions found."
       onRowClick={(row) => {
         const plotUuid = plotBySubmission.get(row.uuid);
-        if (plotUuid) router.push(`/dashboard/map?plot=${plotUuid}`);
+        if (plotUuid) {router.push(`/dashboard/map?plot=${plotUuid}`);}
       }}
       rowClassName={(row) =>
         plotBySubmission.has(row.uuid) ? "cursor-pointer" : "opacity-60"

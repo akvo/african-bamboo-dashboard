@@ -96,8 +96,8 @@ export default function MapView({
         <MapController selectedPlot={selectedPlot} allPlots={plots} />
 
         {plotsWithCoords.map((plot) => {
-          if (plot.coords.length === 0) return null;
-          if (plot.uuid === editingPlotId) return null;
+          if (plot.coords.length === 0) {return null;}
+          if (plot.uuid === editingPlotId) {return null;}
 
           const isSelected = selectedPlot?.uuid === plot.uuid;
           const style = isSelected

@@ -2,7 +2,13 @@ import logging
 import re
 
 from django.conf import settings as django_settings
-from django.db.models import Count, Exists, OuterRef, Q
+from django.db.models import (
+    Count,
+    Exists,
+    OuterRef,
+    Q,
+    Sum,
+)
 from django.http import HttpResponse
 from django_q.tasks import async_task
 from drf_spectacular.utils import extend_schema
@@ -104,7 +110,14 @@ class PlotViewSet(
                 )
             elif status_param == "pending":
                 qs = qs.filter(
-                    submission__approval_status__isnull=True,  # noqa: E501
+                    Q(
+                        submission__approval_status__isnull=True  # noqa: E501
+                    )
+                    | Q(
+                        submission__approval_status=(  # noqa: E501
+                            ApprovalStatusTypes.PENDING
+                        )
+                    )
                 )
             elif status_param in self.STATUS_MAP:
                 qs = qs.filter(
@@ -579,6 +592,77 @@ class PlotViewSet(
             ] = available
 
         return Response(response_data)
+
+    @extend_schema(
+        tags=["Plots"],
+        summary="Dashboard statistics",
+    )
+    @action(detail=False, methods=["get"])
+    def stats(self, request):
+        """Aggregate stats for dashboard cards.
+
+        Reuses get_queryset() so all filters
+        (form_id, region, sub_region, date range,
+        dynamic filters) are applied."""
+        qs = self.get_queryset().order_by()
+
+        pending_q = Q(
+            submission__approval_status__isnull=True  # noqa: E501
+        ) | Q(
+            submission__approval_status=(
+                ApprovalStatusTypes.PENDING
+            )
+        )
+
+        result = qs.aggregate(
+            total_plots=Count("id"),
+            total_area_ha=Sum("area_ha"),
+            approved_count=Count(
+                "id",
+                filter=Q(
+                    submission__approval_status=(
+                        ApprovalStatusTypes.APPROVED
+                    )
+                ),
+            ),
+            pending_count=Count(
+                "id",
+                filter=pending_q,
+            ),
+            pending_area_ha=Sum(
+                "area_ha",
+                filter=pending_q,
+            ),
+        )
+
+        total = result["total_plots"] or 0
+        approved = result["approved_count"] or 0
+        approval_pct = (
+            round(approved / total * 100, 1)
+            if total > 0
+            else 0
+        )
+
+        return Response(
+            {
+                "total_plots": total,
+                "total_area_ha": round(
+                    result["total_area_ha"] or 0,
+                    2,
+                ),
+                "approval_percentage": (
+                    approval_pct
+                ),
+                "pending_count": (
+                    result["pending_count"] or 0
+                ),
+                "pending_area_ha": round(
+                    result["pending_area_ha"]
+                    or 0,
+                    2,
+                ),
+            }
+        )
 
     @extend_schema(
         tags=["Plots"],

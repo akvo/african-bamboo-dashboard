@@ -110,7 +110,14 @@ class PlotViewSet(
                 )
             elif status_param == "pending":
                 qs = qs.filter(
-                    submission__approval_status__isnull=True,  # noqa: E501
+                    Q(
+                        submission__approval_status__isnull=True  # noqa: E501
+                    )
+                    | Q(
+                        submission__approval_status=(  # noqa: E501
+                            ApprovalStatusTypes.PENDING
+                        )
+                    )
                 )
             elif status_param in self.STATUS_MAP:
                 qs = qs.filter(

@@ -1,13 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import {
-  ChevronDown,
-  Download,
-  Loader2,
-  Map,
-  Search,
-} from "lucide-react";
+import { ChevronDown, Download, Loader2, Map, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -150,7 +144,11 @@ const DashboardPage = () => {
               Total submissions
             </CardTitle>
             <CardAction>
-              <div className="inline-flex rounded-md border border-border overflow-hidden" role="group" aria-label="Stats unit toggle">
+              <div
+                className="inline-flex rounded-md border border-border overflow-hidden"
+                role="group"
+                aria-label="Stats unit toggle"
+              >
                 <button
                   type="button"
                   aria-label="Show plot count"
@@ -233,7 +231,9 @@ const DashboardPage = () => {
               {(stats?.pending_count ?? 0).toLocaleString()}
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
-              {(stats?.pending_area_ha ?? 0).toLocaleString()} hectares to map
+              {stats?.pending_area_ha
+                ? `${stats.pending_area_ha.toLocaleString()} hectares to map`
+                : ""}
             </p>
           </CardContent>
         </Card>

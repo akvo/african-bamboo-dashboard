@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DashboardHeader } from "@/components/dashboard-header";
 import { FilterBar } from "@/components/filter-bar";
+import { StatTabs } from "@/components/stat-tabs";
 import { SubmissionsTable } from "@/components/submissions-table";
 import { TablePagination } from "@/components/table-pagination";
 import { useForms } from "@/hooks/useForms";
@@ -69,6 +70,7 @@ const DashboardPage = () => {
 
   const [activeTab, setActiveTab] = useState("all");
   const [statsTab, setStatsTab] = useState("plot");
+  const [approvalTab, setApprovalTab] = useState("percentage");
   const [search, setSearch] = useState("");
   const [ordering, setOrdering] = useState(null);
 
@@ -144,38 +146,23 @@ const DashboardPage = () => {
               Total submissions
             </CardTitle>
             <CardAction>
-              <div
-                className="inline-flex rounded-md border border-border overflow-hidden"
-                role="group"
-                aria-label="Stats unit toggle"
-              >
-                <button
-                  type="button"
-                  aria-label="Show plot count"
-                  aria-pressed={statsTab === "plot"}
-                  onClick={() => setStatsTab("plot")}
-                  className={`cursor-pointer flex items-center justify-center h-[34px] px-2.5 transition-colors ${
-                    statsTab === "plot"
-                      ? "bg-white"
-                      : "bg-muted text-muted-foreground"
-                  }`}
-                >
-                  <Map className="size-4" />
-                </button>
-                <button
-                  type="button"
-                  aria-label="Show hectares"
-                  aria-pressed={statsTab === "ha"}
-                  onClick={() => setStatsTab("ha")}
-                  className={`cursor-pointer flex items-center justify-center h-[34px] px-2.5 border-l border-border text-sm font-semibold transition-colors ${
-                    statsTab === "ha"
-                      ? "bg-white text-foreground"
-                      : "bg-muted text-muted-foreground"
-                  }`}
-                >
-                  Ha
-                </button>
-              </div>
+              <StatTabs
+                value={statsTab}
+                onChange={setStatsTab}
+                ariaLabel="Stats unit toggle"
+                options={[
+                  {
+                    value: "plot",
+                    icon: Map,
+                    ariaLabel: "Show plot count",
+                  },
+                  {
+                    value: "ha",
+                    label: "Ha",
+                    ariaLabel: "Show hectares",
+                  },
+                ]}
+              />
             </CardAction>
           </CardHeader>
           <CardContent>
@@ -194,22 +181,40 @@ const DashboardPage = () => {
         <Card>
           <CardHeader>
             <CardTitle className="text-md font-medium text-foreground">
-              Percentage approved on first submission
+              {approvalTab === "percentage"
+                ? "Percentage approved on first submission"
+                : "Hectares approved on first submission"}
             </CardTitle>
-            {/* TODO: wire up MoreVertical menu actions
             <CardAction>
-              <Button variant="ghost" size="icon-xs" aria-label="More options">
-                <MoreVertical className="size-4" />
-              </Button>
+              <StatTabs
+                value={approvalTab}
+                onChange={setApprovalTab}
+                ariaLabel="Approval unit toggle"
+                options={[
+                  {
+                    value: "percentage",
+                    label: "%",
+                    ariaLabel: "Show approval percentage",
+                  },
+                  {
+                    value: "ha",
+                    label: "Ha",
+                    ariaLabel: "Show approved hectares",
+                  },
+                ]}
+              />
             </CardAction>
-            */}
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold">
-              {stats?.approval_percentage ?? 0}%
+              {approvalTab === "percentage"
+                ? `${stats?.approval_percentage ?? 0}%`
+                : (stats?.approved_area_ha ?? 0).toLocaleString()}
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
-              Of plots out of 100%
+              {approvalTab === "percentage"
+                ? "Of plots out of 100%"
+                : "Hectares approved"}
             </p>
           </CardContent>
         </Card>

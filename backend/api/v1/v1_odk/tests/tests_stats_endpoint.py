@@ -75,6 +75,10 @@ class StatsEndpointTestCase(
         self.assertAlmostEqual(
             data["pending_area_ha"], 27.0
         )
+        # approved: 10 + 11 + 12 = 33
+        self.assertAlmostEqual(
+            data["approved_area_ha"], 33.0
+        )
 
     def test_stats_with_region_filter(self):
         url = "/api/v1/odk/plots/stats/"
@@ -96,6 +100,9 @@ class StatsEndpointTestCase(
         )
         self.assertEqual(
             data["approval_percentage"], 0
+        )
+        self.assertEqual(
+            data["approved_area_ha"], 0
         )
 
     def test_stats_requires_auth(self):

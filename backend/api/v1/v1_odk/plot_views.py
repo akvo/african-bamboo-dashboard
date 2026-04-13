@@ -56,6 +56,7 @@ from api.v1.v1_odk.models import (
 from api.v1.v1_odk.serializers import (
     PlotOverlapQuerySerializer,
     PlotSerializer,
+    StatsSerializer,
     build_option_lookup,
     resolve_value,
 )
@@ -70,6 +71,7 @@ from utils.polygon import (
 logger = logging.getLogger(__name__)
 
 
+@extend_schema(tags=["Plots"])
 class PlotViewSet(
     ListModelMixin,
     RetrieveModelMixin,
@@ -596,6 +598,7 @@ class PlotViewSet(
     @extend_schema(
         tags=["Plots"],
         summary="Dashboard statistics",
+        responses=StatsSerializer,
     )
     @action(detail=False, methods=["get"])
     def stats(self, request):
@@ -614,25 +617,36 @@ class PlotViewSet(
             )
         )
 
+        approved_q = Q(
+            submission__approval_status=(
+                ApprovalStatusTypes.APPROVED
+            )
+        )
+
         result = qs.aggregate(
-            total_plots=Count("id"),
+            total_plots=Count("id", distinct=True),
             total_area_ha=Sum("area_ha"),
             approved_count=Count(
                 "id",
-                filter=Q(
-                    submission__approval_status=(
-                        ApprovalStatusTypes.APPROVED
-                    )
-                ),
+                filter=approved_q,
+                distinct=True,
             ),
             pending_count=Count(
                 "id",
                 filter=pending_q,
+                distinct=True,
             ),
             pending_area_ha=Sum(
                 "area_ha",
                 filter=pending_q,
             ),
+        )
+
+        approved_area_ha = (
+            qs.filter(approved_q).aggregate(
+                total=Sum("area_ha")
+            )["total"]
+            or 0
         )
 
         total = result["total_plots"] or 0
@@ -643,26 +657,28 @@ class PlotViewSet(
             else 0
         )
 
-        return Response(
-            {
+        serializer = StatsSerializer(
+            data={
                 "total_plots": total,
                 "total_area_ha": round(
                     result["total_area_ha"] or 0,
                     2,
                 ),
-                "approval_percentage": (
-                    approval_pct
+                "approval_percentage": approval_pct,
+                "approved_area_ha": round(
+                    approved_area_ha, 2
                 ),
                 "pending_count": (
                     result["pending_count"] or 0
                 ),
                 "pending_area_ha": round(
-                    result["pending_area_ha"]
-                    or 0,
+                    result["pending_area_ha"] or 0,
                     2,
                 ),
             }
         )
+        serializer.is_valid(raise_exception=True)
+        return Response(serializer.validated_data)
 
     @extend_schema(
         tags=["Plots"],

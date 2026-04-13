@@ -960,3 +960,12 @@ class FieldMappingSerializer(
             "form_question_label",
         ]
         read_only_fields = fields
+
+
+class StatsSerializer(serializers.Serializer):
+    total_plots = serializers.IntegerField()
+    total_area_ha = serializers.FloatField()
+    approval_percentage = serializers.FloatField()
+    approved_area_ha = serializers.FloatField()
+    pending_count = serializers.IntegerField()
+    pending_area_ha = serializers.FloatField()

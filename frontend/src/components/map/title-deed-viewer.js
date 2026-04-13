@@ -93,7 +93,7 @@ export default function TitleDeedViewer({ open, onClose, attachments = [] }) {
   const hasMultiple = attachments.length > 1;
 
   return (
-    <div className="max-w-xl max-h-[calc(100vh-8rem)] absolute bottom-16 left-0 inset-x-0 z-30 flex flex-col border-l border-border bg-card overflow-hidden">
+    <div className="max-w-xl max-h-[calc(100vh-4rem)] absolute bottom-6 left-0 inset-x-0 z-30 flex flex-col border-l border-border bg-card overflow-hidden">
       {/* Header */}
       <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-2">
         <div className="flex min-w-0 items-center gap-2">

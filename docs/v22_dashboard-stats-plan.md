@@ -21,12 +21,13 @@ from django.db.models import (
 )
 ```
 
-Add the `stats` action method to `PlotViewSet` (after `filter_options`, before `export`):
+Add the `stats` action method to `PlotViewSet` (after `filter_options`, before `export`). Uses `StatsSerializer` for schema + response validation and computes `approved_area_ha` via a dedicated filtered aggregate to avoid join duplication, with `distinct=True` on counts.
 
 ```python
 @extend_schema(
     tags=["Plots"],
     summary="Dashboard statistics",
+    responses=StatsSerializer,
 )
 @action(detail=False, methods=["get"])
 def stats(self, request):
@@ -38,32 +39,42 @@ def stats(self, request):
     qs = self.get_queryset().order_by()
 
     pending_q = Q(
-        submission__approval_status__isnull=True  # noqa: E501
+        submission__approval_status__isnull=True
     ) | Q(
         submission__approval_status=(
             ApprovalStatusTypes.PENDING
         )
     )
+    approved_q = Q(
+        submission__approval_status=(
+            ApprovalStatusTypes.APPROVED
+        )
+    )
 
     result = qs.aggregate(
-        total_plots=Count("id"),
+        total_plots=Count("id", distinct=True),
         total_area_ha=Sum("area_ha"),
         approved_count=Count(
             "id",
-            filter=Q(
-                submission__approval_status=(
-                    ApprovalStatusTypes.APPROVED
-                )
-            ),
+            filter=approved_q,
+            distinct=True,
         ),
         pending_count=Count(
             "id",
             filter=pending_q,
+            distinct=True,
         ),
         pending_area_ha=Sum(
             "area_ha",
             filter=pending_q,
         ),
+    )
+
+    approved_area_ha = (
+        qs.filter(approved_q).aggregate(
+            total=Sum("area_ha")
+        )["total"]
+        or 0
     )
 
     total = result["total_plots"] or 0
@@ -74,26 +85,38 @@ def stats(self, request):
         else 0
     )
 
-    return Response(
-        {
+    serializer = StatsSerializer(
+        data={
             "total_plots": total,
             "total_area_ha": round(
-                result["total_area_ha"] or 0,
-                2,
+                result["total_area_ha"] or 0, 2
             ),
-            "approval_percentage": (
-                approval_pct
+            "approval_percentage": approval_pct,
+            "approved_area_ha": round(
+                approved_area_ha, 2
             ),
             "pending_count": (
                 result["pending_count"] or 0
             ),
             "pending_area_ha": round(
-                result["pending_area_ha"]
-                or 0,
-                2,
+                result["pending_area_ha"] or 0, 2
             ),
         }
     )
+    serializer.is_valid(raise_exception=True)
+    return Response(serializer.validated_data)
+```
+
+**`StatsSerializer`** (in `backend/api/v1/v1_odk/serializers.py`):
+
+```python
+class StatsSerializer(serializers.Serializer):
+    total_plots = serializers.IntegerField()
+    total_area_ha = serializers.FloatField()
+    approval_percentage = serializers.FloatField()
+    approved_area_ha = serializers.FloatField()
+    pending_count = serializers.IntegerField()
+    pending_area_ha = serializers.FloatField()
 ```
 
 **Note:** Pending matches both `NULL` (database convention) and `PENDING=0` (constant) for safety.
@@ -214,18 +237,44 @@ const { stats } = useStats({
 </CardContent>
 ```
 
-### Card 2 - Percentage approved:
+### Card 2 - Percentage approved (with %/Ha toggle):
+
+Uses the reusable `StatTabs` component (`frontend/src/components/stat-tabs.js`) and an `approvalTab` state. Title, value, and subtitle switch based on the active tab.
 
 ```jsx
+<CardHeader>
+  <CardTitle className="text-md font-medium text-foreground">
+    {approvalTab === "percentage"
+      ? "Percentage approved on first submission"
+      : "Hectares approved on first submission"}
+  </CardTitle>
+  <CardAction>
+    <StatTabs
+      value={approvalTab}
+      onChange={setApprovalTab}
+      ariaLabel="Approval unit toggle"
+      options={[
+        { value: "percentage", label: "%", ariaLabel: "Show approval percentage" },
+        { value: "ha", label: "Ha", ariaLabel: "Show approved hectares" },
+      ]}
+    />
+  </CardAction>
+</CardHeader>
 <CardContent>
   <div className="text-3xl font-bold">
-    {stats?.approval_percentage ?? 0}%
+    {approvalTab === "percentage"
+      ? `${stats?.approval_percentage ?? 0}%`
+      : (stats?.approved_area_ha ?? 0).toLocaleString()}
   </div>
   <p className="mt-1 text-sm text-muted-foreground">
-    Of plots out of 100%
+    {approvalTab === "percentage"
+      ? "Of plots out of 100%"
+      : "Hectares approved"}
   </p>
 </CardContent>
 ```
+
+Card 1 was refactored to also use `StatTabs` (plot/ha toggle with `Map` icon + `Ha` label).
 
 ### Card 3 - Items requiring review:
 
@@ -375,6 +424,7 @@ Added `curly: ["error", "all"]` rule to enforce braces on all `if`/`else` statem
   "total_plots": 5023,
   "total_area_ha": 20420.50,
   "approval_percentage": 80.0,
+  "approved_area_ha": 16330.40,
   "pending_count": 1000,
   "pending_area_ha": 5230.75
 }
@@ -387,8 +437,10 @@ Added `curly: ["error", "all"]` rule to enforce braces on all `if`/`else` statem
 | Action | File |
 |--------|------|
 | Modify | `backend/api/v1/v1_odk/plot_views.py` |
+| Modify | `backend/api/v1/v1_odk/serializers.py` (StatsSerializer) |
 | Create | `backend/api/v1/v1_odk/tests/tests_stats_endpoint.py` |
 | Create | `frontend/src/hooks/useStats.js` |
+| Create | `frontend/src/components/stat-tabs.js` |
 | Modify | `frontend/src/app/dashboard/page.js` |
 | Modify | `frontend/eslint.config.mjs` |
 | Modify | 20+ frontend files (curly brace auto-fix) |

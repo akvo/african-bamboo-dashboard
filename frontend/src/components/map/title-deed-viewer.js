@@ -154,7 +154,7 @@ export default function TitleDeedViewer({ open, onClose, attachments = [] }) {
             ref={imgRef}
             src={current.local_url}
             alt={current.media_file_basename || "Title deed"}
-            className="h-full w-full object-cover select-none"
+            className="h-full w-full object-contain select-none"
             style={{
               transform: `translate(${position.x}px, ${position.y}px)`,
               cursor: dragging ? "grabbing" : "grab",

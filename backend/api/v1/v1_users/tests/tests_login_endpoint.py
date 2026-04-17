@@ -3,7 +3,26 @@ from unittest.mock import patch
 from django.test import TestCase
 from django.test.utils import override_settings
 
+from api.v1.v1_users.constants import UserStatus
 from api.v1.v1_users.models import SystemUser
+
+
+KOBO_URL = "https://kf.kobotoolbox.org"
+
+
+def _make_active_user(**overrides):
+    defaults = {
+        "email": "testuser@test.local",
+        "name": "testuser",
+        "kobo_url": KOBO_URL,
+        "kobo_username": "testuser",
+        "status": UserStatus.ACTIVE,
+        "is_active": True,
+    }
+    defaults.update(overrides)
+    return SystemUser.objects._create_user(
+        password="internal", **defaults
+    )
 
 
 @override_settings(USE_TZ=False, TEST_ENV=True)
@@ -11,9 +30,13 @@ class LoginTestCase(TestCase):
 
     @patch("api.v1.v1_users.views.KoboClient")
     def test_successfully_logged_in(self, mock_client_cls):
-        mock_client_cls.return_value.verify_credentials.return_value = True
+        # Approval gate: an ACTIVE user must already exist for
+        # the Kobo-valid login to succeed with 200 + JWT.
+        _make_active_user()
+        mock_client_cls.return_value \
+            .verify_credentials.return_value = True
         payload = {
-            "kobo_url": ("https://kf.kobotoolbox.org"),
+            "kobo_url": KOBO_URL,
             "kobo_username": "testuser",
             "kobo_password": "testpass",
         }
@@ -38,34 +61,47 @@ class LoginTestCase(TestCase):
                 "kobo_username",
             ],
         )
-        self.assertEqual(res["user"]["kobo_username"], "testuser")
         self.assertEqual(
-            res["user"]["kobo_url"],
-            "https://kf.kobotoolbox.org",
+            res["user"]["kobo_username"], "testuser"
+        )
+        self.assertEqual(
+            res["user"]["kobo_url"], KOBO_URL
         )
 
     @patch("api.v1.v1_users.views.KoboClient")
-    def test_creates_system_user(self, mock_client_cls):
-        mock_client_cls.return_value.verify_credentials.return_value = True
+    def test_new_user_row_created_but_pending(
+        self, mock_client_cls
+    ):
+        """First-time Kobo login creates a row (silent PENDING)
+        but the approval gate returns 403 instead of a JWT."""
+        mock_client_cls.return_value \
+            .verify_credentials.return_value = True
         payload = {
-            "kobo_url": ("https://kf.kobotoolbox.org"),
+            "kobo_url": KOBO_URL,
             "kobo_username": "newuser",
             "kobo_password": "newpass",
         }
-        self.client.post(
+        req = self.client.post(
             "/api/v1/auth/login",
             payload,
             content_type="application/json",
         )
-        self.assertTrue(
-            SystemUser.objects.filter(kobo_username="newuser").exists()
-        )
+        self.assertEqual(req.status_code, 403)
+        user = SystemUser.objects.get(kobo_username="newuser")
+        self.assertEqual(user.status, UserStatus.PENDING)
 
     @patch("api.v1.v1_users.views.KoboClient")
-    def test_updates_existing_user_credentials(self, mock_client_cls):
-        mock_client_cls.return_value.verify_credentials.return_value = True
+    def test_updates_existing_user_credentials(
+        self, mock_client_cls
+    ):
+        """An ACTIVE user logging in again with a new password
+        updates the stored encrypted password and still gets
+        200 + JWT. Only one row exists throughout."""
+        _make_active_user()
+        mock_client_cls.return_value \
+            .verify_credentials.return_value = True
         payload = {
-            "kobo_url": ("https://kf.kobotoolbox.org"),
+            "kobo_url": KOBO_URL,
             "kobo_username": "testuser",
             "kobo_password": "oldpass",
         }
@@ -74,7 +110,6 @@ class LoginTestCase(TestCase):
             payload,
             content_type="application/json",
         )
-        # Login again with new password
         payload["kobo_password"] = "newpass"
         req = self.client.post(
             "/api/v1/auth/login",
@@ -82,17 +117,19 @@ class LoginTestCase(TestCase):
             content_type="application/json",
         )
         self.assertEqual(req.status_code, 200)
-        # Should still be one user
         self.assertEqual(
-            SystemUser.objects.filter(kobo_username="testuser").count(),
+            SystemUser.objects.filter(
+                kobo_username="testuser"
+            ).count(),
             1,
         )
 
     @patch("api.v1.v1_users.views.KoboClient")
     def test_invalid_kobo_credentials(self, mock_client_cls):
-        mock_client_cls.return_value.verify_credentials.return_value = False
+        mock_client_cls.return_value \
+            .verify_credentials.return_value = False
         payload = {
-            "kobo_url": ("https://kf.kobotoolbox.org"),
+            "kobo_url": KOBO_URL,
             "kobo_username": "baduser",
             "kobo_password": "badpass",
         }
@@ -105,7 +142,7 @@ class LoginTestCase(TestCase):
         res = req.json()
         self.assertEqual(
             res,
-            {"message": ("Invalid KoboToolbox credentials")},
+            {"message": "Invalid KoboToolbox credentials"},
         )
 
     def test_all_inputs_are_required(self):

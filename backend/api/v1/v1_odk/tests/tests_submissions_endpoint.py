@@ -352,6 +352,7 @@ class SubmissionKoboSyncDispatchTest(
     ):
         """User without Kobo creds still gets 200
         but async_task is not dispatched."""
+        from api.v1.v1_users.constants import UserStatus
         from api.v1.v1_users.models import SystemUser
 
         user2 = SystemUser.objects.create_superuser(
@@ -359,7 +360,11 @@ class SubmissionKoboSyncDispatchTest(
             password="Changeme123",
             name="nocreds",
         )
-        # No kobo_url, kobo_username, kobo_password
+        # No kobo_url, kobo_username, kobo_password.
+        # Approval gate: mark ACTIVE so the JWT is accepted.
+        user2.status = UserStatus.ACTIVE
+        user2.is_active = True
+        user2.save()
         from rest_framework_simplejwt.tokens import (
             AccessToken,
         )

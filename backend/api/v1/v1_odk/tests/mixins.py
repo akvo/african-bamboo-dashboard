@@ -1,5 +1,6 @@
 from unittest.mock import patch
 
+from api.v1.v1_users.constants import UserStatus
 from api.v1.v1_users.models import SystemUser
 from utils.encryption import encrypt
 
@@ -9,7 +10,9 @@ class OdkTestHelperMixin:
 
     def create_kobo_user(self):
         """Create a SystemUser with Kobo credentials
-        for testing."""
+        for testing. Marks the user as ACTIVE so
+        StatusAwareJWTAuthentication accepts their JWT on
+        authenticated endpoint calls."""
         user = SystemUser.objects.create_superuser(
             email="kobouser@kf.kobotoolbox.org.local",
             password="Changeme123",
@@ -18,6 +21,8 @@ class OdkTestHelperMixin:
         user.kobo_url = "https://kf.kobotoolbox.org"
         user.kobo_username = "kobouser"
         user.kobo_password = encrypt("kobopass")
+        user.status = UserStatus.ACTIVE
+        user.is_active = True
         user.save()
         return user
 

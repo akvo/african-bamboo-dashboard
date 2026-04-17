@@ -91,7 +91,7 @@
 
 ### Code organisation & style
 
-- [ ] New files: `v1_users/auth.py`, `v1_users/services/approval.py`, `v1_users/services/emails.py`.
+- [ ] New files: `v1_users/auth.py`, `v1_users/services/__init__.py`, `v1_users/services/approval.py`. **No** `v1_users/services/emails.py` — email plumbing lives in the global [`backend/utils/email_helper.py`](../../backend/utils/email_helper.py) instead (modified, not created), per decision to reuse the shared helper across modules.
 - [ ] Each new file ≤ 400 lines; passes `black`, `isort`, `flake8` (80 char max).
 - [ ] All imports at top of file; no inline imports.
 

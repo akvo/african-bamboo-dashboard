@@ -1,11 +1,8 @@
-from unittest.mock import patch
-
 from django.test import TestCase
 from django.test.utils import override_settings
 
 from api.v1.v1_init.models import SystemSetting
-from api.v1.v1_users.models import SystemUser
-from utils.encryption import encrypt
+from api.v1.v1_init.tests.mixins import V1InitTestHelperMixin
 
 
 @override_settings(
@@ -16,65 +13,23 @@ from utils.encryption import encrypt
     TELEGRAM_SUPERVISOR_GROUP_ID="env-sup",
     TELEGRAM_ENUMERATOR_GROUP_ID="env-enum",
 )
-class TelegramSettingsTest(TestCase):
+class TelegramSettingsTest(V1InitTestHelperMixin, TestCase):
     URL = "/api/v1/settings/telegram/"
 
     def setUp(self):
-        self.user = (
-            SystemUser.objects.create_superuser(
-                email="admin@test.local",
-                password="Changeme123",
-                name="admin",
-            )
-        )
-        self.user.kobo_url = (
-            "https://kf.kobotoolbox.org"
-        )
-        self.user.kobo_username = "admin"
-        self.user.kobo_password = encrypt("pass")
-        self.user.save()
-
-    def _login(self):
-        with patch(
-            "api.v1.v1_users.views.KoboClient"
-        ) as mock_cls:
-            mock_cls.return_value \
-                .verify_credentials.return_value = (
-                    True
-                )
-            resp = self.client.post(
-                "/api/v1/auth/login",
-                {
-                    "kobo_url": (
-                        "https://kf.kobotoolbox.org"
-                    ),
-                    "kobo_username": "admin",
-                    "kobo_password": "pass",
-                },
-                content_type="application/json",
-            )
-            token = resp.json()["token"]
-            return {
-                "HTTP_AUTHORIZATION": (
-                    f"Bearer {token}"
-                ),
-            }
+        self.user = self.create_admin_user()
 
     def test_get_unauthenticated_returns_401(self):
         resp = self.client.get(self.URL)
         self.assertEqual(resp.status_code, 401)
 
     def test_get_returns_fallback_defaults(self):
-        auth = self._login()
-        resp = self.client.get(
-            self.URL, **auth
-        )
+        auth = self.login()
+        resp = self.client.get(self.URL, **auth)
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
         self.assertFalse(data["enabled"])
-        self.assertEqual(
-            data["bot_token"], "env-token"
-        )
+        self.assertEqual(data["bot_token"], "env-token")
         self.assertEqual(
             data["supervisor_group_id"], "env-sup"
         )
@@ -83,7 +38,7 @@ class TelegramSettingsTest(TestCase):
         )
 
     def test_put_saves_and_get_returns_updated(self):
-        auth = self._login()
+        auth = self.login()
         payload = {
             "enabled": True,
             "bot_token": "new-token",
@@ -99,9 +54,7 @@ class TelegramSettingsTest(TestCase):
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
         self.assertTrue(data["enabled"])
-        self.assertEqual(
-            data["bot_token"], "new-token"
-        )
+        self.assertEqual(data["bot_token"], "new-token")
 
         # Verify DB was written
         self.assertEqual(
@@ -112,14 +65,10 @@ class TelegramSettingsTest(TestCase):
         )
 
         # Subsequent GET returns updated values
-        resp2 = self.client.get(
-            self.URL, **auth
-        )
+        resp2 = self.client.get(self.URL, **auth)
         data2 = resp2.json()
         self.assertTrue(data2["enabled"])
-        self.assertEqual(
-            data2["bot_token"], "new-token"
-        )
+        self.assertEqual(data2["bot_token"], "new-token")
 
     def test_put_unauthenticated_returns_401(self):
         resp = self.client.put(

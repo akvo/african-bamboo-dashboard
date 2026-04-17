@@ -119,3 +119,23 @@ backend/api/v1/v1_odk/tests/
 ```
 
 When creating new tests, always split by endpoint — never put multiple resource tests in one file.
+
+## Documentation Style
+
+### Diagrams
+
+All diagrams in `docs/` MUST use [Mermaid](https://mermaid.js.org/) syntax inside fenced code blocks (```` ```mermaid ````). Do NOT use ASCII/box-drawing diagrams.
+
+Pick the right Mermaid diagram type for the job:
+- **`flowchart`** — system/component architecture, data flow, decision trees.
+- **`sequenceDiagram`** — request/response flows, multi-actor interactions, lifecycle transitions.
+- **`erDiagram`** — entity relationships when introducing new tables/relations.
+- **`stateDiagram-v2`** — model state machines (e.g. user/submission status transitions).
+- **`classDiagram`** — only when truly modelling class hierarchies.
+
+This applies to:
+- Plan files in `docs/v*_*_plan.md`
+- Sub-folder design specs (`docs/<feature>/*.md`)
+- Any new architectural or workflow documentation
+
+The existing `docs/extended-validation/extended-validation-implementation-plan.md` is a good reference for the Mermaid + Markdown house style.

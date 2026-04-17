@@ -1,0 +1,44 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+    &rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+    &rsaquo; <a href="{% url 'admin:v1_users_systemuser_changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a>
+    &rsaquo; {% trans 'Invite user' %}
+</div>
+{% endblock %}
+
+{% block content %}
+<h1>{% trans 'Invite user' %}</h1>
+<p>
+    {% trans "Send an invitation email to a KoboToolbox user. The row lands in PENDING status until someone logs in via a KoboToolbox account whose email matches this address — that account is then auto-activated. If the invitee owns multiple KoboToolbox accounts sharing this email, the first login claims the invite; the others are handled as separate PENDING rows." %}
+</p>
+<form method="post" novalidate>
+    {% csrf_token %}
+    <fieldset class="module aligned">
+        {% for field in form %}
+        <div class="form-row{% if field.errors %} errors{% endif %}">
+            {{ field.errors }}
+            <div>
+                <label for="{{ field.id_for_label }}"
+                       class="{% if field.field.required %}required{% endif %}">
+                    {{ field.label }}:
+                </label>
+                {{ field }}
+                {% if field.help_text %}
+                <div class="help">{{ field.help_text }}</div>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </fieldset>
+    <div class="submit-row">
+        <input type="submit" value="{% trans 'Send invitation' %}"
+               class="default">
+        <a href="{% url 'admin:v1_users_systemuser_changelist' %}"
+           class="button cancel-link">{% trans 'Cancel' %}</a>
+    </div>
+</form>
+{% endblock %}

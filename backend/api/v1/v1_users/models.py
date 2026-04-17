@@ -2,7 +2,9 @@ from django.contrib.auth.base_user import AbstractBaseUser
 from django.contrib.auth.models import PermissionsMixin
 from django.core import signing
 from django.db import models
+from django.db.models import Q
 
+from api.v1.v1_users.constants import UserStatus
 from utils.custom_manager import UserManager
 from utils.soft_deletes_model import SoftDeletes
 
@@ -28,6 +30,21 @@ class SystemUser(AbstractBaseUser, PermissionsMixin, SoftDeletes):
         blank=True,
         help_text="Encrypted KoboToolbox password",
     )
+
+    is_active = models.BooleanField(default=True)
+    status = models.IntegerField(
+        choices=UserStatus.fieldStr.items(),
+        default=UserStatus.PENDING,
+    )
+    status_changed_at = models.DateTimeField(null=True, blank=True)
+    status_changed_by = models.ForeignKey(
+        "self",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
+    invited_at = models.DateTimeField(null=True, blank=True)
 
     objects = UserManager()
 
@@ -55,4 +72,10 @@ class SystemUser(AbstractBaseUser, PermissionsMixin, SoftDeletes):
 
     class Meta:
         db_table = "system_user"
-        unique_together = [("kobo_username", "kobo_url")]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["kobo_username", "kobo_url"],
+                condition=Q(kobo_username__isnull=False),
+                name="unique_kobo_identity_when_set",
+            ),
+        ]

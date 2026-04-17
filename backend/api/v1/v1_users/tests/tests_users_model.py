@@ -1,6 +1,7 @@
 from django.test import TestCase
 
-from api.v1.v1_users.models import SystemUser, UserStatus
+from api.v1.v1_users.models import SystemUser
+from api.v1.v1_users.constants import UserStatus
 
 
 class UserModelTestCase(TestCase):

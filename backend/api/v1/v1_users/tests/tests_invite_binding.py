@@ -234,6 +234,72 @@ class InviteBindingTest(TestCase):
         )
         self.assertEqual(user.status, UserStatus.PENDING)
 
+    def test_bind_synthesized_email_also_collides(self):
+        """Regression: if the deterministic synthesized email
+        `<kobo_username>@<host>` is itself already taken
+        (e.g. an invite used that literal address), the
+        fallback loop must keep trying random-suffixed
+        variants instead of crashing."""
+        shared_email = "shared@africa-bamboo.com"
+
+        # Pre-seed both collision surfaces. Both rows carry a
+        # kobo_username so they do NOT match the invite-bind
+        # filter (which requires kobo_username__isnull=True)
+        # — the test must land in the silent-PENDING fallback.
+        # 1) real email — owned by a distinct Kobo identity
+        SystemUser.objects.create(
+            email=shared_email,
+            name="First",
+            kobo_url=KOBO_URL,
+            kobo_username="ab_enumerator",
+            status=UserStatus.ACTIVE,
+            is_active=True,
+        )
+        # 2) the deterministic synth target — also taken by
+        # yet another Kobo identity
+        SystemUser.objects.create(
+            email="ab_admin@kf.kobotoolbox.org",
+            name="Synth occupant",
+            kobo_url=KOBO_URL,
+            kobo_username="someone_else",
+            status=UserStatus.ACTIVE,
+            is_active=True,
+        )
+
+        with self.assertLogs(
+            "api.v1.v1_users.services.approval",
+            level="WARNING",
+        ) as log:
+            user, outcome = bind_pending_login(
+                email_from_kobo=shared_email,
+                kobo_username="ab_admin",
+                kobo_url=KOBO_URL,
+                encrypted_password="pw",
+                name_from_kobo="Alice",
+                email_was_synthesized=False,
+            )
+        self.assertEqual(
+            outcome, BindOutcome.SILENT_PENDING
+        )
+        self.assertEqual(user.kobo_username, "ab_admin")
+        self.assertEqual(user.status, UserStatus.PENDING)
+        # Neither the real nor the deterministic synth;
+        # must be the random-suffix fallback form.
+        self.assertNotEqual(user.email, shared_email)
+        self.assertNotEqual(
+            user.email, "ab_admin@kf.kobotoolbox.org"
+        )
+        self.assertTrue(
+            user.email.startswith("ab_admin+")
+            and user.email.endswith("@kf.kobotoolbox.org")
+        )
+        self.assertTrue(
+            any(
+                "Email collision on silent-pending" in m
+                for m in log.output
+            )
+        )
+
     def test_bind_two_kobo_users_sharing_email(self):
         """Regression: two distinct Kobo identities (different
         kobo_username) can legally share an email address on

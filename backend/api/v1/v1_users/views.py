@@ -38,6 +38,7 @@ _PENDING_MESSAGES = {
     request=LoginSerializer,
     responses={
         200: LoginResponseSerializer,
+        400: DefaultResponseSerializer,
         401: DefaultResponseSerializer,
         403: PendingLoginResponseSerializer,
     },

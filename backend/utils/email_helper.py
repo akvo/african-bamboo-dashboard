@@ -1,5 +1,4 @@
 import logging
-from pathlib import Path
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -123,9 +122,10 @@ def send_email(
         )
         msg.attach_alternative(email_html_message, "text/html")
         if path:
-            msg.attach(
-                Path(path).name, open(path).read(), content_type
-            )
+            # Django reads the file in binary mode internally,
+            # closes the handle, and infers the mimetype from
+            # the filename when content_type is None.
+            msg.attach_file(path, mimetype=content_type)
         if send:
             msg.send()
         if not send:

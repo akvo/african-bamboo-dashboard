@@ -200,7 +200,7 @@ EMAIL_FROM = environ.get("EMAIL_FROM") or "noreply@akvo.org"
 
 # APP SETUP
 WEBDOMAIN = environ.get("WEBDOMAIN", "http://localhost:3000")
-TEST_ENV = environ.get("TEST_ENV") or False
+TEST_ENV = bool(environ.get("TEST_ENV", False))
 
 # CSRF trusted origins — Django admin form POSTs come from the
 # frontend proxy host. Without this, Django's Origin check

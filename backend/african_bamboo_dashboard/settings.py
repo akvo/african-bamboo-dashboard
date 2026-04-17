@@ -205,7 +205,13 @@ TEST_ENV = environ.get("TEST_ENV") or False
 # CSRF trusted origins — Django admin form POSTs come from the
 # frontend proxy host. Without this, Django's Origin check
 # rejects the request with 403 "Origin checking failed".
-CSRF_TRUSTED_ORIGINS = [WEBDOMAIN]
+# Guard: Django 4 requires values to start with http:// or
+# https://. CI may set WEBDOMAIN to a bare string like "notset".
+CSRF_TRUSTED_ORIGINS = (
+    [WEBDOMAIN]
+    if WEBDOMAIN.startswith(("http://", "https://"))
+    else []
+)
 
 # Override the default user model
 AUTH_USER_MODEL = "v1_users.SystemUser"

@@ -1,5 +1,6 @@
 import enum
 import logging
+import secrets
 from typing import Optional, Tuple
 
 from django.db import IntegrityError, transaction
@@ -148,31 +149,67 @@ def bind_pending_login(
         "is_active": False,
         "status_changed_at": timezone.now(),
     }
-    try:
-        with transaction.atomic():
-            user = SystemUser.objects.create(**create_kwargs)
-    except IntegrityError:
-        # Another SystemUser already owns this email (distinct
-        # Kobo identity sharing an email address). Keep the
-        # Kobo identity as the authoritative key and store a
-        # synthesized email so the row can persist. The real
-        # email is still recoverable from the Kobo user
-        # payload at admin-approval time.
-        synth = _synthesized_email(kobo_username, kobo_url)
-        logger.warning(
-            "Email collision on silent-pending: real email "
-            "%s already used; storing synthesized email %s "
-            "for kobo identity %s@%s.",
-            normalized,
-            synth,
-            kobo_username,
-            kobo_url,
+
+    # Try the real email first. If another SystemUser already
+    # owns it (distinct Kobo identities sharing an email, e.g.
+    # `ab_admin` and `ab_enumerator` both using the same
+    # address), fall back to the deterministic synthesized
+    # form. If THAT is also taken (e.g. an invite row already
+    # uses the literal `<kobo_username>@<host>` form), keep
+    # trying short random-suffixed variants before giving up.
+    # The earlier `(kobo_username, kobo_url)` lookup already
+    # returned ALREADY_ACTIVE / SILENT_PENDING for matching
+    # identities, so any IntegrityError here is necessarily
+    # an email-UNIQUE collision — we don't mask other bugs.
+    user = None
+    for candidate in _email_candidates(normalized, kobo_username, kobo_url):
+        create_kwargs["email"] = candidate
+        try:
+            with transaction.atomic():
+                user = SystemUser.objects.create(**create_kwargs)
+            if candidate != normalized:
+                logger.warning(
+                    "Email collision on silent-pending: "
+                    "real email %s already used; stored as "
+                    "%s for kobo identity %s@%s.",
+                    normalized,
+                    candidate,
+                    kobo_username,
+                    kobo_url,
+                )
+            break
+        except IntegrityError:
+            continue
+    if user is None:
+        raise IntegrityError(
+            "Exhausted email candidates for kobo identity "
+            f"{kobo_username}@{kobo_url}. "
+            "SystemUser.email UNIQUE constraint is blocking "
+            "every synthesized variant — inspect the table."
         )
-        create_kwargs["email"] = synth
-        user = SystemUser.objects.create(**create_kwargs)
     user.set_unusable_password()
     user.save(update_fields=["password"])
     return user, BindOutcome.SILENT_PENDING
+
+
+def _email_candidates(
+    real_email: str, kobo_username: str, kobo_url: str
+):
+    """Yield the email addresses to try for a silent-PENDING
+    row, in order: the real email, then the deterministic
+    synthesized form, then a small number of random-suffixed
+    variants of the synthesized form.
+
+    Random suffix uses 3 bytes (6 hex chars, ~16M space) —
+    with 5 attempts the probability of total collision is
+    cosmologically small.
+    """
+    yield real_email
+    synth = _synthesized_email(kobo_username, kobo_url)
+    yield synth
+    local, _, host = synth.partition("@")
+    for _ in range(5):
+        yield f"{local}+{secrets.token_hex(3)}@{host}"
 
 
 def _transition(

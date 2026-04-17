@@ -29,6 +29,14 @@ class LoginResponseSerializer(serializers.Serializer):
     expiration_time = serializers.DateTimeField()
 
 
+class PendingLoginResponseSerializer(serializers.Serializer):
+    message = serializers.CharField()
+    # String label from UserStatus.fieldStr — "pending" or
+    # "suspended". Frontend switches on this.
+    status = serializers.CharField()
+    email = serializers.EmailField()
+
+
 class ResendVerificationEmailSerializer(serializers.Serializer):
     email = CustomEmailField()
 

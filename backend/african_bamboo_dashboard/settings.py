@@ -76,7 +76,9 @@ ROOT_URLCONF = "african_bamboo_dashboard.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        "DIRS": [
+            BASE_DIR / "african_bamboo_dashboard" / "templates",
+        ],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -157,7 +159,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
+        "api.v1.v1_users.auth.StatusAwareJWTAuthentication",
     ],
     "DEFAULT_VERSIONING_CLASS": "rest_framework.versioning.URLPathVersioning",
     "DATE_FORMAT": "%d-%m-%Y",
@@ -200,17 +202,35 @@ EMAIL_FROM = environ.get("EMAIL_FROM") or "noreply@akvo.org"
 WEBDOMAIN = environ.get("WEBDOMAIN", "http://localhost:3000")
 TEST_ENV = environ.get("TEST_ENV") or False
 
+# CSRF trusted origins — Django admin form POSTs come from the
+# frontend proxy host. Without this, Django's Origin check
+# rejects the request with 403 "Origin checking failed".
+CSRF_TRUSTED_ORIGINS = [WEBDOMAIN]
+
 # Override the default user model
 AUTH_USER_MODEL = "v1_users.SystemUser"
 
 # Django Q2 — async task queue backed by PostgreSQL ORM
+
+# In tests, run tasks inline on the calling thread so
+# mail.outbox and side effects are observable without a
+# running qcluster worker.
+Q_IS_SYNC = bool(TEST_ENV)
+
 Q_CLUSTER = {
     "name": "african_bamboo",
     "workers": 2,
     "timeout": 60,
     "retry": 120,
     "orm": "default",
+    "sync": Q_IS_SYNC,
 }
+
+# In tests, bypass Mailjet so emails land in mail.outbox.
+if TEST_ENV:
+    EMAIL_BACKEND = (
+        "django.core.mail.backends.locmem.EmailBackend"
+    )
 
 # Storage path for file uploads and exports
 STORAGE_PATH = environ.get("STORAGE_PATH", "./storage")

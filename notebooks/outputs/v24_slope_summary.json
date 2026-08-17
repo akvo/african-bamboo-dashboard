@@ -1,0 +1,47 @@
+{
+  "poc": "v24",
+  "metric": "slope",
+  "notebook": "notebooks/v24_average_slope_poc.ipynb",
+  "dataset": {
+    "source": "OpenTopography Copernicus GLO-30 DGED 2023_1",
+    "source_version": "DGED-2023_1",
+    "source_provider": "OpenTopography",
+    "target_resolution_m": 30.0
+  },
+  "summary": {
+    "total_submissions": 166,
+    "valid_polygons": 166,
+    "slope_complete": 166,
+    "slope_unavailable": 0,
+    "flagged_over_30_degrees": 0,
+    "low_resolution_confidence": 166,
+    "source": "OpenTopography Copernicus GLO-30 DGED 2023_1",
+    "threshold_degrees": 30.0
+  },
+  "observed_mean_slope_degrees": {
+    "min": 0.3,
+    "median": 3.79,
+    "max": 20.69
+  },
+  "acceptance_checks": {
+    "ac_above_30_is_flagged": true,
+    "ac_exactly_30_is_not_flagged": true,
+    "ac_warning_has_measured_value": true,
+    "ac_warning_has_strict_threshold": true,
+    "ac_warning_has_dataset_source": true
+  },
+  "boundary_demo": [
+    {
+      "scenario": "above_threshold",
+      "controlled_demo_mean_slope_degrees": 30.01,
+      "flagged_for_review": true,
+      "note": "Average slope is 30.01 degrees (threshold: > 30.0 degrees). Dataset source: OpenTopography Copernicus GLO-30 DGED 2023_1."
+    },
+    {
+      "scenario": "exactly_at_threshold",
+      "controlled_demo_mean_slope_degrees": 30.0,
+      "flagged_for_review": false,
+      "note": null
+    }
+  ]
+}

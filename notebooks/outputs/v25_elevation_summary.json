@@ -1,0 +1,51 @@
+{
+  "poc": "v25",
+  "metric": "elevation",
+  "notebook": "notebooks/v25_elevation_range_poc.ipynb",
+  "dataset": {
+    "source": "Copernicus DEM GLO-30",
+    "source_version": "DGED-2023_1",
+    "source_provider": "OpenTopography",
+    "reused_v24_subset": true
+  },
+  "summary": {
+    "valid_input_polygons": 166,
+    "completed_calculations": 166,
+    "flagged_out_of_range": 0,
+    "flagged_below_2400": 0,
+    "flagged_above_3500": 0,
+    "min_mean_elevation_m": 2569.1,
+    "median_mean_elevation_m": 2761.73,
+    "max_mean_elevation_m": 2920.73,
+    "min_coverage_percent": 100.0,
+    "min_intersecting_cells": 1,
+    "max_intersecting_cells": 9,
+    "low_resolution_confidence_plots": 166
+  },
+  "boundary_demo": [
+    {
+      "scenario": "below_range",
+      "controlled_demo_mean_elevation_m": 2399.99,
+      "flagged_for_review": true,
+      "note": "Mean elevation is 2,399.99 m, which is below the expected range of 2,400-3,500 m. Dataset source: Copernicus DEM GLO-30 DGED-2023_1 via OpenTopography."
+    },
+    {
+      "scenario": "exactly_lower_bound",
+      "controlled_demo_mean_elevation_m": 2400.0,
+      "flagged_for_review": false,
+      "note": null
+    },
+    {
+      "scenario": "exactly_upper_bound",
+      "controlled_demo_mean_elevation_m": 3500.0,
+      "flagged_for_review": false,
+      "note": null
+    },
+    {
+      "scenario": "above_range",
+      "controlled_demo_mean_elevation_m": 3500.01,
+      "flagged_for_review": true,
+      "note": "Mean elevation is 3,500.01 m, which is above the expected range of 2,400-3,500 m. Dataset source: Copernicus DEM GLO-30 DGED-2023_1 via OpenTopography."
+    }
+  ]
+}

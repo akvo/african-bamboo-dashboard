@@ -1,3 +1,4 @@
+import logging
 from unittest.mock import patch
 
 from django.test import TestCase
@@ -204,6 +205,60 @@ class RejectionAuditEndpointTest(
             ".on_kobo_sync_complete",
         )
         self.assertIn("audit_id", kwargs)
+
+    @patch("api.v1.v1_odk.views.async_task")
+    def test_reject_without_kobo_credentials_logs(
+        self, mock_async
+    ):
+        """The silent early return had no coverage.
+
+        A validator with no Kobo credentials cannot
+        sync, so nothing is queued and no Telegram
+        message is ever sent. That used to happen
+        without a single log line, which made TC19
+        undiagnosable from production logs.
+        """
+        self.user.kobo_password = ""
+        self.user.save(
+            update_fields=["kobo_password"]
+        )
+
+        with self.assertLogs(
+            "api.v1.v1_odk.views",
+            level=logging.WARNING,
+        ) as cm:
+            resp = self.client.patch(
+                "/api/v1/odk/submissions/"
+                "sub-audit-001/",
+                {
+                    "approval_status": (
+                        ApprovalStatus.REJECTED
+                    ),
+                    "reason_category": (
+                        "polygon_error"
+                    ),
+                },
+                content_type="application/json",
+                **self.auth,
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        mock_async.assert_not_called()
+        # The audit is still recorded, so the
+        # rejection is not lost -- only the sync and
+        # the notification are skipped.
+        self.assertTrue(
+            RejectionAudit.objects.filter(
+                submission=self.sub
+            ).exists()
+        )
+        joined = " ".join(cm.output)
+        self.assertIn(
+            "no KoboToolbox", joined
+        )
+        self.assertIn(
+            "will NOT be sent", joined
+        )
 
     @patch("api.v1.v1_odk.views.async_task")
     def test_audit_stores_validator(

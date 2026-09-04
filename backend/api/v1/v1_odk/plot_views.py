@@ -28,6 +28,7 @@ from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
 from api.v1.v1_jobs.constants import (
+    EXPORT_TASK_TIMEOUT,
     JobStatus,
     JobTypes,
 )
@@ -772,7 +773,7 @@ class PlotViewSet(
             "api.v1.v1_odk.tasks"
             ".generate_export_file",
             job.id,
-            timeout=300,
+            timeout=EXPORT_TASK_TIMEOUT,
         )
         job.task_id = task_id
         job.save()

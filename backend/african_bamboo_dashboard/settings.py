@@ -194,8 +194,11 @@ SIMPLE_JWT = {
 
 # MAIL SETUP
 EMAIL_BACKEND = "django_mailjet.backends.MailjetBackend"
-MAILJET_API_KEY = environ["MAILJET_APIKEY"]
-MAILJET_API_SECRET = environ["MAILJET_SECRET"]
+# Read with .get: a missing mail credential must not stop the
+# task worker from importing Django. Sending fails loudly at send
+# time instead of crashing qcluster on boot.
+MAILJET_API_KEY = environ.get("MAILJET_APIKEY", "")
+MAILJET_API_SECRET = environ.get("MAILJET_SECRET", "")
 EMAIL_FROM = environ.get("EMAIL_FROM") or "noreply@akvo.org"
 
 # APP SETUP
@@ -218,16 +221,24 @@ AUTH_USER_MODEL = "v1_users.SystemUser"
 
 # Django Q2 — async task queue backed by PostgreSQL ORM
 
-# In tests, run tasks inline on the calling thread so
-# mail.outbox and side effects are observable without a
-# running qcluster worker.
+# NOTE: TEST_ENV is not exported by test.sh or
+# docker-compose.test.yml, so this is False during the test run
+# and django_q reads Q_CLUSTER once at import — @override_settings
+# cannot change it. Tests therefore only ENQUEUE; they must patch
+# async_task or call the task function directly.
 Q_IS_SYNC = bool(TEST_ENV)
 
+# "retry" is the ORM broker's visibility timeout, so it MUST be
+# greater than "timeout" — otherwise a task still running is
+# redelivered to another worker and re-run forever. Pinned by
+# api/v1/v1_odk/tests/tests_qcluster_settings.py.
 Q_CLUSTER = {
     "name": "african_bamboo",
     "workers": 2,
-    "timeout": 60,
-    "retry": 120,
+    "timeout": 600,
+    "retry": 900,
+    "max_attempts": 1,
+    "ack_failures": True,
     "orm": "default",
     "sync": Q_IS_SYNC,
 }
@@ -237,6 +248,54 @@ if TEST_ENV:
     EMAIL_BACKEND = (
         "django.core.mail.backends.locmem.EmailBackend"
     )
+
+# LOGGING
+# Without this, application loggers have no handler and
+# propagate to a bare root logger, so Python's
+# lastResort handler drops everything below WARNING --
+# INFO diagnostics were silently discarded in
+# production. Send them to stdout, which is what the
+# container runtime collects.
+LOG_LEVEL = environ.get("LOG_LEVEL", "INFO").upper()
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "standard": {
+            "format": (
+                "%(asctime)s %(levelname)s "
+                "%(name)s: %(message)s"
+            ),
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "stream": "ext://sys.stdout",
+            "formatter": "standard",
+        },
+    },
+    "loggers": {
+        # Application code. "api" covers the v1 apps,
+        # "utils" the Kobo/Telegram/storage clients.
+        "api": {
+            "handlers": ["console"],
+            "level": LOG_LEVEL,
+            "propagate": False,
+        },
+        "utils": {
+            "handlers": ["console"],
+            "level": LOG_LEVEL,
+            "propagate": False,
+        },
+        "django_q": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+    },
+}
 
 # Storage path for file uploads and exports
 STORAGE_PATH = environ.get("STORAGE_PATH", "./storage")

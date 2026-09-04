@@ -22,3 +22,12 @@ class JobStatus:
         failed: "failed",
         done: "done",
     }
+
+
+# Per-task timeout for export jobs. Must stay below
+# Q_CLUSTER["retry"] so a running export is never redelivered.
+EXPORT_TASK_TIMEOUT = 540
+
+# A job still pending/on_progress this long after creation is
+# treated as abandoned — almost always a dead qcluster worker.
+JOB_STALE_SECONDS = 600

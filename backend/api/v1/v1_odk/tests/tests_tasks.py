@@ -58,9 +58,16 @@ class SyncKoboValidationStatusTest(TestCase):
     @patch(
         "api.v1.v1_odk.tasks.KoboClient"
     )
-    def test_sync_failure_logs_no_exception(
+    def test_sync_failure_logs_and_reraises(
         self, mock_cls,
     ):
+        """A Kobo failure must reach django_q.
+
+        on_kobo_sync_complete gates the Telegram
+        notification on task.success, so swallowing
+        the error here would tell an enumerator that
+        a rejection reached Kobo when it never did.
+        """
         mock_client = MagicMock()
         mock_client.update_validation_statuses.side_effect = (  # noqa: E501
             Exception("Kobo API down")
@@ -71,14 +78,15 @@ class SyncKoboValidationStatusTest(TestCase):
             "api.v1.v1_odk.tasks",
             level=logging.ERROR,
         ) as cm:
-            sync_kobo_validation_status(
-                self.kobo_url,
-                self.kobo_username,
-                self.kobo_password_enc,
-                self.asset_uid,
-                self.kobo_ids,
-                ApprovalStatusTypes.REJECTED,
-            )
+            with self.assertRaises(Exception):
+                sync_kobo_validation_status(
+                    self.kobo_url,
+                    self.kobo_username,
+                    self.kobo_password_enc,
+                    self.asset_uid,
+                    self.kobo_ids,
+                    ApprovalStatusTypes.REJECTED,
+                )
 
         self.assertTrue(
             any(

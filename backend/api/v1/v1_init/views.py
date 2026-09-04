@@ -52,7 +52,15 @@ def telegram_settings(request, version):
 
     for key, value in data.items():
         if key == "enabled":
-            value = str(value)
+            value = str(bool(value)).lower()
+        # Clearing a field means "unset" — delete the
+        # row so get_telegram_config falls back to the
+        # env default instead of being shadowed by "".
+        if not str(value).strip():
+            SystemSetting.objects.filter(
+                group=TELEGRAM_GROUP, key=key
+            ).delete()
+            continue
         SystemSetting.objects.update_or_create(
             group=TELEGRAM_GROUP,
             key=key,

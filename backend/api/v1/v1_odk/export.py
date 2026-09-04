@@ -18,6 +18,7 @@ from shapely.geometry.polygon import orient
 from openpyxl import Workbook
 
 from django.conf import settings
+from django.utils import timezone as dj_timezone
 from api.v1.v1_odk.models import (
     FieldMapping,
     FarmerFieldMapping,
@@ -31,12 +32,56 @@ from api.v1.v1_odk.constants import (
     PREFIX_FARM_ID,
     PREFIX_SUBM_ID,
 )
+from api.v1.v1_odk.utils.plot_id import get_plot_uid
 from api.v1.v1_users.models import SystemUser
 from utils import storage
 
 logger = logging.getLogger(__name__)
 
 EXPORT_FOLDER = "exports"
+
+# Deliberately ASCII-only rather than \w: Python's \w matches
+# Unicode letters, so a non-Latin form name would survive into a
+# Content-Disposition header value and break the download.
+FILENAME_SAFE_RE = re.compile(r"[^A-Za-z0-9\-]+")
+
+
+def slugify_form_name(name):
+    """Reduce a form name to a safe filename part."""
+    slug = FILENAME_SAFE_RE.sub("_", name or "")
+    slug = slug.strip("_")[:60]
+    return slug or "export"
+
+
+def build_export_filename(form, job_id, when=None):
+    """Build the filename stem for an export.
+
+    Shape: ``{FormName}_{asset_uid}_{date}_{time}``
+    e.g. ``Bamboo_Survey_aG7kXm2_2026-09-01_143205``.
+
+    Uniqueness matters beyond tidiness: storage.upload
+    is a plain copy into a flat folder, so a collision
+    would silently overwrite another user's export
+    while their job row still points at the path. The
+    timestamp is second-resolution, so *job_id* is
+    appended when the stem is already taken.
+    """
+    when = when or dj_timezone.now()
+    stem = "_".join(
+        [
+            slugify_form_name(form.name),
+            slugify_form_name(form.asset_uid),
+            when.strftime("%Y-%m-%d"),
+            when.strftime("%H%M%S"),
+        ]
+    )
+    export_dir = (
+        Path(settings.STORAGE_PATH) / EXPORT_FOLDER
+    )
+    if list(export_dir.glob(f"{stem}.*")):
+        stem = f"{stem}_{job_id}"
+    return stem
+
 
 WGS84_PRJ = (
     'GEOGCS["GCS_WGS_1984",'
@@ -187,21 +232,7 @@ def resolve_plot_attributes(
         needs_recl = "No"
     else:
         needs_recl = ""
-    plot_uid = ""
-    if (
-        plot.submission
-        and hasattr(
-            plot.submission,
-            "main_plot_submission",
-        )
-        and plot.submission.main_plot_submission
-    ):
-        plot_uid = (
-            plot.submission
-            .main_plot_submission
-            .main_plot
-            .uid
-        )
+    plot_uid = get_plot_uid(plot.submission)
 
     return {
         "SUBMISSION_ID": (

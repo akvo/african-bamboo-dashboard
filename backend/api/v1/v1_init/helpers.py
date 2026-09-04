@@ -28,16 +28,20 @@ def get_telegram_config():
 
     config = {}
     for key, default_fn in TELEGRAM_DEFAULTS.items():
-        if key in db_settings:
-            val = db_settings[key]
-            if key == "enabled":
-                val = val.lower() in (
-                    "true",
-                    "1",
-                    "yes",
-                )
-            config[key] = val
-        else:
+        # A blank DB value means "unset", not
+        # "empty string". Treating it as a value
+        # would let one save of the settings tab
+        # permanently shadow the env fallback.
+        raw = (db_settings.get(key) or "").strip()
+        if not raw:
             config[key] = default_fn()
+        elif key == "enabled":
+            config[key] = raw.lower() in (
+                "true",
+                "1",
+                "yes",
+            )
+        else:
+            config[key] = raw
 
     return config

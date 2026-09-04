@@ -13,7 +13,11 @@ from api.v1.v1_odk.tasks import (
     on_kobo_sync_complete,
     send_telegram_rejection_notification,
 )
+from api.v1.v1_odk.utils.plot_id import (
+    create_main_plot_for_submission,
+)
 from api.v1.v1_users.models import SystemUser
+from utils.telegram_client import TelegramSendError
 
 
 @override_settings(USE_TZ=False, TEST_ENV=True)
@@ -333,9 +337,13 @@ class TelegramNotificationTaskTest(TestCase):
         )
 
         mock_client = MagicMock()
+        # Third entry: the second group also fails
+        # its plain-text retry, so it is a genuine
+        # partial failure rather than a fallback.
         mock_client.send_message.side_effect = [
             111,
             TelegramSendError("fail"),
+            TelegramSendError("fail plain"),
         ]
         mock_client_cls.return_value = (
             mock_client
@@ -387,4 +395,137 @@ class TelegramNotificationTaskTest(TestCase):
         self.assertEqual(
             self.audit.telegram_chat_ids,
             ["-100001"],
+        )
+
+
+@override_settings(
+    TELEGRAM_ENABLED=True,
+    TELEGRAM_BOT_TOKEN="test-token",
+    TELEGRAM_SUPERVISOR_GROUP_ID="-100001",
+    TELEGRAM_ENUMERATOR_GROUP_ID="-100002",
+)
+class TelegramMessageContentTest(TestCase):
+    """TC19 expects the PlotID and the exact reason."""
+
+    def setUp(self):
+        self.form = FormMetadata.objects.create(
+            asset_uid="formMSG",
+            name="Form MSG",
+        )
+        self.sub = Submission.objects.create(
+            uuid="sub-msg-001",
+            form=self.form,
+            kobo_id="900",
+            submission_time=1700000000000,
+            submitted_by="enumerator1",
+            raw_data={"q": "a"},
+        )
+        self.plot = Plot.objects.create(
+            plot_name="MSG Plot",
+            form=self.form,
+            region="Region A",
+            sub_region="Sub A",
+            created_at=1700000000000,
+            submission=self.sub,
+        )
+        self.validator = (
+            SystemUser.objects.create_superuser(
+                email="msg-val@test.local",
+                password="Changeme123",
+                name="msg-validator",
+            )
+        )
+
+    def _audit(self, reason_text="Boundary overlap"):
+        return RejectionAudit.objects.create(
+            plot=self.plot,
+            submission=self.sub,
+            validator=self.validator,
+            reason_category="overlap",
+            reason_text=reason_text,
+        )
+
+    def _send(self, audit, side_effect=None):
+        with patch(
+            "api.v1.v1_odk.tasks.TelegramClient"
+        ) as mock_cls:
+            client = MagicMock()
+            if side_effect is not None:
+                client.send_message.side_effect = (
+                    side_effect
+                )
+            else:
+                client.send_message.return_value = 1
+            mock_cls.return_value = client
+            send_telegram_rejection_notification(
+                audit.pk
+            )
+        return client
+
+    @patch(
+        "api.v1.v1_odk.utils.plot_id"
+        ".generate_next_plot_uid",
+        return_value="PLT00042",
+    )
+    def test_message_contains_plot_id(self, _uid):
+        create_main_plot_for_submission(self.sub)
+        self.sub.refresh_from_db()
+
+        client = self._send(self._audit())
+
+        sent = client.send_message.call_args.args[1]
+        self.assertIn("Plot ID:", sent)
+        self.assertIn("PLT00042", sent)
+
+    def test_plot_id_na_when_never_approved(self):
+        """A MainPlot only exists after an approval."""
+        client = self._send(self._audit())
+
+        sent = client.send_message.call_args.args[1]
+        self.assertIn("Plot ID:", sent)
+        self.assertIn("N/A", sent)
+
+    def test_message_contains_category_and_reason(self):
+        client = self._send(
+            self._audit("Boundary overlap detected")
+        )
+
+        sent = client.send_message.call_args.args[1]
+        self.assertIn("Overlap", sent)
+        self.assertIn(
+            "Boundary overlap detected", sent
+        )
+
+    def test_markdown_failure_retries_as_plain_text(
+        self,
+    ):
+        """Unescaped specials must not lose the message.
+
+        _escape_markdown only covers _ * ` [ so a
+        reason containing "]" or "(" makes Telegram
+        reject the message with a parse error.
+        """
+        audit = self._audit("Overlap (see plot [B])")
+
+        client = self._send(
+            audit,
+            side_effect=[
+                TelegramSendError("parse error"),
+                77,
+                TelegramSendError("parse error"),
+                78,
+            ],
+        )
+
+        self.assertEqual(
+            client.send_message.call_count, 4
+        )
+        retry = client.send_message.call_args
+        self.assertIsNone(retry.kwargs["parse_mode"])
+
+        audit.refresh_from_db()
+        self.assertIsNotNone(audit.telegram_sent_at)
+        self.assertEqual(
+            audit.telegram_chat_ids,
+            ["-100001", "-100002"],
         )

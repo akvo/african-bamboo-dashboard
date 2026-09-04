@@ -787,7 +787,8 @@ class TelegramNotificationEdgeCasesTest(
 
         self.assertTrue(
             any(
-                "BOT_TOKEN not set" in m
+                "No Telegram bot token configured"
+                in m
                 for m in cm.output
             )
         )

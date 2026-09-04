@@ -94,6 +94,17 @@ from utils.polygon import extract_plot_data
 logger = logging.getLogger(__name__)
 
 
+def _notification_suffix(audit):
+    """Spell out the notification consequence of
+    skipping the Kobo sync, for the log."""
+    if not audit:
+        return ""
+    return (
+        f", so the Telegram rejection notification "
+        f"for audit {audit.pk} will NOT be sent"
+    )
+
+
 def _has_kobo_credentials(user):
     """Check if user has Kobo credentials."""
     return (
@@ -965,9 +976,26 @@ class SubmissionViewSet(
             if approval is not None else ApprovalStatusTypes.PENDING
         kobo_uid = ApprovalStatusTypes.KoboStatusMap.get(kobo_key)
         if not kobo_uid:
+            logger.warning(
+                "No Kobo status mapping for "
+                "approval_status=%s on submission "
+                "%s — skipping Kobo sync%s",
+                kobo_key,
+                instance.uuid,
+                _notification_suffix(audit),
+            )
             return
         user = self.request.user
         if not _has_kobo_credentials(user):
+            logger.warning(
+                "User %s has no KoboToolbox "
+                "credentials (url/username/password) "
+                "— skipping Kobo sync for submission "
+                "%s%s",
+                user.pk,
+                instance.uuid,
+                _notification_suffix(audit),
+            )
             return
 
         task_kwargs = {}

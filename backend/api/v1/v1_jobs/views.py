@@ -1,6 +1,9 @@
+import logging
 import os
+from datetime import timedelta
 
 from django.http import FileResponse
+from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.decorators import (
@@ -15,12 +18,65 @@ from rest_framework.permissions import (
 )
 from rest_framework.response import Response
 
-from api.v1.v1_jobs.constants import JobStatus
+from api.v1.v1_jobs.constants import (
+    JOB_STALE_SECONDS,
+    JobStatus,
+)
 from api.v1.v1_jobs.models import Jobs
 from api.v1.v1_jobs.serializers import (
     JobSerializer,
 )
 from utils import storage
+
+
+logger = logging.getLogger(__name__)
+
+STALE_JOB_MESSAGE = (
+    "Export timed out — the background worker did "
+    "not pick this job up. It may be down. Please "
+    "retry, and contact support if it recurs."
+)
+
+
+def _reap_if_stale(job):
+    """Fail a job that the worker never finished.
+
+    Done here, in a request handled by the *web*
+    process, rather than as a scheduled task: the
+    component that is down is the worker itself, so
+    a worker-hosted reaper could never run. The
+    client polls this endpoint every 2s while it
+    waits, which makes it the natural place to
+    notice that nothing is consuming the queue.
+    """
+    if job.status not in (
+        JobStatus.pending,
+        JobStatus.on_progress,
+    ):
+        return job
+    cutoff = timezone.now() - timedelta(
+        seconds=JOB_STALE_SECONDS
+    )
+    if job.created > cutoff:
+        return job
+
+    job.status = JobStatus.failed
+    job.result = STALE_JOB_MESSAGE
+    job.save(update_fields=["status", "result"])
+    logger.warning(
+        "Export job %s (type=%s, user=%s) was never "
+        "completed after %ss and has been marked "
+        "failed. The qcluster worker is most likely "
+        "not consuming: check that the worker "
+        "process is running, that it shares "
+        "STORAGE_PATH with the web process, and the "
+        "django_q_ormq queue depth.",
+        job.pk,
+        job.type,
+        job.created_by_id,
+        JOB_STALE_SECONDS,
+    )
+    return job
 
 
 @extend_schema(
@@ -34,6 +90,7 @@ def view_job(request, job_id):
     job = get_object_or_404(
         Jobs, pk=job_id, created_by=request.user
     )
+    job = _reap_if_stale(job)
     serializer = JobSerializer(instance=job)
     return Response(
         data=serializer.data,
@@ -96,7 +153,11 @@ def download_job_result(request, job_id):
     content_type = CONTENT_TYPES.get(
         ext, "application/octet-stream"
     )
-    filename = os.path.basename(real_path)
+    # Jobs created before download_name existed fall
+    # back to the on-disk name.
+    filename = info.get(
+        "download_name"
+    ) or os.path.basename(real_path)
 
     response = FileResponse(
         open(real_path, "rb"),

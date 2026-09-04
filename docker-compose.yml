@@ -5,6 +5,7 @@ services:
     command: ["tail", "-f", "/dev/null"]
   db:
     image: postgres:13-alpine
+    restart: unless-stopped
     volumes:
       - ./database/docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d
       - pg-data:/var/lib/postgresql/data
@@ -15,6 +16,7 @@ services:
       - 5432:5432
   backend:
     image: python:3.12
+    restart: unless-stopped
     working_dir: /app
     command: ["./start.sh"]
     volumes:
@@ -39,6 +41,7 @@ services:
       - db
   worker:
     image: python:3.12
+    restart: unless-stopped
     working_dir: /app
     command: ["./run_worker.sh"]
     volumes:
@@ -62,6 +65,7 @@ services:
       - backend
   frontend:
     image: akvo/akvo-node-20-alpine:20250923.063900.7ce4b53
+    restart: unless-stopped
     command: ["./start.sh"]
     volumes:
       - ./frontend:/app:delegated

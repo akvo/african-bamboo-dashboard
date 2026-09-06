@@ -1,5 +1,6 @@
 import logging
 
+from drf_spectacular.contrib.rest_framework_simplejwt import SimpleJWTScheme
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.exceptions import AuthenticationFailed
 
@@ -33,3 +34,14 @@ class StatusAwareJWTAuthentication(JWTAuthentication):
                 code="user_not_active",
             )
         return user, validated_token
+
+
+class StatusAwareJWTScheme(SimpleJWTScheme):
+    """Expose the custom JWT auth to drf-spectacular.
+
+    SimpleJWTScheme has match_subclasses = False, so our subclass
+    otherwise resolves to no security scheme and Swagger UI shows
+    no Authorize button.
+    """
+
+    target_class = StatusAwareJWTAuthentication

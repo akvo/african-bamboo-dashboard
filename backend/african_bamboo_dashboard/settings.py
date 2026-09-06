@@ -181,6 +181,9 @@ SPECTACULAR_SETTINGS = {
     "SORT_OPERATIONS": False,
     "SERVE_INCLUDE_SCHEMA": False,
     "COMPONENT_SPLIT_REQUEST": True,
+    "SWAGGER_UI_SETTINGS": {
+        "persistAuthorization": True,
+    },
 }
 
 # SIMPLE_JWT SETTINGS

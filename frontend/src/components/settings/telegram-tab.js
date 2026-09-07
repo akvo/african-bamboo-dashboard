@@ -26,6 +26,10 @@ export default function TelegramTab() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [groups, setGroups] = useState([]);
+  // An outage used to look identical to "no groups
+  // configured": the catch below emptied the list and
+  // the UI silently fell back to a bare chat-ID box.
+  const [groupsError, setGroupsError] = useState(null);
   const [loadingGroups, setLoadingGroups] = useState(false);
   const [config, setConfig] = useState({
     enabled: false,
@@ -35,16 +39,24 @@ export default function TelegramTab() {
   });
 
   const fetchGroups = useCallback(async (token) => {
-    if (!token) {return;}
+    if (!token) {
+      return;
+    }
     setLoadingGroups(true);
+    setGroupsError(null);
     try {
       const params = token ? { bot_token: token } : {};
       const { data } = await api.get("/v1/settings/telegram/groups/", {
         params,
       });
       setGroups(data);
-    } catch {
+    } catch (err) {
       setGroups([]);
+      setGroupsError(
+        err?.response?.data?.detail ||
+          "Could not reach Telegram. Check the bot token and " +
+            "the server's network access, then try again.",
+      );
     } finally {
       setLoadingGroups(false);
     }
@@ -160,6 +172,15 @@ export default function TelegramTab() {
               click refresh to load groups.
             </p>
           </div>
+
+          {groupsError && (
+            <p
+              role="alert"
+              className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700"
+            >
+              {groupsError}
+            </p>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="supervisor-group">Supervisor Group</Label>

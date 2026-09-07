@@ -6,7 +6,7 @@ omit = */__init__*
        */migrations/*
        */urls.py
        */admin.py
-       */apps.p
+       */apps.py
 disable_warnings = no-data-collected
 # Required for parallel
 parallel = true

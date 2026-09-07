@@ -12,6 +12,7 @@ from django.db.models import (
 from django.db.models.fields.json import (
     KeyTextTransform,
 )
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django_q.tasks import async_task
 from drf_spectacular.types import OpenApiTypes
@@ -21,8 +22,13 @@ from drf_spectacular.utils import (
 )
 from requests.exceptions import RequestException
 from rest_framework import status, viewsets
-from rest_framework.decorators import action
+from rest_framework.decorators import (
+    action,
+    api_view,
+    permission_classes,
+)
 from rest_framework.mixins import (
+    DestroyModelMixin,
     ListModelMixin,
     RetrieveModelMixin,
     UpdateModelMixin,
@@ -33,11 +39,13 @@ from rest_framework.permissions import (
 from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
+from api.v1.v1_init.helpers import get_telegram_config
 from api.v1.v1_odk.constants import (
     ApprovalStatusTypes,
     EXCLUDED_QUESTION_TYPES,
     STATUS_MAP,
     ALLOWED_ORDERINGS,
+    SyncStatus,
 )
 from api.v1.v1_odk.funcs import (
     MAPPING_FIELDS,
@@ -504,6 +512,10 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
             )
             form.save()
 
+        counts["stale"] = (
+            self._flag_stale_submissions(form, results)
+        )
+
         # Post-sync sweep: re-check plots whose
         # flags were cleared by old buggy code
         unchecked = Plot.objects.filter(
@@ -532,6 +544,60 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
                 **counts,
             }
         )
+
+    def _flag_stale_submissions(self, form, results):
+        """Mark local rows KoboToolbox no longer returns.
+
+        A submission deleted in Kobo leaves a local row
+        that can never sync again: every validation-status
+        update for it answers 400 "One or more submission
+        ids are invalid", so a rejection on it silently
+        never reaches Kobo and never notifies anyone.
+
+        Flagged, never deleted here — the row may carry a
+        Plot, rejection history and a Plot ID link, so
+        removal is an explicit operator action. Skipped
+        entirely on an empty result, since a failed or
+        partial fetch must not condemn every row.
+
+        Returns the number of rows currently flagged.
+        """
+        if not results:
+            return 0
+
+        fetched_ids = {str(r["_id"]) for r in results}
+        local = Submission.objects.filter(form=form)
+
+        # Anything that reappeared is no longer stale.
+        local.filter(
+            kobo_id__in=fetched_ids,
+            missing_from_kobo_at__isnull=False,
+        ).update(missing_from_kobo_at=None)
+
+        stale = local.exclude(kobo_id__in=fetched_ids)
+        newly_stale = list(
+            stale.filter(
+                missing_from_kobo_at__isnull=True
+            ).values_list("kobo_id", flat=True)
+        )
+        if newly_stale:
+            stale.filter(
+                missing_from_kobo_at__isnull=True
+            ).update(
+                missing_from_kobo_at=timezone.now()
+            )
+            logger.warning(
+                "%s submission(s) on form %s are no "
+                "longer in KoboToolbox (ids: %s). "
+                "Approve/reject is now blocked for them, "
+                "because the update cannot reach Kobo "
+                "and no Telegram notification would be "
+                "sent.",
+                len(newly_stale),
+                form.asset_uid,
+                ", ".join(newly_stale[:20]),
+            )
+        return stale.count()
 
     def _upsert_submission(self, form, item):
         """Upsert a single Kobo submission."""
@@ -695,6 +761,7 @@ class SubmissionViewSet(
     ListModelMixin,
     RetrieveModelMixin,
     UpdateModelMixin,
+    DestroyModelMixin,
     GenericViewSet,
 ):
     queryset = Submission.objects.all()
@@ -939,6 +1006,84 @@ class SubmissionViewSet(
                 qs = qs.filter(**{f"raw_data__{field_name}": (params[key])})
         return qs
 
+    def update(self, request, *args, **kwargs):
+        """Refuse approve/reject on a stale submission.
+
+        Covers PATCH too (partial_update delegates here).
+        The UI disables these actions, but a stale row
+        must be refused server-side as well: letting it
+        through writes a local decision that can never
+        reach Kobo and never notifies the field team.
+        """
+        instance = self.get_object()
+        if instance.missing_from_kobo_at:
+            return Response(
+                {
+                    "detail": (
+                        "This submission no longer "
+                        "exists in KoboToolbox, so the "
+                        "decision cannot be synced and "
+                        "the field team cannot be "
+                        "notified. Delete it instead."
+                    ),
+                    "error_type": "missing_from_kobo",
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+        return super().update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        """Delete a submission Kobo no longer has.
+
+        Authorization is deliberately IsAuthenticated, the
+        same bar as approve/reject on this viewset. Accounts
+        are provisioned from KoboToolbox and created with
+        is_superuser=False, so a superuser gate would make
+        this unusable for every real operator rather than
+        making it safer.
+
+        What bounds the damage instead is the object-level
+        check below: only a submission KoboToolbox no longer
+        has can be deleted. Its rejection history and Plot
+        ID link describe a submission that is already gone
+        upstream, so this is cleanup, not destruction of
+        live data. A live submission is refused outright —
+        Kobo would restore it on the next sync anyway.
+        """
+        instance = self.get_object()
+        if not instance.missing_from_kobo_at:
+            return Response(
+                {
+                    "detail": (
+                        "Only a submission missing from "
+                        "KoboToolbox can be deleted "
+                        "here."
+                    )
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+        # Plot.submission is SET_NULL, so the plot would
+        # otherwise outlive the submission as an orphan: no
+        # data, no possible action, and every field resolved
+        # from raw_data unavailable. Remove it in the same
+        # operation rather than leaving a ghost on the map.
+        plot = getattr(instance, "plot", None)
+        plot_uuid = plot.uuid if plot else None
+
+        logger.warning(
+            "User %s deleted submission %s (kobo_id=%s) and "
+            "its plot %s, which KoboToolbox no longer has. "
+            "Rejection history and the Plot ID link go with "
+            "them.",
+            request.user.pk,
+            instance.uuid,
+            instance.kobo_id,
+            plot_uuid or "(none)",
+        )
+        if plot:
+            plot.delete()
+        return super().destroy(request, *args, **kwargs)
+
     def perform_update(self, serializer):
         reason_category = serializer.validated_data.get("reason_category")
         reason_text = serializer.validated_data.get("reason_text", "")
@@ -961,9 +1106,28 @@ class SubmissionViewSet(
 
         # Create RejectionAudit for rejections
         audit = None
-        if approval == ApprovalStatusTypes.REJECTED and reason_category:
+        if approval == ApprovalStatusTypes.REJECTED:
             plot = getattr(instance, "plot", None)
-            if plot:
+            if not reason_category:
+                # No audit row means no notification
+                # and no rejection history, while the
+                # caller still gets 200. Say so.
+                logger.warning(
+                    "Submission %s rejected without a "
+                    "reason_category — no "
+                    "RejectionAudit created, so no "
+                    "Telegram notification is sent",
+                    instance.uuid,
+                )
+            elif not plot:
+                logger.warning(
+                    "Submission %s rejected but has "
+                    "no linked Plot — no "
+                    "RejectionAudit created, so no "
+                    "Telegram notification is sent",
+                    instance.uuid,
+                )
+            else:
                 audit = RejectionAudit.objects.create(
                     plot=plot,
                     submission=instance,
@@ -1293,3 +1457,91 @@ class FieldMappingViewSet(
             "field", "form_question"
         )
         return Response(FieldMappingSerializer(mappings, many=True).data)
+
+
+@extend_schema(
+    description=(
+        "Re-queue the Telegram rejection notification "
+        "for an audit that never fully delivered. "
+        "Superuser only."
+    ),
+    request=None,
+    responses=OpenApiTypes.OBJECT,
+    tags=["Submissions"],
+)
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def resend_rejection_notification(request, pk):
+    """Re-queue delivery for one RejectionAudit.
+
+    IsAuthenticated, matching approve/reject: accounts are
+    provisioned from KoboToolbox with is_superuser=False, so
+    a superuser gate would leave nobody able to use this.
+
+    Safe to call twice: the task skips any chat already in
+    the delivery ledger, so a partially delivered audit
+    never double-posts. The 409s below are what keep it
+    from sending something it should not.
+    """
+    audit = get_object_or_404(RejectionAudit, pk=pk)
+
+    tg_config = get_telegram_config()
+    if (
+        not tg_config["enabled"]
+        or not tg_config["bot_token"]
+    ):
+        return Response(
+            {
+                "detail": (
+                    "Telegram notifications are "
+                    "disabled or not configured."
+                )
+            },
+            status=status.HTTP_409_CONFLICT,
+        )
+
+    if audit.sync_status != SyncStatus.SYNCED:
+        return Response(
+            {
+                "detail": (
+                    "This rejection never reached "
+                    "KoboToolbox, so no notification "
+                    "may be sent for it."
+                )
+            },
+            status=status.HTTP_409_CONFLICT,
+        )
+
+    if audit.telegram_sent_at:
+        return Response(
+            {
+                "detail": (
+                    "This notification was already "
+                    "delivered to every configured "
+                    "group."
+                )
+            },
+            status=status.HTTP_409_CONFLICT,
+        )
+
+    # Zeroing the counter also re-arms the retry sweep,
+    # so one click restores automatic recovery instead
+    # of being a one-shot.
+    audit.telegram_attempts = 0
+    audit.save(update_fields=["telegram_attempts"])
+
+    logger.info(
+        "User %s manually re-queued the Telegram "
+        "notification for audit %s",
+        request.user.pk,
+        audit.pk,
+    )
+    async_task(
+        "api.v1.v1_odk.tasks"
+        ".send_telegram_rejection_notification",
+        audit.pk,
+    )
+    return Response(
+        {"detail": "Notification re-queued."},
+        status=status.HTTP_200_OK,
+    )

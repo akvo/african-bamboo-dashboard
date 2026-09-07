@@ -299,10 +299,6 @@ class TelegramNotificationTaskTest(TestCase):
     def test_failure_does_not_raise(
         self, mock_client_cls
     ):
-        from utils.telegram_client import (
-            TelegramSendError,
-        )
-
         mock_client = MagicMock()
         mock_client.send_message.side_effect = (
             TelegramSendError("API error")
@@ -311,10 +307,13 @@ class TelegramNotificationTaskTest(TestCase):
             mock_client
         )
 
-        # Should not raise
+        # Must not raise: Q_CLUSTER pins max_attempts=1,
+        # so raising would lose the notification outright.
+        # The failure is recorded and the retry sweep owns
+        # recovery, so this is a WARNING, not an ERROR.
         with self.assertLogs(
             "api.v1.v1_odk.tasks",
-            level="ERROR",
+            level="WARNING",
         ):
             send_telegram_rejection_notification(
                 self.audit.pk
@@ -332,18 +331,14 @@ class TelegramNotificationTaskTest(TestCase):
     def test_partial_failure(
         self, mock_client_cls
     ):
-        from utils.telegram_client import (
-            TelegramSendError,
-        )
-
         mock_client = MagicMock()
-        # Third entry: the second group also fails
-        # its plain-text retry, so it is a genuine
-        # partial failure rather than a fallback.
+        # One attempt per chat: there is no plain-text
+        # retry any more, because a blind resend can
+        # double-post a message Telegram already
+        # delivered before the error surfaced.
         mock_client.send_message.side_effect = [
             111,
             TelegramSendError("fail"),
-            TelegramSendError("fail plain"),
         ]
         mock_client_cls.return_value = (
             mock_client
@@ -351,19 +346,26 @@ class TelegramNotificationTaskTest(TestCase):
 
         with self.assertLogs(
             "api.v1.v1_odk.tasks",
-            level="ERROR",
+            level="WARNING",
         ):
             send_telegram_rejection_notification(
                 self.audit.pk
             )
 
         self.audit.refresh_from_db()
-        self.assertIsNotNone(
+        # telegram_sent_at now means "delivered to every
+        # configured group". Leaving it NULL on a partial
+        # send is what lets the sweep retry only the group
+        # that is still outstanding.
+        self.assertIsNone(
             self.audit.telegram_sent_at
         )
         self.assertEqual(
             self.audit.telegram_chat_ids,
             ["-100001"],
+        )
+        self.assertIn(
+            "fail", self.audit.telegram_last_error
         )
 
     @override_settings(
@@ -496,32 +498,30 @@ class TelegramMessageContentTest(TestCase):
             "Boundary overlap detected", sent
         )
 
-    def test_markdown_failure_retries_as_plain_text(
-        self,
-    ):
-        """Unescaped specials must not lose the message.
+    def test_html_escaping_delivers_first_try(self):
+        """Specials must not lose the message.
 
-        _escape_markdown only covers _ * ` [ so a
-        reason containing "]" or "(" makes Telegram
-        reject the message with a parse error.
+        Legacy Markdown escaped only _ * ` [ so a reason
+        containing "]" or "(" made Telegram reject the
+        message. HTML needs exactly <, > and & escaped,
+        which django.utils.html.escape covers in full --
+        so one attempt per chat, no fallback.
         """
-        audit = self._audit("Overlap (see plot [B])")
-
-        client = self._send(
-            audit,
-            side_effect=[
-                TelegramSendError("parse error"),
-                77,
-                TelegramSendError("parse error"),
-                78,
-            ],
+        audit = self._audit(
+            "Overlap (see plot [B]) <a> & more"
         )
+
+        client = self._send(audit, side_effect=[77, 78])
 
         self.assertEqual(
-            client.send_message.call_count, 4
+            client.send_message.call_count, 2
         )
-        retry = client.send_message.call_args
-        self.assertIsNone(retry.kwargs["parse_mode"])
+        sent = client.send_message.call_args.args[1]
+        self.assertIn("&lt;a&gt;", sent)
+        self.assertIn("&amp;", sent)
+        self.assertIn("<b>Plot Rejected</b>", sent)
+        # Raw specials pass through untouched now.
+        self.assertIn("(see plot [B])", sent)
 
         audit.refresh_from_db()
         self.assertIsNotNone(audit.telegram_sent_at)

@@ -21,12 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Loader2, RefreshCw, Settings } from "lucide-react";
 
-export function FormsTable({
-  forms,
-  isLoading,
-  syncForm,
-  onConfigureClick,
-}) {
+export function FormsTable({ forms, isLoading, syncForm, onConfigureClick }) {
   const [syncingId, setSyncingId] = useState(null);
   const [status, setStatus] = useState(null);
 
@@ -45,13 +40,22 @@ export function FormsTable({
         const plotsUpdated = result.plots_updated || 0;
         parts.push(`${plotsCreated} created, ${plotsUpdated} updated`);
       }
+      // Submissions deleted in Kobo can never sync again,
+      // so surface them here rather than letting a
+      // validator discover it when a rejection silently
+      // fails to reach Kobo.
+      if (result.stale) {
+        parts.push(
+          `${result.stale} submission(s) no longer exist in ` +
+            "KoboToolbox and can only be deleted",
+        );
+      }
       setStatus({
-        type: "success",
+        type: result.stale ? "warning" : "success",
         message: parts.join(". ") + ".",
       });
     } catch (err) {
-      const isKoboAuth =
-        err.response?.data?.error_type === "kobo_unauthorized";
+      const isKoboAuth = err.response?.data?.error_type === "kobo_unauthorized";
       setStatus({
         type: isKoboAuth ? "kobo_unauthorized" : "error",
         message:
@@ -79,7 +83,8 @@ export function FormsTable({
             className={`mb-4 rounded-md p-3 text-sm ${
               status.type === "success"
                 ? "bg-status-approved/10 text-status-approved"
-                : status.type === "kobo_unauthorized"
+                : status.type === "kobo_unauthorized" ||
+                    status.type === "warning"
                   ? "bg-amber-500/10 text-amber-700 dark:text-amber-400"
                   : "bg-destructive/10 text-destructive"
             }`}
@@ -121,9 +126,7 @@ export function FormsTable({
               <TableBody>
                 {forms.map((form) => (
                   <TableRow key={form.asset_uid}>
-                    <TableCell className="font-medium">
-                      {form.name}
-                    </TableCell>
+                    <TableCell className="font-medium">{form.name}</TableCell>
                     <TableCell className="font-mono text-xs text-muted-foreground">
                       {form.asset_uid}
                     </TableCell>
@@ -132,9 +135,7 @@ export function FormsTable({
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       {form.last_sync_timestamp
-                        ? new Date(
-                            form.last_sync_timestamp,
-                          ).toLocaleString()
+                        ? new Date(form.last_sync_timestamp).toLocaleString()
                         : "Never"}
                     </TableCell>
                     <TableCell className="text-right">

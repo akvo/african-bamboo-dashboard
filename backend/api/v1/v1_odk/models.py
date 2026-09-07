@@ -3,11 +3,8 @@ import uuid
 from django.conf import settings
 from django.db import models
 
-from api.v1.v1_odk.constants import (
-    ApprovalStatusTypes,
-    RejectionCategory,
-    SyncStatus,
-)
+from api.v1.v1_odk.constants import (ApprovalStatusTypes, RejectionCategory,
+                                     SyncStatus)
 
 
 class FormMetadata(models.Model):
@@ -158,6 +155,19 @@ class Submission(models.Model):
         null=True,
         blank=True,
         help_text="Timestamp of last validator action",
+    )
+    missing_from_kobo_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text=(
+            "Set by sync when KoboToolbox no longer "
+            "returns this submission. Such a row can "
+            "never sync again — every validation-status "
+            "update answers 400 'submission ids are "
+            "invalid' — so approve/reject are blocked "
+            "and only deletion is offered."
+        ),
     )
 
     class Meta:
@@ -319,6 +329,27 @@ class RejectionAudit(models.Model):
         max_length=100,
         null=True,
         blank=True,
+    )
+    # Delivery attempts so far. Bounds the retry sweep
+    # so a permanently bad chat id is abandoned rather
+    # than retried forever.
+    telegram_attempts = models.IntegerField(default=0)
+    telegram_last_attempt_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+    telegram_last_error = models.TextField(
+        null=True,
+        blank=True,
+    )
+    # Set from Telegram's own parameters.retry_after on a 429.
+    # Retrying before this only lengthens the flood-wait,
+    # because Telegram extends the cooldown progressively when
+    # it is ignored.
+    telegram_next_attempt_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        db_index=True,
     )
 
     class Meta:

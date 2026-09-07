@@ -322,3 +322,17 @@ TELEGRAM_SUPERVISOR_GROUP_ID = environ.get(
 TELEGRAM_ENUMERATOR_GROUP_ID = environ.get(
     "TELEGRAM_ENUMERATOR_GROUP_ID", ""
 )
+
+# Retry bounds for the delivery sweep.
+# MAX_ATTEMPTS caps how many times an undelivered
+# notification is retried; COOLDOWN_MINUTES is both the
+# sweep interval and the minimum gap between two
+# attempts on one audit, which is the backoff.
+TELEGRAM_MAX_ATTEMPTS = int(
+    environ.get("TELEGRAM_MAX_ATTEMPTS", 5)
+)
+TELEGRAM_RETRY_COOLDOWN_MINUTES = int(
+    environ.get(
+        "TELEGRAM_RETRY_COOLDOWN_MINUTES", 5
+    )
+)

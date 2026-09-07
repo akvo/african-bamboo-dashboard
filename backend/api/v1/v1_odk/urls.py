@@ -1,3 +1,4 @@
+from django.urls import re_path
 from rest_framework.routers import DefaultRouter
 
 from api.v1.v1_odk import plot_views, views
@@ -26,4 +27,11 @@ router.register(
     basename="enumerator",
 )
 
-urlpatterns = router.urls
+urlpatterns = router.urls + [
+    re_path(
+        r"^rejection-audits/(?P<pk>[0-9]+)"
+        r"/resend_notification/$",
+        views.resend_rejection_notification,
+        name="resend_rejection_notification",
+    ),
+]

@@ -45,3 +45,31 @@ def get_telegram_config():
             config[key] = raw
 
     return config
+
+
+def migrate_telegram_group_id(old_chat_id, new_chat_id):
+    """Repoint any group setting matching old_chat_id.
+
+    Telegram issues a brand new id when a basic group is
+    upgraded to a supergroup, and every send to the old
+    id fails permanently from that moment. Persisting
+    the replacement is the difference between a blip and
+    a total outage of the feature.
+
+    Returns the setting keys that were updated.
+    """
+    config = get_telegram_config()
+    updated = []
+    for key in (
+        "supervisor_group_id",
+        "enumerator_group_id",
+    ):
+        if str(config.get(key)) != str(old_chat_id):
+            continue
+        SystemSetting.objects.update_or_create(
+            group=TELEGRAM_GROUP,
+            key=key,
+            defaults={"value": str(new_chat_id)},
+        )
+        updated.append(key)
+    return updated

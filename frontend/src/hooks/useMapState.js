@@ -68,8 +68,12 @@ export function MapStateProvider({ children }) {
       initializedRef.current = true;
       return;
     }
-    if (!formId) {return;}
-    if (saveFilterFieldsRef.current) {clearTimeout(saveFilterFieldsRef.current);}
+    if (!formId) {
+      return;
+    }
+    if (saveFilterFieldsRef.current) {
+      clearTimeout(saveFilterFieldsRef.current);
+    }
     saveFilterFieldsRef.current = setTimeout(() => {
       api
         .patch(`/v1/odk/forms/${formId}/`, {
@@ -79,39 +83,72 @@ export function MapStateProvider({ children }) {
         .catch(() => {});
     }, 1000);
     return () => {
-      if (saveFilterFieldsRef.current)
-        {clearTimeout(saveFilterFieldsRef.current);}
+      if (saveFilterFieldsRef.current) {
+        clearTimeout(saveFilterFieldsRef.current);
+      }
     };
   }, [formId, activeFilterFields]);
   const startMs = startDate ? startDate.getTime() : null;
   const endMs = endDate ? endDate.getTime() : null;
+
+  const latestPlotsRequestRef = useRef(0);
 
   const fetchPlots = useCallback(async () => {
     if (!formId) {
       setIsLoading(false);
       return;
     }
+    // Switching tabs quickly leaves two requests in flight, and
+    // without this guard whichever lands last wins — so the
+    // previous tab's response could overwrite "View all" while
+    // the UI still showed "View all" as active. Same pattern as
+    // fetchSelectedPlot below.
+    const requestId = ++latestPlotsRequestRef.current;
     setIsLoading(true);
     setError(null);
     try {
       const params = { form_id: formId, limit: 200 };
-      if (activeTab && activeTab !== "all") {params.status = activeTab;}
-      if (search) {params.search = search;}
-      if (sortBy && sortBy !== "priority") {params.sort = sortBy;}
-      if (startMs) {params.start_date = startMs;}
-      if (endMs) {params.end_date = endMs;}
-      if (region) {params.region = region;}
-      if (subRegion) {params.sub_region = subRegion;}
+      if (activeTab && activeTab !== "all") {
+        params.status = activeTab;
+      }
+      if (search) {
+        params.search = search;
+      }
+      if (sortBy && sortBy !== "priority") {
+        params.sort = sortBy;
+      }
+      if (startMs) {
+        params.start_date = startMs;
+      }
+      if (endMs) {
+        params.end_date = endMs;
+      }
+      if (region) {
+        params.region = region;
+      }
+      if (subRegion) {
+        params.sub_region = subRegion;
+      }
       Object.entries(dynamicValues).forEach(([k, v]) => {
-        if (v) {params[`filter__${k}`] = v;}
+        if (v) {
+          params[`filter__${k}`] = v;
+        }
       });
       const res = await api.get("/v1/odk/plots/", { params });
+      if (requestId !== latestPlotsRequestRef.current) {
+        return;
+      }
       setPlots(res.data.results || []);
       setCount(res.data.count || 0);
     } catch (err) {
+      if (requestId !== latestPlotsRequestRef.current) {
+        return;
+      }
       setError(err.response?.data?.message || "Failed to fetch plots");
     } finally {
-      setIsLoading(false);
+      if (requestId === latestPlotsRequestRef.current) {
+        setIsLoading(false);
+      }
     }
   }, [
     formId,
@@ -177,7 +214,9 @@ export function MapStateProvider({ children }) {
 
   const handleSelectPlot = useCallback(
     (plotUuid) => {
-      if (editingPlotId && plotUuid !== editingPlotId) {return;}
+      if (editingPlotId && plotUuid !== editingPlotId) {
+        return;
+      }
       setSelectedPlotId(plotUuid);
     },
     [editingPlotId],

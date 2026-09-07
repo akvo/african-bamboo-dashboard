@@ -1,47 +1,25 @@
 "use client";
 
-import "leaflet/dist/leaflet.css";
+// Side-effect imports (Leaflet CSS, leaflet-editable) live in
+// one module so their order is explicit and the CSS cannot be
+// pulled in twice from different components.
+import "@/lib/leaflet-setup";
 
-import L from "leaflet";
-import "leaflet-editable";
-import {
-  MapContainer,
-  TileLayer,
-  Polygon,
-  Popup,
-  ZoomControl,
-} from "react-leaflet";
+import { MapContainer, TileLayer, ZoomControl } from "react-leaflet";
 import { useMemo, useState } from "react";
 import { Construction, Satellite } from "lucide-react";
-import { parseWktPolygon } from "@/lib/wkt-parser";
-import { getPlotStatus } from "@/lib/plot-utils";
 import basemaps, { DEFAULT_BASEMAP } from "@/lib/basemap-config";
+import {
+  DEFAULT_CENTER,
+  DEFAULT_ZOOM,
+  MAX_ZOOM,
+} from "@/lib/map-styles";
+import usePlotFeatures from "@/hooks/usePlotFeatures";
 import MapController from "@/components/map/map-controller";
 import MapEditLayer from "@/components/map/map-edit-layer";
 import MapEditToolbar from "@/components/map/map-edit-toolbar";
-import MapPopupCard from "@/components/map/map-popup-card";
+import PlotPolygons from "@/components/map/plot-polygons";
 import { PREFIX_SUBM_ID } from "@/lib/constants";
-
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl:
-    "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-});
-
-const POLYGON_STYLES = {
-  pending: { color: "#EAB308", weight: 2, fillOpacity: 0.2 },
-  approved: { color: "#16A34A", weight: 2, fillOpacity: 0.2 },
-  rejected: { color: "#DC2626", weight: 2, fillOpacity: 0.2 },
-  flagged: { color: "#E97316", weight: 2, fillOpacity: 0.2 },
-  selected: { color: "#22D3EE", weight: 3, fillOpacity: 0.3 },
-  editing: { color: "#F97316", weight: 3, fillOpacity: 0.25 },
-};
-
-const DEFAULT_CENTER = [7.05, 38.47];
-const DEFAULT_ZOOM = 6;
-const MAX_ZOOM = 22;
 
 export default function MapView({
   plots,
@@ -62,14 +40,10 @@ export default function MapView({
     [basemap],
   );
 
-  const plotsWithCoords = useMemo(
-    () =>
-      plots.map((p) => ({
-        ...p,
-        coords: parseWktPolygon(p.polygon_wkt),
-        status: getPlotStatus(p),
-      })),
-    [plots],
+  const features = usePlotFeatures(plots, selectedPlot);
+  const editingFeature = useMemo(
+    () => features.find((p) => p.uuid === editingPlotId),
+    [features, editingPlotId],
   );
 
   return (
@@ -95,36 +69,16 @@ export default function MapView({
 
         <MapController selectedPlot={selectedPlot} allPlots={plots} />
 
-        {plotsWithCoords.map((plot) => {
-          if (plot.coords.length === 0) {return null;}
-          if (plot.uuid === editingPlotId) {return null;}
-
-          const isSelected = selectedPlot?.uuid === plot.uuid;
-          const style = isSelected
-            ? POLYGON_STYLES.selected
-            : POLYGON_STYLES[plot.status] || POLYGON_STYLES.pending;
-
-          return (
-            <Polygon
-              key={plot.uuid}
-              positions={plot.coords}
-              pathOptions={style}
-              eventHandlers={{
-                click: () => onSelectPlot(plot.uuid),
-              }}
-            >
-              {isSelected && (
-                <Popup>
-                  <MapPopupCard plot={plot} />
-                </Popup>
-              )}
-            </Polygon>
-          );
-        })}
+        <PlotPolygons
+          features={features}
+          selectedUuid={selectedPlot?.uuid}
+          editingPlotId={editingPlotId}
+          onSelectPlot={onSelectPlot}
+        />
 
         {editingPlotId && (
           <MapEditLayer
-            plot={plotsWithCoords.find((p) => p.uuid === editingPlotId)}
+            plot={editingFeature}
             setEditedGeo={setEditedGeo}
             onNotify={onNotify}
           />
@@ -155,12 +109,11 @@ export default function MapView({
 
       {editingPlotId && (
         <MapEditToolbar
-          plotName={(() => {
-            const pid = plotsWithCoords.find(
-              (p) => p.uuid === editingPlotId,
-            )?.plot_id;
-            return pid ? `${PREFIX_SUBM_ID}${pid}` : "—";
-          })()}
+          plotName={
+            editingFeature?.plot_id
+              ? `${PREFIX_SUBM_ID}${editingFeature.plot_id}`
+              : "—"
+          }
           onSave={onSaveEdit}
           onCancel={onCancelEdit}
           onReset={onReset}

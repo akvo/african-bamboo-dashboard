@@ -42,9 +42,7 @@ function useToggleList(initial) {
   const [list, setList] = useState(initial);
   const toggle = (item) =>
     setList((prev) =>
-      prev.includes(item)
-        ? prev.filter((f) => f !== item)
-        : [...prev, item],
+      prev.includes(item) ? prev.filter((f) => f !== item) : [...prev, item],
     );
   return [list, setList, toggle];
 }
@@ -63,10 +61,10 @@ export function FieldMappingDialog({
   const [mappingStatus, setMappingStatus] = useState(null);
 
   // Plot Structure tab
-  const [polygonFields, setPolygonFields, togglePolygonField] =
-    useToggleList([]);
-  const [regionFields, setRegionFields, toggleRegionField] =
-    useToggleList([]);
+  const [polygonFields, setPolygonFields, togglePolygonField] = useToggleList(
+    [],
+  );
+  const [regionFields, setRegionFields, toggleRegionField] = useToggleList([]);
   const [subRegionFields, setSubRegionFields, toggleSubRegionField] =
     useToggleList([]);
   const [plotNameFields, setPlotNameFields] = useToggleList([]);
@@ -112,8 +110,7 @@ export function FieldMappingDialog({
       .catch((err) => {
         setMappingStatus({
           type: "error",
-          message:
-            err.response?.data?.detail || "Failed to fetch form fields.",
+          message: err.response?.data?.detail || "Failed to fetch form fields.",
         });
         setFormFields([]);
       })
@@ -129,9 +126,7 @@ export function FieldMappingDialog({
       api.get(`/v1/odk/forms/${form.asset_uid}/farmer-field-mapping/`),
     ])
       .then(([settingsRes, questionsRes, mappingsRes, farmerRes]) => {
-        setFieldSettings(
-          settingsRes.data?.results || settingsRes.data || [],
-        );
+        setFieldSettings(settingsRes.data?.results || settingsRes.data || []);
         setFormQuestions(questionsRes.data || []);
         const mappingsMap = {};
         const mappingsData =
@@ -180,23 +175,17 @@ export function FieldMappingDialog({
         const qId = detailMappings[fs.name];
         detailPayload[fs.name] = qId ? parseInt(qId, 10) : null;
       }
-      await api.put(
-        `/v1/odk/field-mappings/${form.asset_uid}/`,
-        detailPayload,
-      );
+      await api.put(`/v1/odk/field-mappings/${form.asset_uid}/`, detailPayload);
 
       if (farmerUniqueFields.length > 0) {
-        await api.put(
-          `/v1/odk/forms/${form.asset_uid}/farmer-field-mapping/`,
-          {
-            unique_fields: farmerUniqueFields,
-            values_fields:
-              farmerValuesFields.length > 0
-                ? farmerValuesFields
-                : farmerUniqueFields,
-            uid_start: farmerUidStart,
-          },
-        );
+        await api.put(`/v1/odk/forms/${form.asset_uid}/farmer-field-mapping/`, {
+          unique_fields: farmerUniqueFields,
+          values_fields:
+            farmerValuesFields.length > 0
+              ? farmerValuesFields
+              : farmerUniqueFields,
+          uid_start: farmerUidStart,
+        });
       }
 
       setMappingStatus({
@@ -207,8 +196,7 @@ export function FieldMappingDialog({
     } catch (err) {
       setMappingStatus({
         type: "error",
-        message:
-          err.response?.data?.detail || "Failed to save field mappings.",
+        message: err.response?.data?.detail || "Failed to save field mappings.",
       });
     } finally {
       setIsSavingMapping(false);
@@ -246,12 +234,10 @@ export function FieldMappingDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-x-hidden overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>
-            Configure Field Mappings — {form?.name}
-          </DialogTitle>
+          <DialogTitle>Configure Field Mappings — {form?.name}</DialogTitle>
           <DialogDescription>
-            Map form fields to plot attributes for automatic plot creation
-            and updates
+            Map form fields to plot attributes for automatic plot creation and
+            updates
           </DialogDescription>
         </DialogHeader>
 
@@ -353,9 +339,7 @@ export function FieldMappingDialog({
                 fieldSettings.map((fs) => {
                   const selectedId = detailMappings[fs.name];
                   const selectedQ = selectedId
-                    ? formQuestions.find(
-                        (q) => String(q.id) === selectedId,
-                      )
+                    ? formQuestions.find((q) => String(q.id) === selectedId)
                     : null;
                   return (
                     <div key={fs.id} className="flex flex-col gap-1.5">
@@ -382,8 +366,7 @@ export function FieldMappingDialog({
                             onValueChange={(val) =>
                               setDetailMappings((prev) => ({
                                 ...prev,
-                                [fs.name]:
-                                  val === "none" ? undefined : val,
+                                [fs.name]: val === "none" ? undefined : val,
                               }))
                             }
                           >
@@ -411,9 +394,9 @@ export function FieldMappingDialog({
           {/* Farmer Fields Tab */}
           <TabsContent value="farmer-fields">
             <p className="mb-4 text-xs text-muted-foreground">
-              Define which form fields identify unique farmers and which
-              values to store. These are used during sync to deduplicate
-              farmers and populate the Farmer table in XLSX exports.
+              Define which form fields identify unique farmers and which values
+              to store. These are used during sync to deduplicate farmers and
+              populate the Farmer table in XLSX exports.
             </p>
             <div className="space-y-6">
               {isLoadingFarmerMapping || isLoadingFields ? (
@@ -423,15 +406,14 @@ export function FieldMappingDialog({
                 </div>
               ) : formFields.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-6">
-                  No fields found. Sync the form first to populate
-                  questions.
+                  No fields found. Sync the form first to populate questions.
                 </p>
               ) : (
                 <>
                   <MultiSelectDropdown
                     label="Unique fields (identity)"
                     placeholder="Select unique fields..."
-                    hint='Fields that uniquely identify a farmer (e.g. First Name + Father&apos;s Name + Grandfather&apos;s Name). Values are joined with " - " for deduplication.'
+                    hint="Fields that uniquely identify a farmer (e.g. First Name + Father's Name + Grandfather's Name). Values are joined with &quot; - &quot; for deduplication."
                     items={formFields}
                     selected={farmerUniqueFields}
                     onToggle={toggleFarmerUniqueField}
@@ -451,9 +433,7 @@ export function FieldMappingDialog({
                   />
 
                   <div className="space-y-2">
-                    <Label htmlFor="uid-start">
-                      Starting Farmer ID Number
-                    </Label>
+                    <Label htmlFor="uid-start">Starting Farmer ID Number</Label>
                     <Input
                       id="uid-start"
                       type="number"
@@ -461,19 +441,16 @@ export function FieldMappingDialog({
                       value={farmerUidStart}
                       onChange={(e) =>
                         setFarmerUidStart(
-                          Math.max(
-                            1,
-                            parseInt(e.target.value, 10) || 1,
-                          ),
+                          Math.max(1, parseInt(e.target.value, 10) || 1),
                         )
                       }
                       className="w-40"
                       placeholder="1"
                     />
                     <p className="text-xs text-muted-foreground">
-                      Minimum starting number for new farmer IDs. Use this
-                      to continue from legacy data (e.g., enter 351 to
-                      start after AB00350). Only affects new farmers.
+                      Minimum starting number for new farmer IDs. Use this to
+                      continue from legacy data (e.g., enter 351 to start after
+                      AB00350). Only affects new farmers.
                     </p>
                   </div>
                 </>

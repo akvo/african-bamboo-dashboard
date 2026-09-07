@@ -1,3 +1,5 @@
+import logging
+
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.decorators import (
@@ -19,6 +21,8 @@ from utils.telegram_client import (
     TelegramClient,
     TelegramSendError,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @extend_schema(
@@ -52,7 +56,15 @@ def telegram_settings(request, version):
 
     for key, value in data.items():
         if key == "enabled":
-            value = str(value)
+            value = str(bool(value)).lower()
+        # Clearing a field means "unset" — delete the
+        # row so get_telegram_config falls back to the
+        # env default instead of being shadowed by "".
+        if not str(value).strip():
+            SystemSetting.objects.filter(
+                group=TELEGRAM_GROUP, key=key
+            ).delete()
+            continue
         SystemSetting.objects.update_or_create(
             group=TELEGRAM_GROUP,
             key=key,
@@ -82,22 +94,64 @@ def telegram_groups(request, version):
             {"detail": "No bot token configured"},
             status=status.HTTP_400_BAD_REQUEST,
         )
+    client = TelegramClient(bot_token)
+
+    # getUpdates is DISCOVERY only: it sees just the
+    # last 24h of activity and a bot's own messages
+    # generate no updates, so the list empties itself
+    # after a quiet day. That is why a configured group
+    # used to render as a bare chat id.
+    discovery_error = None
     try:
-        client = TelegramClient(bot_token)
         groups = client.get_groups()
     except TelegramSendError as e:
-        return Response(
-            {"detail": str(e)},
-            status=status.HTTP_502_BAD_GATEWAY,
+        logger.warning(
+            "Telegram getUpdates failed: %s", e
         )
-    except Exception:
-        return Response(
-            {
-                "detail": (
-                    "Failed to connect to "
-                    "Telegram API"
+        groups = []
+        discovery_error = str(e)
+
+    # Configured ids are resolved with getChat, which
+    # is authoritative and permanent.
+    by_id = {g["id"]: g for g in groups}
+    resolved_any = False
+    for key in (
+        "supervisor_group_id",
+        "enumerator_group_id",
+    ):
+        chat_id = config.get(key)
+        if not chat_id or chat_id in by_id:
+            continue
+        try:
+            chat = client.get_chat(chat_id)
+            # Only ever hand the renderer a plain dict of the
+            # three fields we use. Anything else is a bug in
+            # the client, and letting it reach the JSON
+            # encoder turns that bug into an unbounded
+            # allocation rather than a clear error.
+            if not isinstance(chat, dict):
+                raise TelegramSendError(
+                    f"getChat returned {type(chat).__name__}, "
+                    f"expected dict"
                 )
-            },
+            by_id[chat_id] = {
+                "id": str(chat.get("id", chat_id)),
+                "title": chat.get("title", "Untitled"),
+                "type": chat.get("type", ""),
+            }
+            resolved_any = True
+        except TelegramSendError as e:
+            # One unreachable chat must not empty the
+            # whole list.
+            logger.warning(
+                "Telegram getChat failed for %s: %s",
+                chat_id,
+                e,
+            )
+
+    if discovery_error and not resolved_any:
+        return Response(
+            {"detail": discovery_error},
             status=status.HTTP_502_BAD_GATEWAY,
         )
-    return Response(groups)
+    return Response(list(by_id.values()))

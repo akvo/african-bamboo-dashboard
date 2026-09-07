@@ -5,11 +5,13 @@ from urllib.parse import quote
 from django.conf import settings
 from rest_framework import serializers
 
+from api.v1.v1_init.helpers import get_telegram_config
 from api.v1.v1_odk.constants import (
     ATTACHMENTS_FOLDER,
     EXCLUDED_QUESTION_TYPES,
     ApprovalStatusTypes,
     RejectionCategory,
+    SyncStatus,
 )
 from api.v1.v1_odk.models import (
     FieldMapping,
@@ -137,6 +139,7 @@ class SubmissionListSerializer(serializers.ModelSerializer):
             "resolved_data",
             "area_ha",
             "main_plot_uid",
+            "missing_from_kobo_at",
         ]
 
     def get_resolved_data(self, obj):
@@ -284,6 +287,46 @@ class RejectionAuditSerializer(
         read_only=True,
         default=None,
     )
+    telegram_status = (
+        serializers.SerializerMethodField()
+    )
+    can_resend = serializers.SerializerMethodField()
+
+    def get_telegram_status(self, obj):
+        """Delivery state for the UI.
+
+        Derived server-side so the frontend never needs
+        the bot config -- the only endpoint carrying
+        that also returns the bot token.
+        """
+        if not get_telegram_config()["enabled"]:
+            return "disabled"
+        if obj.telegram_sent_at:
+            return "sent"
+        if obj.sync_status == SyncStatus.FAILED:
+            # The rejection never reached Kobo, so no
+            # message was ever attempted. Reporting this
+            # as a Telegram failure sends the validator
+            # after the wrong problem.
+            return "sync_failed"
+        if (
+            obj.telegram_attempts
+            >= settings.TELEGRAM_MAX_ATTEMPTS
+        ):
+            return "failed"
+        return "pending"
+
+    def get_can_resend(self, obj):
+        """Whether resending would actually do anything.
+
+        Any authenticated user may resend, matching
+        approve/reject. This flag exists so the UI does
+        not offer a button the endpoint would refuse.
+        """
+        return (
+            self.get_telegram_status(obj) == "failed"
+            and obj.sync_status == SyncStatus.SYNCED
+        )
 
     class Meta:
         model = RejectionAudit
@@ -295,6 +338,8 @@ class RejectionAuditSerializer(
             "rejected_at",
             "sync_status",
             "telegram_sent_at",
+            "telegram_status",
+            "can_resend",
             "validator_name",
         ]
         read_only_fields = fields
@@ -308,6 +353,18 @@ class SubmissionDetailSerializer(
     form = serializers.CharField(
         source="form.asset_uid", read_only=True
     )
+    can_delete = serializers.SerializerMethodField()
+
+    def get_can_delete(self, obj):
+        """Whether the submission may be deleted.
+
+        Mirrors SubmissionViewSet.destroy so the UI never
+        offers a button the endpoint would refuse:
+        deletion is limited to submissions KoboToolbox no
+        longer has.
+        """
+        return bool(obj.missing_from_kobo_at)
+
     resolved_data = (
         serializers.SerializerMethodField()
     )
@@ -791,7 +848,17 @@ class PlotSerializer(serializers.ModelSerializer):
     def _resolve_plot_fields(self, obj, field_spec):
         """Resolve comma-separated field spec for
         a plot. Builds option_map inline. Non-empty
-        resolved values joined with ' - '."""
+        resolved values joined with ' - '.
+
+        A plot can outlive its submission: Plot.submission
+        is SET_NULL, so deleting a submission that no
+        longer exists in KoboToolbox leaves the plot
+        behind. Every field resolved from raw_data is
+        simply unavailable then — it must not 500 the
+        whole list.
+        """
+        if not obj.submission:
+            return None
         option_map, type_map = build_option_lookup(
             obj.form
         )

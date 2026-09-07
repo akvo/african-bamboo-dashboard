@@ -28,16 +28,48 @@ def get_telegram_config():
 
     config = {}
     for key, default_fn in TELEGRAM_DEFAULTS.items():
-        if key in db_settings:
-            val = db_settings[key]
-            if key == "enabled":
-                val = val.lower() in (
-                    "true",
-                    "1",
-                    "yes",
-                )
-            config[key] = val
-        else:
+        # A blank DB value means "unset", not
+        # "empty string". Treating it as a value
+        # would let one save of the settings tab
+        # permanently shadow the env fallback.
+        raw = (db_settings.get(key) or "").strip()
+        if not raw:
             config[key] = default_fn()
+        elif key == "enabled":
+            config[key] = raw.lower() in (
+                "true",
+                "1",
+                "yes",
+            )
+        else:
+            config[key] = raw
 
     return config
+
+
+def migrate_telegram_group_id(old_chat_id, new_chat_id):
+    """Repoint any group setting matching old_chat_id.
+
+    Telegram issues a brand new id when a basic group is
+    upgraded to a supergroup, and every send to the old
+    id fails permanently from that moment. Persisting
+    the replacement is the difference between a blip and
+    a total outage of the feature.
+
+    Returns the setting keys that were updated.
+    """
+    config = get_telegram_config()
+    updated = []
+    for key in (
+        "supervisor_group_id",
+        "enumerator_group_id",
+    ):
+        if str(config.get(key)) != str(old_chat_id):
+            continue
+        SystemSetting.objects.update_or_create(
+            group=TELEGRAM_GROUP,
+            key=key,
+            defaults={"value": str(new_chat_id)},
+        )
+        updated.append(key)
+    return updated

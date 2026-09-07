@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 from PIL import Image
 
-from django.test import TestCase, SimpleTestCase
+from django.test import TestCase
 from django.test.utils import override_settings
 
 from api.v1.v1_jobs.constants import (
@@ -27,7 +27,7 @@ from api.v1.v1_odk.models import (
     Submission,
 )
 from api.v1.v1_odk.tasks import (
-    _escape_markdown,
+    _build_rejection_message,
     _resolve_field_spec,
     _resolve_plot_location,
     generate_export_file,
@@ -527,24 +527,48 @@ class KoboSyncHookEdgeCasesTest(TestCase):
         )
 
 
-# ── _escape_markdown ─────────────────────────
+# ── _build_rejection_message ─────────────────
 
 
-class EscapeMarkdownTest(SimpleTestCase):
-    def test_escapes_special_chars(self):
-        text = "hello_world *bold* `code` [link]"
-        result = _escape_markdown(text)
-        self.assertEqual(
-            result,
-            "hello\\_world \\*bold\\* "
-            "\\`code\\` \\[link]",
+class BuildRejectionMessageTest(TestCase):
+    """HTML replaced legacy Markdown: escaping <, > and &
+    is a complete escape set, where Markdown's four
+    characters were not and silently lost messages."""
+
+    def test_escapes_html_specials_only(self):
+        form = FormMetadata.objects.create(
+            asset_uid="formESC", name="Form Esc"
+        )
+        sub = Submission.objects.create(
+            uuid="sub-esc-001",
+            form=form,
+            kobo_id="600",
+            submission_time=1700000000000,
+            raw_data={},
+        )
+        plot = Plot.objects.create(
+            plot_name="Esc Plot",
+            form=form,
+            region="R",
+            sub_region="S",
+            created_at=1700000000000,
+            submission=sub,
+        )
+        audit = RejectionAudit.objects.create(
+            plot=plot,
+            submission=sub,
+            reason_category="other",
+            reason_text="a <b> & c (d) [e] _f_ *g*",
         )
 
-    def test_no_special_chars(self):
-        self.assertEqual(
-            _escape_markdown("plain"),
-            "plain",
-        )
+        message = _build_rejection_message(audit)
+
+        self.assertIn("&lt;b&gt;", message)
+        self.assertIn("&amp;", message)
+        # Markdown specials are no longer escaped, because
+        # HTML does not treat them as markup.
+        self.assertIn("(d) [e] _f_ *g*", message)
+        self.assertIn("<b>Plot Rejected</b>", message)
 
 
 # ── _resolve_field_spec ──────────────────────
@@ -787,7 +811,8 @@ class TelegramNotificationEdgeCasesTest(
 
         self.assertTrue(
             any(
-                "BOT_TOKEN not set" in m
+                "No Telegram bot token configured"
+                in m
                 for m in cm.output
             )
         )

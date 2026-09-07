@@ -51,6 +51,28 @@ def generate_next_plot_uid(form):
     return f"{PREFIX_PLOT_ID}{str(next_num).zfill(5)}"
 
 
+def get_plot_uid(submission):
+    """Return the MainPlot uid for a submission.
+
+    A MainPlot only exists once a submission has
+    been approved at least once, so a submission
+    rejected without ever being approved has none.
+
+    Returns:
+        str: e.g. "PLT00001", or "" when unlinked.
+    """
+    if not submission:
+        return ""
+    if not hasattr(
+        submission, "main_plot_submission"
+    ):
+        return ""
+    link = submission.main_plot_submission
+    if not link or not link.main_plot:
+        return ""
+    return link.main_plot.uid or ""
+
+
 def create_main_plot_for_submission(submission):
     """Create a MainPlot and link it to the
     submission on approval.

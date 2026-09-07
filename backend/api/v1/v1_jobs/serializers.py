@@ -30,6 +30,7 @@ class JobSerializer(serializers.ModelSerializer):
             "id",
             "type",
             "status",
+            "result",
             "created",
             "available",
         ]

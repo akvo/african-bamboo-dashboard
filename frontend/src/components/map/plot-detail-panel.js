@@ -8,6 +8,8 @@ import {
   SquarePen,
   ImageIcon,
   MapPin,
+  AlertTriangle,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -23,6 +25,7 @@ import AttachmentCard from "@/components/map/attachment-card";
 import EditableField from "@/components/map/editable-field";
 import { PREFIX_FARM_ID } from "@/lib/constants";
 import { useMapState } from "@/hooks/useMapState";
+import TelegramStatusBadge from "@/components/map/telegram-status-badge";
 
 const SECTION_FIELD_MAP = {
   enumerator: ["enumerator"],
@@ -76,7 +79,9 @@ function SectionHeader({
 }
 
 function DataField({ label, value }) {
-  if (!value) {return null;}
+  if (!value) {
+    return null;
+  }
   return (
     <div className="flex flex-1 flex-col gap-1">
       <span className="text-sm text-muted-foreground">{label}</span>
@@ -87,7 +92,9 @@ function DataField({ label, value }) {
 
 function DataFieldRow({ fields }) {
   const visibleFields = fields.filter((f) => f.value);
-  if (visibleFields.length === 0) {return null;}
+  if (visibleFields.length === 0) {
+    return null;
+  }
   return (
     <div
       className={cn("flex items-start", "divide-x divide-muted-foreground/20")}
@@ -114,7 +121,9 @@ function PersonSection({
   onCancel,
   isSaving,
 }) {
-  if (!name && !isEditing) {return null;}
+  if (!name && !isEditing) {
+    return null;
+  }
   const visibleFields = fields.filter((f) => f.value);
   return (
     <div className="flex flex-col gap-3 rounded-md border border-card-foreground/10 p-3 bg-card">
@@ -160,11 +169,18 @@ export default function PlotDetailPanel({
   onRevertToPending,
   onStartEditing,
   onOpenTitleDeed,
+  onNotify,
+  onDeleteSubmission,
+  refreshKey,
 }) {
   const [submission, setSubmission] = useState(null);
   const [isLoadingSub, setIsLoadingSub] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const [activeTab, setActiveTab] = useState("details");
+
+  // Flagged by sync when KoboToolbox stops returning this
+  // submission. Any decision on it is unsyncable.
+  const isMissingFromKobo = Boolean(submission?.missing_from_kobo_at);
 
   // Edit mode state
   const [editingSection, setEditingSection] = useState(null);
@@ -194,12 +210,14 @@ export default function PlotDetailPanel({
         }
       })
       .finally(() => {
-        if (!cancelled) {setIsLoadingSub(false);}
+        if (!cancelled) {
+          setIsLoadingSub(false);
+        }
       });
     return () => {
       cancelled = true;
     };
-  }, [plot?.submission_uuid]);
+  }, [plot?.submission_uuid, refreshKey]);
 
   // Reset edit state when plot changes
   useEffect(() => {
@@ -213,7 +231,9 @@ export default function PlotDetailPanel({
 
   const handleStartEdit = useCallback(
     async (section) => {
-      if (!submission) {return;}
+      if (!submission) {
+        return;
+      }
       // Fetch form questions with options (cached)
       // Only needed for non-plot sections (plot uses plot_field_specs)
       if (section !== "plot" && formQuestions.length === 0) {
@@ -261,7 +281,9 @@ export default function PlotDetailPanel({
   );
 
   const handleSave = useCallback(async () => {
-    if (!plot?.submission_uuid) {return;}
+    if (!plot?.submission_uuid) {
+      return;
+    }
     setIsSaving(true);
     try {
       const res = await api.patch(
@@ -310,7 +332,9 @@ export default function PlotDetailPanel({
       return stdNames
         .map((stdName) => {
           const entry = mapped[stdName];
-          if (!entry?.question_name) {return null;}
+          if (!entry?.question_name) {
+            return null;
+          }
           const q = formQuestions.find((fq) => fq.name === entry.question_name);
           return {
             questionName: entry.question_name,
@@ -621,6 +645,7 @@ export default function PlotDetailPanel({
                       <p className="text-xs text-muted-foreground">
                         by {audit.validator_name || "Unknown"}
                       </p>
+                      <TelegramStatusBadge audit={audit} onResent={onNotify} />
                     </div>
                   ))}
                 </div>
@@ -632,6 +657,7 @@ export default function PlotDetailPanel({
               <Button
                 variant="outline"
                 className="w-full"
+                disabled={isMissingFromKobo}
                 onClick={onStartEditing}
               >
                 <span className="font-semibold">Edit polygon</span>
@@ -661,11 +687,39 @@ export default function PlotDetailPanel({
         )}
       </ScrollArea>
 
+      {/* A submission Kobo no longer has can never sync
+          again, so every decision on it is inert. The
+          buttons stay visible but disabled, with the
+          reason stated and deletion offered. */}
+      {isMissingFromKobo && (
+        <div className="flex flex-col gap-2 border-t border-border p-4 position-sticky bottom-0 bg-card">
+          <p className="flex items-start gap-1.5 text-xs text-amber-600">
+            <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+            <span>
+              This submission no longer exists in KoboToolbox. Approving or
+              rejecting it cannot be synced and the field team would not be
+              notified.
+            </span>
+          </p>
+          {submission?.can_delete ? (
+            <Button
+              variant="destructive"
+              className="w-full"
+              onClick={onDeleteSubmission}
+            >
+              <Trash2 className="mr-2 size-4" />
+              Delete submission
+            </Button>
+          ) : null}
+        </div>
+      )}
+
       {/* Action buttons */}
       {(["pending", "flagged"].includes(status) || isResetting) && (
         <div className="flex gap-2 border-t border-border p-4 position-sticky bottom-0 bg-card">
           <Button
             className="flex-1 bg-status-approved text-white hover:bg-status-approved/90"
+            disabled={isMissingFromKobo}
             onClick={() => {
               if (isResetting) {
                 setIsResetting(false);
@@ -678,6 +732,7 @@ export default function PlotDetailPanel({
           <Button
             variant="destructive"
             className="flex-1"
+            disabled={isMissingFromKobo}
             onClick={() => {
               if (isResetting) {
                 setIsResetting(false);
@@ -694,6 +749,7 @@ export default function PlotDetailPanel({
           <Button
             variant="outline"
             className="w-full"
+            disabled={isMissingFromKobo}
             onClick={() => setIsResetting(true)}
           >
             Reset Approval
@@ -701,6 +757,7 @@ export default function PlotDetailPanel({
           <Button
             variant="outline"
             className="w-full"
+            disabled={isMissingFromKobo}
             onClick={onRevertToPending}
           >
             Revert to Pending

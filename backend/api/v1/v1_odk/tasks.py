@@ -1,25 +1,31 @@
 import logging
+import os
 import re
-import time
+from datetime import timedelta
 from io import BytesIO
 from pathlib import Path
 
 from django.conf import settings
+from django.db.models import Q
 from django.utils import timezone
+from django.utils.html import escape
 from django_q.tasks import async_task
 from PIL import Image, ImageOps
 
-from api.v1.v1_init.helpers import get_telegram_config
+from api.v1.v1_init.helpers import (get_telegram_config,
+                                    migrate_telegram_group_id)
 from api.v1.v1_jobs.constants import JobStatus, JobTypes
 from api.v1.v1_jobs.models import Jobs
 from api.v1.v1_odk.constants import (ATTACHMENTS_FOLDER, PREFIX_FARM_ID,
                                      PREFIX_SUBM_ID, ApprovalStatusTypes,
                                      SyncStatus)
-from api.v1.v1_odk.export import (cleanup_old_exports, generate_geojson,
+from api.v1.v1_odk.export import (build_export_filename,
+                                  cleanup_old_exports, generate_geojson,
                                   generate_shapefile, generate_xlsx)
 from api.v1.v1_odk.models import FormMetadata, Plot, RejectionAudit, Submission
 from api.v1.v1_odk.serializers import build_option_lookup, resolve_value
 from api.v1.v1_odk.utils.farmer_sync import sync_farmers_for_form
+from api.v1.v1_odk.utils.plot_id import get_plot_uid
 from utils.encryption import decrypt
 from utils.kobo_client import KoboClient, KoboUnauthorizedError
 from utils.telegram_client import TelegramClient, TelegramSendError
@@ -31,6 +37,19 @@ STATUS_MAP = {
     "approved": ApprovalStatusTypes.APPROVED,
     "rejected": ApprovalStatusTypes.REJECTED,
 }
+
+
+def _set_stage(job, info, stage):
+    """Record which phase an export is in.
+
+    The client already polls the job endpoint, so
+    this is what distinguishes a slow export from a
+    stuck one without adding another endpoint.
+    """
+    info = {**info, "stage": stage}
+    job.info = info
+    job.save(update_fields=["info"])
+    return info
 
 
 def generate_export_file(job_id):
@@ -101,20 +120,34 @@ def generate_export_file(job_id):
             if field in allowed:
                 qs = qs.filter(**{"submission__" "raw_data__" f"{field}": val})
 
-        filename = f"plots_{form_id}_{job_id}"
+        filename = build_export_filename(form, job_id)
 
         if job.type == JobTypes.export_xlsx:
-            # XLSX: all plots, run farmer sync
-            sync_farmers_for_form(form)
-            ts = int(time.time())
-            safe_name = re.sub(r"[^\w\-.]", "_", form.name)[:80].strip("_") \
-                or "export"
-            xlsx_filename = f"{safe_name}_{ts}"
-            file_path, count = generate_xlsx(qs, form, xlsx_filename)
+            # XLSX carries a Farmer sheet, so refresh
+            # the Farmer rows first. A sync failure
+            # should leave the export with stale
+            # farmer data, not kill it outright.
+            info = _set_stage(job, info, "syncing_farmers")
+            try:
+                sync_farmers_for_form(form)
+            except Exception as e:
+                logger.exception(
+                    "Farmer sync failed for form %s "
+                    "during export job %s — "
+                    "continuing with existing "
+                    "farmer data",
+                    form.asset_uid,
+                    job_id,
+                )
+                info["farmer_sync_error"] = str(e)
+
+            info = _set_stage(job, info, "building_file")
+            file_path, count = generate_xlsx(qs, form, filename)
         else:
             # SHP/GeoJSON require geometry
             qs = qs.filter(polygon_wkt__isnull=False).exclude(polygon_wkt="")
 
+            info = _set_stage(job, info, "building_file")
             if job.type == (JobTypes.export_geojson):
                 file_path, count = generate_geojson(qs, form, filename)
             else:
@@ -124,7 +157,9 @@ def generate_export_file(job_id):
         job.info = {
             **info,
             "file_path": file_path,
+            "download_name": os.path.basename(file_path),
             "record_count": count,
+            "stage": "done",
         }
         job.available = timezone.now()
         job.save()
@@ -140,6 +175,20 @@ def generate_export_file(job_id):
         job.status = JobStatus.failed
         job.result = str(e)
         job.save()
+
+
+def _short_body(response):
+    """One-line, length-capped response body.
+
+    Kobo answers a missing asset with a full HTML
+    page; dumping it raw buries the useful signal.
+    """
+    if response is None:
+        return "n/a"
+    text = " ".join(
+        str(getattr(response, "text", "")).split()
+    )
+    return text[:200] or "n/a"
 
 
 def sync_kobo_validation_status(
@@ -184,12 +233,28 @@ def sync_kobo_validation_status(
             kobo_ids,
             asset_uid,
         )
-    except Exception:
+        # Re-raise so django_q records the task as
+        # failed. on_kobo_sync_complete gates the
+        # Telegram notification on task.success, so
+        # swallowing here would notify an enumerator
+        # about an update that never reached Kobo.
+        raise
+    except Exception as e:
         logger.exception(
-            "Failed to sync validation status " "for kobo_ids=%s on asset %s",
+            "Failed to sync validation status for "
+            "kobo_ids=%s on asset %s (status=%s, "
+            "body=%s). The form may have been "
+            "deleted or renamed in KoboToolbox.",
             kobo_ids,
             asset_uid,
+            getattr(
+                getattr(e, "response", None),
+                "status_code",
+                "n/a",
+            ),
+            _short_body(getattr(e, "response", None)),
         )
+        raise
 
 
 def sync_kobo_submission_geometry(
@@ -323,23 +388,40 @@ def on_kobo_sync_complete(task):
             )
         else:
             logger.info(
-                "Telegram disabled, skipping " "notification for audit %s",
+                "Telegram disabled, skipping "
+                "notification for audit %s",
                 audit_id,
             )
     else:
         audit.sync_status = SyncStatus.FAILED
         audit.save(update_fields=["sync_status"])
         logger.warning(
-            "Kobo sync failed for audit %s",
+            "Kobo sync FAILED for audit %s — "
+            "suppressing the Telegram rejection "
+            "notification. The enumerator is not "
+            "told, because the rejection never "
+            "reached KoboToolbox. See the "
+            "sync_kobo_validation_status traceback "
+            "above for the cause.",
             audit_id,
         )
 
 
-def _escape_markdown(text):
-    """Escape Telegram MarkdownV1 special chars."""
-    for ch in ("_", "*", "`", "["):
-        text = text.replace(ch, f"\\{ch}")
-    return text
+def _telegram_targets(tg_config):
+    """Chat ids to notify, de-duplicated, in order.
+
+    Both group ids routinely point at the same chat;
+    sending twice would double-post.
+    """
+    targets = []
+    for key in (
+        "supervisor_group_id",
+        "enumerator_group_id",
+    ):
+        chat_id = tg_config.get(key)
+        if chat_id and chat_id not in targets:
+            targets.append(chat_id)
+    return targets
 
 
 def _resolve_field_spec(raw_data, field_spec, option_map, type_map):
@@ -402,12 +484,126 @@ def _resolve_plot_location(submission, plot):
     return region or sub_region or "Unknown Location"
 
 
+def _deliver_to_chat(client, chat_id, message, audit):
+    """Send to one chat, following a supergroup move.
+
+    Returns (chat_id_used, message_id). Raises
+    TelegramSendError -- including for transport faults,
+    which TelegramClient now normalises -- so the caller
+    records the failure and lets the sweep retry.
+
+    There is deliberately no plain-text retry here. A
+    blind resend is wrong for every failure mode it can
+    see: for 429 it lengthens Telegram's progressive
+    flood-wait, for 403 it is a second guaranteed
+    refusal, and for a timeout that fired *after*
+    delivery it double-posts.
+    """
+    try:
+        return chat_id, client.send_message(
+            chat_id, message
+        )
+    except TelegramSendError as e:
+        if not e.migrate_to_chat_id:
+            raise
+        # The group became a supergroup and Telegram
+        # issued a new id. Persist it, or every future
+        # send fails permanently.
+        new_chat_id = str(e.migrate_to_chat_id)
+        logger.warning(
+            "Chat %s migrated to supergroup %s — "
+            "persisting the new id and retrying "
+            "(audit %s)",
+            chat_id,
+            new_chat_id,
+            audit.pk,
+        )
+        migrate_telegram_group_id(
+            chat_id, new_chat_id
+        )
+        return new_chat_id, client.send_message(
+            new_chat_id, message
+        )
+
+
+def _build_rejection_message(audit):
+    """Render the notification body as Telegram HTML.
+
+    HTML needs exactly three characters escaped and
+    django.utils.html.escape covers all three -- unlike
+    legacy Markdown, whose incomplete escape set used to
+    lose messages containing "]" or "(".
+    """
+    plot = audit.plot
+    submission = audit.submission
+    validator_name = (
+        audit.validator.name
+        if audit.validator
+        else "Unknown"
+    )
+    category_display = (
+        audit.get_reason_category_display()
+    )
+    reason = category_display
+    if audit.reason_text:
+        reason = (
+            f"{category_display}: "
+            f"{audit.reason_text}"
+        )
+
+    rejected_at_str = (
+        audit.rejected_at.strftime(
+            "%Y-%m-%d %H:%M UTC"
+        )
+        if audit.rejected_at
+        else "N/A"
+    )
+    location = _resolve_plot_location(
+        submission, plot
+    )
+
+    plot_id = get_plot_uid(submission) or "N/A"
+    submission_id = "N/A"
+    if submission.kobo_id:
+        submission_id = (
+            f"{PREFIX_SUBM_ID}{submission.kobo_id}"
+        )
+    farm_id = "N/A"
+    if plot.farmer and plot.farmer.uid:
+        farm_id = (
+            f"{PREFIX_FARM_ID}{plot.farmer.uid}"
+        )
+
+    return (
+        f"<b>Plot Rejected</b>\n\n"
+        f"<b>Plot ID:</b> {escape(plot_id)}\n"
+        f"<b>Submission ID:</b> "
+        f"{escape(submission_id)}\n"
+        f"<b>Farm ID:</b> {escape(farm_id)}\n"
+        f"<b>Location:</b> {escape(location)}\n"
+        f"<b>Reason:</b> {escape(reason)}\n"
+        f"<b>Validated by:</b> "
+        f"{escape(validator_name)}\n"
+        f"<b>Time:</b> "
+        f"{escape(rejected_at_str)}\n\n"
+        f"<i>Please review and recollect "
+        f"if needed.</i>"
+    )
+
+
 def send_telegram_rejection_notification(audit_id):
     """Send Telegram notification for a
     rejected plot submission.
 
-    Called asynchronously after successful
-    Kobo validation sync.
+    Idempotent: telegram_chat_ids is the delivery
+    ledger, so a chat already in it is never sent to
+    again. That is what makes the retry sweep and the
+    manual resend safe.
+
+    Never raises. A failed attempt is recorded state,
+    not an exception -- the sweep owns recovery, and an
+    exception here would only be swallowed by
+    Q_CLUSTER's max_attempts=1.
     """
     try:
         audit = RejectionAudit.objects.select_related(
@@ -426,103 +622,221 @@ def send_telegram_rejection_notification(audit_id):
     tg_config = get_telegram_config()
     if not tg_config["enabled"]:
         logger.info(
-            "Telegram disabled, skipping " "notification for audit %s",
+            "Telegram disabled, skipping "
+            "notification for audit %s",
             audit_id,
         )
         return
 
     bot_token = tg_config["bot_token"]
     if not bot_token:
-        logger.warning("TELEGRAM_BOT_TOKEN not set, " "skipping notification")
+        logger.warning(
+            "No Telegram bot token configured "
+            "(neither TELEGRAM_BOT_TOKEN nor the "
+            "'telegram' SystemSetting) — skipping "
+            "notification for audit %s",
+            audit_id,
+        )
         return
 
-    plot = audit.plot
-    submission = audit.submission
-    validator_name = audit.validator.name if audit.validator else "Unknown"
-    category_display = audit.get_reason_category_display()
-    reason = category_display
-    if audit.reason_text:
-        reason = f"{category_display}: " f"{audit.reason_text}"
+    targets = _telegram_targets(tg_config)
+    if not targets:
+        logger.warning(
+            "No Telegram group ID configured — no "
+            "notification sent for audit %s",
+            audit_id,
+        )
+        return
 
-    rejected_at_str = (
-        audit.rejected_at.strftime("%Y-%m-%d %H:%M UTC")
-        if audit.rejected_at else "N/A"
-    )
-    plot_location = _resolve_plot_location(submission, plot)
+    delivered = list(audit.telegram_chat_ids or [])
+    outstanding = [
+        c for c in targets if c not in delivered
+    ]
+    if not outstanding:
+        logger.info(
+            "Audit %s already delivered to every "
+            "configured group — nothing to send",
+            audit_id,
+        )
+        return
 
-    esc = _escape_markdown
-    submission_id = "N/A"
-    if submission.kobo_id:
-        submission_id = f"{PREFIX_SUBM_ID}{submission.kobo_id}"
-    farm_id = "N/A"
-    if plot.farmer and plot.farmer.uid:
-        farm_id = f"{PREFIX_FARM_ID}{plot.farmer.uid}"
-    message = (
-        f"*Plot Rejected*\n\n"
-        f"*Submission ID:* {esc(submission_id)}\n"
-        f"*Farm ID:* {esc(farm_id)}\n"
-        f"*Location:* {esc(plot_location)}\n"
-        f"*Reason:* {esc(reason)}\n"
-        f"*Validated by:* "
-        f"{esc(validator_name)}\n"
-        f"*Time:* {esc(rejected_at_str)}\n\n"
-        f"_Please review and recollect "
-        f"if needed._"
+    message_ids = [
+        m
+        for m in (
+            audit.telegram_message_id or ""
+        ).split(",")
+        if m
+    ]
+
+    audit.telegram_attempts += 1
+    audit.telegram_last_attempt_at = timezone.now()
+    audit.save(
+        update_fields=[
+            "telegram_attempts",
+            "telegram_last_attempt_at",
+        ]
     )
 
     client = TelegramClient(bot_token)
-    chat_ids = []
-    message_ids = []
-    groups = [
-        (
-            "supervisor",
-            tg_config["supervisor_group_id"],
-        ),
-        (
-            "enumerator",
-            tg_config["enumerator_group_id"],
-        ),
-    ]
-    seen = set()
+    message = _build_rejection_message(audit)
+    last_error = None
+    retry_after = None
 
-    for label, chat_id in groups:
-        if not chat_id or chat_id in seen:
-            logger.info(
-                "No %s group ID configured, " "skipping",
-                label,
+    for chat_id in outstanding:
+        try:
+            used_id, msg_id = _deliver_to_chat(
+                client, chat_id, message, audit
+            )
+        except TelegramSendError as e:
+            last_error = f"{chat_id}: {e}"
+            if e.retry_after:
+                # Telegram lengthens the flood-wait every
+                # time it is ignored, so honour the longest
+                # value it gave us this round.
+                retry_after = max(
+                    retry_after or 0, e.retry_after
+                )
+            logger.warning(
+                "Telegram send failed for group %s "
+                "(audit %s): %s — will retry on the "
+                "next sweep%s",
+                chat_id,
+                audit_id,
+                e,
+                (
+                    f" (not before {e.retry_after}s, per "
+                    f"Telegram)"
+                    if e.retry_after
+                    else ""
+                ),
             )
             continue
-        seen.add(chat_id)
-        try:
-            msg_id = client.send_message(chat_id, message)
-            chat_ids.append(chat_id)
-            message_ids.append(str(msg_id))
-            logger.info(
-                "Sent Telegram notification to " "%s group %s for audit %s",
-                label,
-                chat_id,
-                audit_id,
-            )
-        except TelegramSendError:
-            logger.exception(
-                "Failed to send Telegram "
-                "notification to %s group %s "
-                "for audit %s",
-                label,
-                chat_id,
-                audit_id,
-            )
 
-    if chat_ids:
-        audit.telegram_sent_at = timezone.now()
-        audit.telegram_chat_ids = chat_ids
-        audit.telegram_message_id = ",".join(message_ids)
+        # Saved per chat, not once at the end: a crash
+        # between two sends must not lose the record of
+        # the first, or the retry would double-post.
+        delivered.append(used_id)
+        message_ids.append(str(msg_id))
+        audit.telegram_chat_ids = delivered
+        audit.telegram_message_id = ",".join(
+            message_ids
+        )
         audit.save(
             update_fields=[
-                "telegram_sent_at",
                 "telegram_chat_ids",
                 "telegram_message_id",
             ]
+        )
+        logger.info(
+            "Sent Telegram notification to group %s "
+            "for audit %s",
+            used_id,
+            audit_id,
+        )
+
+    audit.telegram_last_error = last_error
+    audit.telegram_next_attempt_at = (
+        timezone.now() + timedelta(seconds=retry_after)
+        if retry_after
+        else None
+    )
+    if all(c in delivered for c in targets):
+        audit.telegram_sent_at = timezone.now()
+    audit.save(
+        update_fields=[
+            "telegram_last_error",
+            "telegram_next_attempt_at",
+            "telegram_sent_at",
+        ]
+    )
+
+
+def retry_pending_telegram_notifications():
+    """Re-enqueue notifications that never fully
+    delivered.
+
+    This is the only retry path. Q_CLUSTER pins
+    max_attempts=1, so a task that fails is never
+    redelivered; and an in-process retry would not
+    survive a worker restart. A scheduled sweep does
+    both.
+    """
+    # The kill switch is read here, not at schedule
+    # registration: "enabled" lives in SystemSetting
+    # and can be toggled at any time, so a schedule
+    # registered while off must still work once it is
+    # turned on -- and vice versa.
+    tg_config = get_telegram_config()
+    if (
+        not tg_config["enabled"]
+        or not tg_config["bot_token"]
+    ):
+        logger.debug(
+            "Telegram disabled or unconfigured — "
+            "skipping retry sweep"
+        )
+        return
+
+    cutoff = timezone.now() - timedelta(
+        minutes=settings.TELEGRAM_RETRY_COOLDOWN_MINUTES
+    )
+
+    # sync_status=SYNCED is essential: it preserves the
+    # rule that a rejection which never reached Kobo
+    # must not notify the enumerator.
+    now = timezone.now()
+    stuck = (
+        RejectionAudit.objects.filter(
+            sync_status=SyncStatus.SYNCED,
+            telegram_sent_at__isnull=True,
+            telegram_attempts__lt=(
+                settings.TELEGRAM_MAX_ATTEMPTS
+            ),
+        )
+        .filter(
+            Q(telegram_last_attempt_at__isnull=True)
+            | Q(telegram_last_attempt_at__lt=cutoff)
+        )
+        # Telegram's own backoff wins when it is longer than
+        # our cooldown. Retrying inside a flood-wait just
+        # extends it, so both conditions must hold.
+        .filter(
+            Q(telegram_next_attempt_at__isnull=True)
+            | Q(telegram_next_attempt_at__lte=now)
+        )
+    )
+    for audit in stuck:
+        logger.info(
+            "Retrying Telegram notification for "
+            "audit %s (attempt %s of %s)",
+            audit.pk,
+            audit.telegram_attempts + 1,
+            settings.TELEGRAM_MAX_ATTEMPTS,
+        )
+        async_task(
+            "api.v1.v1_odk.tasks"
+            ".send_telegram_rejection_notification",
+            audit.pk,
+        )
+
+    # django_q's call_hook swallows every exception the
+    # hook raises, so a failed on_kobo_sync_complete
+    # leaves sync_status at "pending" forever. These
+    # must NOT be notified -- nothing recorded whether
+    # Kobo accepted the update -- but they must not
+    # stay invisible either.
+    stale_pending = RejectionAudit.objects.filter(
+        sync_status=SyncStatus.PENDING,
+        rejected_at__lt=cutoff,
+    ).count()
+    if stale_pending:
+        logger.warning(
+            "%s rejection audit(s) stuck at "
+            "sync_status=pending — the "
+            "on_kobo_sync_complete hook probably "
+            "failed; see the django_q ERROR log. No "
+            "notification is sent for these.",
+            stale_pending,
         )
 
 

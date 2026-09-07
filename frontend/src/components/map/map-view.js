@@ -9,11 +9,7 @@ import { MapContainer, TileLayer, ZoomControl } from "react-leaflet";
 import { useMemo, useState } from "react";
 import { Construction, Satellite } from "lucide-react";
 import basemaps, { DEFAULT_BASEMAP } from "@/lib/basemap-config";
-import {
-  DEFAULT_CENTER,
-  DEFAULT_ZOOM,
-  MAX_ZOOM,
-} from "@/lib/map-styles";
+import { DEFAULT_CENTER, DEFAULT_ZOOM, MAX_ZOOM } from "@/lib/map-styles";
 import usePlotFeatures from "@/hooks/usePlotFeatures";
 import MapController from "@/components/map/map-controller";
 import MapEditLayer from "@/components/map/map-edit-layer";

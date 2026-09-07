@@ -49,8 +49,7 @@ export function FormRegisterCard({ registerForm }) {
       } else if (errData && typeof errData === "object") {
         const fieldErrors = Object.values(errData).flat().join(" ");
         if (fieldErrors) {
-          message =
-            fieldErrors.charAt(0).toUpperCase() + fieldErrors.slice(1);
+          message = fieldErrors.charAt(0).toUpperCase() + fieldErrors.slice(1);
         }
       }
       setStatus({ type: "error", message });
@@ -107,11 +106,7 @@ export function FormRegisterCard({ registerForm }) {
             </p>
           </div>
           <div className="pt-6">
-            <Button
-              type="submit"
-              disabled={isRegistering}
-              className="shrink-0"
-            >
+            <Button type="submit" disabled={isRegistering} className="shrink-0">
               {isRegistering ? (
                 <>
                   <Loader2 className="size-4 animate-spin" />

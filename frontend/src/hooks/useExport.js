@@ -153,7 +153,9 @@ export function ExportProvider({ children }) {
       end_date,
       dynamic_filters,
     }) => {
-      if (isExporting) {return;}
+      if (isExporting) {
+        return;
+      }
 
       setIsExporting(true);
       startedAtRef.current = Date.now();
@@ -167,10 +169,18 @@ export function ExportProvider({ children }) {
 
       try {
         const body = { form_id: formId, status, search, format };
-        if (region) {body.region = region;}
-        if (subRegion) {body.sub_region = subRegion;}
-        if (start_date) {body.start_date = start_date;}
-        if (end_date) {body.end_date = end_date;}
+        if (region) {
+          body.region = region;
+        }
+        if (subRegion) {
+          body.sub_region = subRegion;
+        }
+        if (start_date) {
+          body.start_date = start_date;
+        }
+        if (end_date) {
+          body.end_date = end_date;
+        }
         if (dynamic_filters && Object.keys(dynamic_filters).length > 0) {
           body.dynamic_filters = dynamic_filters;
         }

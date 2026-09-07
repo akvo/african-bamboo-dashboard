@@ -26,9 +26,7 @@ export function MultiSelectDropdown({
   const resolveBadgeLabel =
     getBadgeLabel ||
     ((key) => {
-      const item = items.find(
-        (i) => i.full_path === key || i.name === key,
-      );
+      const item = items.find((i) => i.full_path === key || i.name === key);
       return item?.label || key;
     });
 

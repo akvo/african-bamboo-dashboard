@@ -1,9 +1,12 @@
 from unittest.mock import patch
 
-from django.db import IntegrityError, transaction
 from django.test import TestCase, override_settings
 
-from api.v1.v1_odk.models import FormMetadata, Submission
+from api.v1.v1_odk.models import (
+    FormMetadata,
+    Plot,
+    Submission,
+)
 from api.v1.v1_odk.tasks import (
     download_submission_attachments,
 )
@@ -91,18 +94,92 @@ class ClonedFormSyncTest(OdkTestHelperMixin, TestCase):
             ).exists()
         )
 
-    def test_same_uuid_twice_on_one_form_still_rejected(self):
-        """Uniqueness moved scope, it was not dropped. Two
-        rows with one uuid on the SAME form is still a bug."""
-        with self.assertRaises(IntegrityError):
-            with transaction.atomic():
-                Submission.objects.create(
-                    uuid=SHARED_UUID,
-                    form=self.origin,
-                    kobo_id="different-id",
-                    submission_time=1700000000000,
-                    raw_data={},
-                )
+    def test_edit_keeps_id_and_refreshes_uuid(self):
+        """Editing in Kobo keeps _id and changes _uuid.
+
+        Observed on 4 of 128 rows in one form. Keying the
+        upsert on uuid treated each edit as a new submission
+        and collided on (form, kobo_id).
+        """
+        origin_sub = Submission.objects.get(
+            form=self.origin, uuid=SHARED_UUID
+        )
+        original_pk = origin_sub.pk
+        plot = Plot.objects.create(
+            plot_name="Edited Plot",
+            form=self.origin,
+            region="R",
+            sub_region="S",
+            created_at=1700000000000,
+            submission=origin_sub,
+        )
+
+        resp = self._sync(
+            self.origin,
+            # Same _id, new _uuid: an edit.
+            [kobo_item("763197472", "301180e4-new-uuid")],
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(
+            Submission.objects.filter(
+                form=self.origin
+            ).count(),
+            1,
+        )
+        origin_sub.refresh_from_db()
+        self.assertEqual(
+            origin_sub.uuid, "301180e4-new-uuid"
+        )
+        # Same row, so the plot and everything hanging off
+        # the submission survive the edit.
+        self.assertEqual(origin_sub.pk, original_pk)
+        plot.refresh_from_db()
+        self.assertEqual(plot.submission_id, original_pk)
+
+    def test_reimport_with_new_id_adds_a_row(self):
+        """A re-import keeps _uuid and takes a new _id.
+
+        The old _id is gone from Kobo, so the superseded row
+        is left for the stale sweep rather than being
+        silently merged into the new one.
+        """
+        resp = self._sync(
+            self.origin,
+            # Same _uuid, different _id.
+            [kobo_item("808919788", SHARED_UUID)],
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        rows = Submission.objects.filter(
+            form=self.origin, uuid=SHARED_UUID
+        )
+        self.assertEqual(rows.count(), 2)
+        # The row Kobo no longer returns is flagged, so the
+        # UI blocks approve/reject on it.
+        superseded = rows.get(kobo_id="763197472")
+        self.assertIsNotNone(
+            superseded.missing_from_kobo_at
+        )
+        current = rows.get(kobo_id="808919788")
+        self.assertIsNone(current.missing_from_kobo_at)
+
+    def test_same_uuid_twice_on_one_form_is_allowed(self):
+        """uuid carries no uniqueness. A re-import legitimately
+        produces two rows sharing one instance uuid."""
+        Submission.objects.create(
+            uuid=SHARED_UUID,
+            form=self.origin,
+            kobo_id="another-id",
+            submission_time=1700000000000,
+            raw_data={},
+        )
+        self.assertEqual(
+            Submission.objects.filter(
+                form=self.origin, uuid=SHARED_UUID
+            ).count(),
+            2,
+        )
 
 
 @override_settings(USE_TZ=False, TEST_ENV=True)

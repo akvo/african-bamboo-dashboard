@@ -106,11 +106,13 @@ class ApprovalStatus(models.IntegerChoices):
 
 
 class Submission(models.Model):
-    # Kobo's _uuid identifies a submission within an asset,
-    # not globally: cloning a project copies submissions with
-    # their original _uuid under new _id values. A global
-    # unique constraint therefore made syncing a cloned form
-    # fail with IntegrityError on submissions_uuid_key.
+    # Not unique in any scope. Kobo changes _uuid when a
+    # submission is edited and keeps it when a submission is
+    # re-imported under a new _id, so two rows in one form can
+    # legitimately carry the same uuid for a while -- until
+    # the stale sweep flags the superseded one.
+    #
+    # (form, kobo_id) is the key; see _upsert_submission.
     uuid = models.CharField(
         max_length=255,
         db_index=True,
@@ -177,10 +179,7 @@ class Submission(models.Model):
     class Meta:
         db_table = "submissions"
         ordering = ["-submission_time"]
-        unique_together = (
-            ("form", "kobo_id"),
-            ("form", "uuid"),
-        )
+        unique_together = ("form", "kobo_id")
 
     def __str__(self):
         return self.instance_name or self.uuid

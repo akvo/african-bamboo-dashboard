@@ -674,6 +674,20 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
             if kobo_uid
             else None
         )
+        # Keyed on (form, kobo_id). Neither Kobo field is
+        # stable on its own:
+        #
+        #   edit in Kobo -> _id stays, _uuid CHANGES
+        #   re-import    -> _id changes, _uuid stays
+        #
+        # _id is Kobo's own operational identifier -- it is
+        # what /data/<id> and update_validation_statuses use
+        # -- and editing is by far the common case, so _id is
+        # the key and uuid is refreshed as data.
+        #
+        # On a re-import the old _id disappears from Kobo, so
+        # the superseded row is picked up by the stale sweep
+        # rather than being silently carried forward.
         return Submission.objects.update_or_create(
             form=form,
             kobo_id=str(item["_id"]),
@@ -842,9 +856,32 @@ class SubmissionViewSet(
 
         matches = list(qs[:2])
         if not matches:
-            raise Http404("No submission matches the given uuid.")
+            raise Http404(
+                "No submission matches the given uuid."
+            )
+
         if len(matches) > 1:
-            raise AmbiguousSubmission()
+            if len({m.form_id for m in matches}) > 1:
+                # Different assets: unrelated submissions
+                # that merely share an instance uuid.
+                # Returning either would show the wrong
+                # form's data, or apply a validator's
+                # decision to it.
+                raise AmbiguousSubmission()
+            # Same asset: a re-import kept the uuid under a
+            # new _id, so the old row is superseded and about
+            # to be flagged stale. Meta.ordering is
+            # -submission_time, so matches[0] is the current
+            # one.
+            logger.info(
+                "uuid %s matches %s rows on form %s; using "
+                "the most recent (kobo_id=%s). The others "
+                "were superseded by a re-import.",
+                self.kwargs["uuid"],
+                len(matches),
+                matches[0].form_id,
+                matches[0].kobo_id,
+            )
 
         self.check_object_permissions(self.request, matches[0])
         return matches[0]

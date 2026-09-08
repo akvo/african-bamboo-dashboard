@@ -23,7 +23,14 @@ def kobo_item(kobo_id, uuid_str):
     }
 
 
-@override_settings(USE_TZ=False, TEST_ENV=True)
+# Deletion is a deployment choice, so pin it off here:
+# these tests are about flagging, and must not depend on
+# whether the developer has SYNC_DELETE_STALE_AFTER_DAYS set.
+@override_settings(
+    USE_TZ=False,
+    TEST_ENV=True,
+    SYNC_DELETE_STALE_AFTER_DAYS=None,
+)
 class StaleSubmissionSyncTest(
     OdkTestHelperMixin, TestCase
 ):
@@ -108,7 +115,14 @@ class StaleSubmissionSyncTest(
         self.assertIsNone(self.gone.missing_from_kobo_at)
 
 
-@override_settings(USE_TZ=False, TEST_ENV=True)
+# Deletion is a deployment choice, so pin it off here:
+# these tests are about flagging, and must not depend on
+# whether the developer has SYNC_DELETE_STALE_AFTER_DAYS set.
+@override_settings(
+    USE_TZ=False,
+    TEST_ENV=True,
+    SYNC_DELETE_STALE_AFTER_DAYS=None,
+)
 class StaleSubmissionActionsTest(
     OdkTestHelperMixin, TestCase
 ):

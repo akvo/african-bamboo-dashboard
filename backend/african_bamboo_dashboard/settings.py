@@ -328,6 +328,23 @@ TELEGRAM_ENUMERATOR_GROUP_ID = environ.get(
 # notification is retried; COOLDOWN_MINUTES is both the
 # sweep interval and the minimum gap between two
 # attempts on one audit, which is the backoff.
+# Automatic removal of submissions KoboToolbox no longer
+# returns. Unset (the default) means sync only flags them:
+# flagging is reversible, deleting is not, so a deployment
+# has to ask for this.
+#
+# The value is a grace period in days. A row must have been
+# flagged that long before it goes, so a partial Kobo fetch
+# that un-flags on the next sync cannot take data with it.
+# 0 is a valid, deliberate choice -- delete on the same sync
+# that notices the row is gone, no grace at all.
+_stale_days = environ.get(
+    "SYNC_DELETE_STALE_AFTER_DAYS", ""
+).strip()
+SYNC_DELETE_STALE_AFTER_DAYS = (
+    int(_stale_days) if _stale_days else None
+)
+
 TELEGRAM_MAX_ATTEMPTS = int(
     environ.get("TELEGRAM_MAX_ATTEMPTS", 5)
 )

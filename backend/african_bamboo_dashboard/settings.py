@@ -328,6 +328,17 @@ TELEGRAM_ENUMERATOR_GROUP_ID = environ.get(
 # notification is retried; COOLDOWN_MINUTES is both the
 # sweep interval and the minimum gap between two
 # attempts on one audit, which is the backoff.
+# Automatic removal of submissions KoboToolbox no longer
+# returns. Off by default: flagging is reversible, deleting is
+# not, and a partial Kobo fetch would otherwise destroy live
+# records. Set to a positive number of days to enable -- a row
+# must have been flagged for at least that long, so a
+# transient Kobo blip that un-flags on the next sync cannot
+# take data with it.
+SYNC_DELETE_STALE_AFTER_DAYS = int(
+    environ.get("SYNC_DELETE_STALE_AFTER_DAYS", 0)
+)
+
 TELEGRAM_MAX_ATTEMPTS = int(
     environ.get("TELEGRAM_MAX_ATTEMPTS", 5)
 )

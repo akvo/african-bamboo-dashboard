@@ -50,6 +50,20 @@ export function FormsTable({ forms, isLoading, syncForm, onConfigureClick }) {
             "KoboToolbox and can only be deleted",
         );
       }
+      // Only ever non-zero where the deployment opted into
+      // automatic removal, so say what went rather than
+      // leaving the count to be noticed later.
+      if (result.stale_deleted) {
+        parts.push(
+          `${result.stale_deleted} long-absent submission(s) removed`,
+        );
+      }
+      if (result.stale_kept) {
+        parts.push(
+          `${result.stale_kept} kept because they carry a ` +
+            "rejection or a Plot ID",
+        );
+      }
       setStatus({
         type: result.stale ? "warning" : "success",
         message: parts.join(". ") + ".",

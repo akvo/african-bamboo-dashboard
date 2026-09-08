@@ -1,7 +1,8 @@
 import logging
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
+from django.conf import settings
 from django.db.models import (
     Exists,
     F,
@@ -545,8 +546,15 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
             counts["stale"] = (
                 self._flag_stale_submissions(form, results)
             )
+            deleted, kept = self._delete_stale_submissions(
+                form
+            )
+            counts["stale_deleted"] = deleted
+            counts["stale_kept"] = kept
         except Exception:
             counts["stale"] = 0
+            counts["stale_deleted"] = 0
+            counts["stale_kept"] = 0
             logger.exception(
                 "Stale-submission check failed for form %s "
                 "— the sync itself succeeded",
@@ -649,6 +657,86 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
                 ", ".join(newly_stale[:20]),
             )
         return len(stale_ids)
+
+    def _delete_stale_submissions(self, form):
+        """Remove rows KoboToolbox has not returned for a
+        while, when the deployment has opted in.
+
+        Off unless SYNC_DELETE_STALE_AFTER_DAYS is positive.
+        Flagging is reversible and deleting is not, so the
+        default is to flag and let an operator decide.
+
+        Three guards, because this runs unattended:
+
+        1. A grace period. The row must have been flagged for
+           the configured number of days, so a Kobo outage
+           that resolves on the next sync cannot take data
+           with it -- _flag_stale_submissions clears the flag
+           the moment a submission reappears.
+        2. Rows carrying user-visible history are kept. A
+           rejection audit or a Plot ID is a record someone
+           made, not Kobo data, and it should not disappear
+           because an upstream row did. Deleting those stays
+           a deliberate act through the UI.
+        3. The plot goes with the submission, since
+           Plot.submission is SET_NULL and an orphaned plot
+           has no data and no possible action.
+
+        Returns (deleted, kept).
+        """
+        days = getattr(
+            settings, "SYNC_DELETE_STALE_AFTER_DAYS", 0
+        )
+        if days <= 0:
+            return 0, 0
+
+        cutoff = timezone.now() - timedelta(days=days)
+        due = Submission.objects.filter(
+            form=form,
+            missing_from_kobo_at__isnull=False,
+            missing_from_kobo_at__lt=cutoff,
+        )
+
+        protected = set(
+            due.filter(
+                Q(rejection_audits__isnull=False)
+                | Q(main_plot_submission__isnull=False)
+            ).values_list("pk", flat=True)
+        )
+        removable = {
+            pk: uuid
+            for pk, uuid in due.values_list("pk", "uuid")
+            if pk not in protected
+        }
+
+        kept = len(protected)
+        deleted = len(removable)
+        if deleted:
+            Plot.objects.filter(
+                submission_id__in=removable
+            ).delete()
+            Submission.objects.filter(
+                pk__in=removable
+            ).delete()
+            uuids = list(removable.values())[:20]
+            logger.warning(
+                "Deleted %s submission(s) and their plots "
+                "on form %s, absent from KoboToolbox for "
+                "more than %s day(s) (uuids: %s)",
+                deleted,
+                form.asset_uid,
+                days,
+                ", ".join(uuids),
+            )
+        if kept:
+            logger.info(
+                "Kept %s stale submission(s) on form %s "
+                "that carry a rejection audit or Plot ID; "
+                "delete those from the plot detail panel.",
+                kept,
+                form.asset_uid,
+            )
+        return deleted, kept
 
     def _upsert_submission(self, form, item):
         """Upsert a single Kobo submission."""

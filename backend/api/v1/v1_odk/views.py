@@ -512,9 +512,22 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
             )
             form.save()
 
-        counts["stale"] = (
-            self._flag_stale_submissions(form, results)
-        )
+        # Reporting stale rows must never break the sync
+        # itself. This path is new and runs against forms far
+        # larger than any test fixture, so a failure here
+        # degrades to "no stale count" rather than a 500 on an
+        # operation that otherwise succeeded.
+        try:
+            counts["stale"] = (
+                self._flag_stale_submissions(form, results)
+            )
+        except Exception:
+            counts["stale"] = 0
+            logger.exception(
+                "Stale-submission check failed for form %s "
+                "— the sync itself succeeded",
+                form.asset_uid,
+            )
 
         # Post-sync sweep: re-check plots whose
         # flags were cleared by old buggy code
@@ -548,56 +561,70 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
     def _flag_stale_submissions(self, form, results):
         """Mark local rows KoboToolbox no longer returns.
 
-        A submission deleted in Kobo leaves a local row
-        that can never sync again: every validation-status
-        update for it answers 400 "One or more submission
-        ids are invalid", so a rejection on it silently
-        never reaches Kobo and never notifies anyone.
+        A submission deleted in Kobo leaves a local row that
+        can never sync again: every validation-status update
+        for it answers 400 "One or more submission ids are
+        invalid", so a rejection on it silently never reaches
+        Kobo and never notifies anyone.
 
         Flagged, never deleted here — the row may carry a
-        Plot, rejection history and a Plot ID link, so
-        removal is an explicit operator action. Skipped
-        entirely on an empty result, since a failed or
-        partial fetch must not condemn every row.
+        Plot, rejection history and a Plot ID link, so removal
+        is an explicit operator action. Skipped entirely on an
+        empty result, since a failed or partial fetch must not
+        condemn every row.
+
+        The set difference is computed in Python rather than
+        with `kobo_id__in=<every fetched id>`. That clause
+        binds one parameter per submission against Postgres's
+        65,535 limit, and it would run twice per sync on a
+        form of any size.
 
         Returns the number of rows currently flagged.
         """
         if not results:
             return 0
 
-        fetched_ids = {str(r["_id"]) for r in results}
+        fetched_ids = {
+            str(r["_id"]) for r in results if r.get("_id")
+        }
+        if not fetched_ids:
+            return 0
+
         local = Submission.objects.filter(form=form)
-
-        # Anything that reappeared is no longer stale.
-        local.filter(
-            kobo_id__in=fetched_ids,
-            missing_from_kobo_at__isnull=False,
-        ).update(missing_from_kobo_at=None)
-
-        stale = local.exclude(kobo_id__in=fetched_ids)
-        newly_stale = list(
-            stale.filter(
-                missing_from_kobo_at__isnull=True
+        local_ids = set(
+            local.values_list("kobo_id", flat=True)
+        )
+        flagged_ids = set(
+            local.filter(
+                missing_from_kobo_at__isnull=False
             ).values_list("kobo_id", flat=True)
         )
+
+        # Anything that reappeared is no longer stale. Scoped
+        # to rows already flagged, which is a small set.
+        reappeared = flagged_ids & fetched_ids
+        if reappeared:
+            local.filter(kobo_id__in=reappeared).update(
+                missing_from_kobo_at=None
+            )
+
+        stale_ids = local_ids - fetched_ids
+        newly_stale = sorted(stale_ids - flagged_ids)
         if newly_stale:
-            stale.filter(
-                missing_from_kobo_at__isnull=True
-            ).update(
+            local.filter(kobo_id__in=newly_stale).update(
                 missing_from_kobo_at=timezone.now()
             )
             logger.warning(
-                "%s submission(s) on form %s are no "
-                "longer in KoboToolbox (ids: %s). "
-                "Approve/reject is now blocked for them, "
-                "because the update cannot reach Kobo "
-                "and no Telegram notification would be "
-                "sent.",
+                "%s submission(s) on form %s are no longer "
+                "in KoboToolbox (ids: %s). Approve/reject is "
+                "now blocked for them, because the update "
+                "cannot reach Kobo and no Telegram "
+                "notification would be sent.",
                 len(newly_stale),
                 form.asset_uid,
                 ", ".join(newly_stale[:20]),
             )
-        return stale.count()
+        return len(stale_ids)
 
     def _upsert_submission(self, form, item):
         """Upsert a single Kobo submission."""

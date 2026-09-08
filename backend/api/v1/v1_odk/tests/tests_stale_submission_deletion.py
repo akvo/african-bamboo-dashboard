@@ -28,11 +28,19 @@ class StaleSubmissionDeletionTest(OdkTestHelperMixin, TestCase):
     user-visible history alone.
     """
 
+    LIVE_ITEM = {
+        "_id": 900,
+        "_uuid": "uuid-900",
+        "_submission_time": "2026-04-08T02:08:29",
+        "_attachments": [],
+    }
+
     def setUp(self):
         self.user = self.create_kobo_user()
         self.form = FormMetadata.objects.create(
             asset_uid="formSTALE", name="Stale"
         )
+        self._submission("900")
 
     def _submission(self, kobo_id, flagged_days_ago=None):
         sub = Submission.objects.create(
@@ -60,7 +68,11 @@ class StaleSubmissionDeletionTest(OdkTestHelperMixin, TestCase):
             submission=sub,
         )
 
-    def _sync(self, returned=()):
+    def _sync(self, returned=None):
+        """Always fetches at least the live row, because an
+        empty fetch is now a deliberate no-op."""
+        if returned is None:
+            returned = [self.LIVE_ITEM]
         url = f"/api/v1/odk/forms/{self.form.asset_uid}/sync/"
         with patch(f"{VIEWS}.KoboClient") as cls, patch(
             f"{VIEWS}.async_task"
@@ -76,6 +88,7 @@ class StaleSubmissionDeletionTest(OdkTestHelperMixin, TestCase):
                 url, **self.get_auth_header()
             )
 
+    @override_settings(SYNC_DELETE_STALE_AFTER_DAYS=None)
     def test_disabled_by_default_keeps_stale_rows(self):
         """The default deployment only flags. Data loss must
         never be something a partner gets by accident."""
@@ -94,7 +107,7 @@ class StaleSubmissionDeletionTest(OdkTestHelperMixin, TestCase):
     @override_settings(SYNC_DELETE_STALE_AFTER_DAYS=7)
     def test_deletes_row_and_plot_past_grace_period(self):
         sub = self._submission("111", flagged_days_ago=30)
-        self._plot_for(sub)
+        plot = self._plot_for(sub)
 
         resp = self._sync()
 
@@ -104,7 +117,9 @@ class StaleSubmissionDeletionTest(OdkTestHelperMixin, TestCase):
         )
         # An orphaned plot has no data and no possible
         # action, so it goes with the submission.
-        self.assertEqual(Plot.objects.count(), 0)
+        self.assertFalse(
+            Plot.objects.filter(pk=plot.pk).exists()
+        )
 
     @override_settings(SYNC_DELETE_STALE_AFTER_DAYS=7)
     def test_grace_period_survives_a_transient_kobo_blip(self):
@@ -129,12 +144,13 @@ class StaleSubmissionDeletionTest(OdkTestHelperMixin, TestCase):
 
         resp = self._sync(
             [
+                self.LIVE_ITEM,
                 {
                     "_id": 111,
                     "_uuid": "uuid-111",
                     "_submission_time": "2026-04-08T02:08:29",
                     "_attachments": [],
-                }
+                },
             ]
         )
 
@@ -207,5 +223,35 @@ class StaleSubmissionDeletionTest(OdkTestHelperMixin, TestCase):
             Submission.objects.values_list(
                 "kobo_id", flat=True
             ),
-            ["111", "444"],
+            ["111", "444", "900"],
         )
+
+    @override_settings(SYNC_DELETE_STALE_AFTER_DAYS=0)
+    def test_zero_days_deletes_on_the_same_sync(self):
+        """0 is a deliberate choice, not "off": the row goes
+        on the sync that first notices it is gone."""
+        sub = self._submission("111")
+        plot = self._plot_for(sub)
+        self.assertIsNone(sub.missing_from_kobo_at)
+
+        resp = self._sync()
+
+        self.assertEqual(resp.json()["stale_deleted"], 1)
+        self.assertFalse(
+            Submission.objects.filter(kobo_id="111").exists()
+        )
+        self.assertFalse(
+            Plot.objects.filter(pk=plot.pk).exists()
+        )
+
+    @override_settings(SYNC_DELETE_STALE_AFTER_DAYS=0)
+    def test_empty_fetch_never_deletes(self):
+        """A fetch that returned nothing says nothing about
+        what Kobo still holds. Reading it as "all deleted"
+        would empty the form."""
+        self._submission("111", flagged_days_ago=30)
+
+        resp = self._sync([])
+
+        self.assertEqual(resp.json()["stale_deleted"], 0)
+        self.assertEqual(Submission.objects.count(), 2)

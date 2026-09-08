@@ -547,7 +547,7 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
                 self._flag_stale_submissions(form, results)
             )
             deleted, kept = self._delete_stale_submissions(
-                form
+                form, results
             )
             counts["stale_deleted"] = deleted
             counts["stale_kept"] = kept
@@ -658,21 +658,20 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
             )
         return len(stale_ids)
 
-    def _delete_stale_submissions(self, form):
-        """Remove rows KoboToolbox has not returned for a
-        while, when the deployment has opted in.
+    def _delete_stale_submissions(self, form, results):
+        """Remove rows KoboToolbox has not returned, when the
+        deployment has opted in.
 
-        Off unless SYNC_DELETE_STALE_AFTER_DAYS is positive.
+        Off unless SYNC_DELETE_STALE_AFTER_DAYS is set.
         Flagging is reversible and deleting is not, so the
         default is to flag and let an operator decide.
 
         Three guards, because this runs unattended:
 
-        1. A grace period. The row must have been flagged for
-           the configured number of days, so a Kobo outage
-           that resolves on the next sync cannot take data
-           with it -- _flag_stale_submissions clears the flag
-           the moment a submission reappears.
+        1. Only on a sync that actually fetched something.
+           An empty fetch tells us nothing about what Kobo
+           still holds, and must never be read as "everything
+           was deleted".
         2. Rows carrying user-visible history are kept. A
            rejection audit or a Plot ID is a record someone
            made, not Kobo data, and it should not disappear
@@ -682,20 +681,30 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
            Plot.submission is SET_NULL and an orphaned plot
            has no data and no possible action.
 
+        A positive setting adds a grace period on top: the
+        row must have been flagged that long, so a partial
+        fetch that un-flags on the next sync cannot take data
+        with it. 0 means delete on the same sync that notices
+        the row is gone.
+
         Returns (deleted, kept).
         """
         days = getattr(
-            settings, "SYNC_DELETE_STALE_AFTER_DAYS", 0
+            settings, "SYNC_DELETE_STALE_AFTER_DAYS", None
         )
-        if days <= 0:
+        if days is None or not results:
             return 0, 0
 
-        cutoff = timezone.now() - timedelta(days=days)
         due = Submission.objects.filter(
             form=form,
             missing_from_kobo_at__isnull=False,
-            missing_from_kobo_at__lt=cutoff,
         )
+        if days > 0:
+            due = due.filter(
+                missing_from_kobo_at__lt=(
+                    timezone.now() - timedelta(days=days)
+                )
+            )
 
         protected = set(
             due.filter(
@@ -721,8 +730,9 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
             uuids = list(removable.values())[:20]
             logger.warning(
                 "Deleted %s submission(s) and their plots "
-                "on form %s, absent from KoboToolbox for "
-                "more than %s day(s) (uuids: %s)",
+                "on form %s, absent from KoboToolbox and "
+                "flagged for more than %s day(s) "
+                "(uuids: %s)",
                 deleted,
                 form.asset_uid,
                 days,

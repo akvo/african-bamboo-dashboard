@@ -336,6 +336,54 @@ When a plot is rejected, the system can send notifications to Telegram groups af
 - Messages are sent to both supervisor and enumerator groups
 - If `TELEGRAM_ENABLED=False` (default), no notifications are sent
 
+## Stale Submissions
+
+A submission deleted in KoboToolbox leaves a local row that can never sync
+again — every validation-status update for it answers `400 One or more
+submission ids are invalid`, so a rejection on it silently never reaches Kobo
+and nobody is notified.
+
+Each sync compares the ids Kobo returned against the rows we hold and **flags**
+the difference (`missing_from_kobo_at`). Flagged rows are read-only in the UI:
+approve and reject are disabled, and the plot detail panel offers Delete
+instead. The forms table reports the count after each sync.
+
+Flagging is reversible — a row that reappears is un-flagged on the next sync.
+
+### Deleting them automatically
+
+Flagged rows otherwise stay forever. To have sync remove them, set a grace
+period in `.env`:
+
+```env
+# Unset (default) — only flag, never delete
+SYNC_DELETE_STALE_AFTER_DAYS=
+
+# Delete on the same sync that notices the row is gone
+SYNC_DELETE_STALE_AFTER_DAYS=0
+
+# Delete only after the row has been flagged for 30 days
+SYNC_DELETE_STALE_AFTER_DAYS=30
+```
+
+Restart the backend after changing it — Django reads the environment at
+startup.
+
+**Choosing a value.** A partial Kobo fetch makes every absent row look deleted.
+A grace period protects against that: the row must stay flagged for the whole
+period, and the clock restarts if it reappears. `0` accepts that risk in
+exchange for the count matching Kobo immediately after every sync.
+
+Two things are never removed automatically, however long they have been
+flagged, and are reported separately as kept:
+
+- submissions with a **rejection audit** — a validator's reason and timestamp
+- submissions carrying a **Plot ID**, which may be referenced off-system
+
+Those stay deletable one at a time from the plot detail panel. A deleted
+submission takes its plot with it, and a sync that fetched nothing from Kobo
+never deletes anything.
+
 ## Image Attachments
 
 During sync, image attachments from KoboToolbox submissions are downloaded and stored locally in `storage/attachments/{submission_uuid}/`. This avoids requiring Kobo credentials for every image request.

@@ -40,32 +40,30 @@ export function FormsTable({ forms, isLoading, syncForm, onConfigureClick }) {
         const plotsUpdated = result.plots_updated || 0;
         parts.push(`${plotsCreated} created, ${plotsUpdated} updated`);
       }
-      // Submissions deleted in Kobo can never sync again,
-      // so surface them here rather than letting a
-      // validator discover it when a rejection silently
-      // fails to reach Kobo.
-      if (result.stale) {
-        parts.push(
-          `${result.stale} submission(s) no longer exist in ` +
-            "KoboToolbox and can only be deleted",
-        );
-      }
-      // Only ever non-zero where the deployment opted into
-      // automatic removal, so say what went rather than
-      // leaving the count to be noticed later.
+      // `stale` counts every row Kobo stopped returning,
+      // including the ones this sync just removed. Only what
+      // is left needs the operator's attention.
+      const staleLeft = (result.stale || 0) - (result.stale_deleted || 0);
       if (result.stale_deleted) {
         parts.push(
-          `${result.stale_deleted} long-absent submission(s) removed`,
+          `${result.stale_deleted} submission(s) removed: ` +
+            "no longer in KoboToolbox",
         );
       }
-      if (result.stale_kept) {
+      // These can never sync again, so a rejection on one
+      // silently fails to reach Kobo. Say so here rather
+      // than letting a validator find out that way.
+      if (staleLeft) {
         parts.push(
-          `${result.stale_kept} kept because they carry a ` +
-            "rejection or a Plot ID",
+          result.stale_kept
+            ? `${staleLeft} kept for their rejection history or ` +
+                "Plot ID, and can only be deleted by hand"
+            : `${staleLeft} submission(s) no longer exist in ` +
+                "KoboToolbox and can only be deleted",
         );
       }
       setStatus({
-        type: result.stale ? "warning" : "success",
+        type: staleLeft ? "warning" : "success",
         message: parts.join(". ") + ".",
       });
     } catch (err) {

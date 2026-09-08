@@ -198,7 +198,12 @@ export default function PlotDetailPanel({
     let cancelled = false;
     setIsLoadingSub(true);
     api
-      .get(`/v1/odk/submissions/${plot.submission_uuid}/`)
+      .get(`/v1/odk/submissions/${plot.submission_uuid}/`, {
+        // uuid is unique per form, not globally: Kobo reuses
+        // _uuid across cloned assets. Without this the
+        // endpoint cannot tell two clones apart.
+        params: { asset_uid: plot.form_id },
+      })
       .then((res) => {
         if (!cancelled) {
           setSubmission(res.data);
@@ -217,7 +222,7 @@ export default function PlotDetailPanel({
     return () => {
       cancelled = true;
     };
-  }, [plot?.submission_uuid, refreshKey]);
+  }, [plot?.submission_uuid, plot?.form_id, refreshKey]);
 
   // Reset edit state when plot changes
   useEffect(() => {
@@ -289,6 +294,7 @@ export default function PlotDetailPanel({
       const res = await api.patch(
         `/v1/odk/submissions/${plot.submission_uuid}/edit_data/`,
         { fields: editValues },
+        { params: { asset_uid: plot.form_id } },
       );
       setSubmission(res.data);
       // Refresh plot + list for updated region/sub_region
@@ -304,7 +310,7 @@ export default function PlotDetailPanel({
     } finally {
       setIsSaving(false);
     }
-  }, [plot?.submission_uuid, editValues, mapState]);
+  }, [plot?.submission_uuid, plot?.form_id, editValues, mapState]);
 
   const handleCancelEdit = useCallback(() => {
     setEditingSection(null);

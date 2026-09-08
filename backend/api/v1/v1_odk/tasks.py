@@ -845,6 +845,7 @@ def download_submission_attachments(
     kobo_username,
     kobo_password_enc,
     submission_uuid,
+    asset_uid=None,
 ):
     """Download image attachments from Kobo
     and store them locally.
@@ -853,14 +854,28 @@ def download_submission_attachments(
     storage/attachments/{submission_uuid}/
     {att_uid}.{ext}
     """
-    try:
-        sub = Submission.objects.get(uuid=submission_uuid)
-    except Submission.DoesNotExist:
+    # uuid is unique per form, not globally: Kobo reuses
+    # _uuid across cloned assets. asset_uid is optional so
+    # tasks queued before this change still run.
+    qs = Submission.objects.filter(uuid=submission_uuid)
+    if asset_uid:
+        qs = qs.filter(form__asset_uid=asset_uid)
+    sub = qs.first()
+    if sub is None:
         logger.error(
-            "Submission %s not found",
+            "Submission %s not found (asset %s)",
             submission_uuid,
+            asset_uid or "unspecified",
         )
         return
+    if not asset_uid and qs.count() > 1:
+        logger.warning(
+            "Submission uuid %s exists on more than one "
+            "form; downloading attachments for form %s. "
+            "Queue this task with asset_uid to be explicit.",
+            submission_uuid,
+            sub.form.asset_uid,
+        )
 
     raw = sub.raw_data or {}
     attachments = raw.get("_attachments", [])

@@ -12,6 +12,7 @@ from django.db.models import (
 from django.db.models.fields.json import (
     KeyTextTransform,
 )
+from django.http import Http404
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django_q.tasks import async_task
@@ -22,6 +23,7 @@ from drf_spectacular.utils import (
 )
 from requests.exceptions import RequestException
 from rest_framework import status, viewsets
+from rest_framework.exceptions import APIException
 from rest_framework.decorators import (
     action,
     api_view,
@@ -100,6 +102,28 @@ from utils.kobo_client import (
 from utils.polygon import extract_plot_data
 
 logger = logging.getLogger(__name__)
+
+
+class AmbiguousSubmission(APIException):
+    """Raised when a uuid matches submissions on two forms.
+
+    Only reachable once a cloned Kobo asset has been synced,
+    since Kobo reuses _uuid across clones. Answering 409 with
+    the remedy beats returning whichever row sorted first.
+    """
+
+    status_code = status.HTTP_409_CONFLICT
+    # Dict body so callers get a machine-readable error_type,
+    # matching kobo_unauthorized and missing_from_kobo.
+    default_detail = {
+        "detail": (
+            "This submission uuid exists on more than one "
+            "form. Retry with ?asset_uid=<form> to identify "
+            "which."
+        ),
+        "error_type": "ambiguous_submission",
+    }
+    default_code = "ambiguous_submission"
 
 
 def _notification_suffix(audit):
@@ -780,6 +804,7 @@ class FormMetadataViewSet(viewsets.ModelViewSet):
                 user.kobo_username,
                 user.kobo_password,
                 str(sub.uuid),
+                sub.form.asset_uid,
             )
 
 
@@ -794,6 +819,35 @@ class SubmissionViewSet(
     queryset = Submission.objects.all()
     permission_classes = [IsAuthenticated]
     lookup_field = "uuid"
+
+    def get_object(self):
+        """Resolve a submission by uuid, per form.
+
+        Kobo reuses _uuid across cloned assets, so uuid is
+        unique per form rather than globally. A bare
+        /submissions/<uuid>/ can therefore match more than one
+        row once a cloned form has been synced.
+
+        Rather than silently picking one — which would show
+        the wrong form's data, or apply a decision to it —
+        narrow by ?asset_uid= when given and refuse loudly
+        when the uuid is still ambiguous.
+        """
+        qs = self.filter_queryset(self.get_queryset())
+        qs = qs.filter(uuid=self.kwargs["uuid"])
+
+        asset_uid = self.request.query_params.get("asset_uid")
+        if asset_uid:
+            qs = qs.filter(form__asset_uid=asset_uid)
+
+        matches = list(qs[:2])
+        if not matches:
+            raise Http404("No submission matches the given uuid.")
+        if len(matches) > 1:
+            raise AmbiguousSubmission()
+
+        self.check_object_permissions(self.request, matches[0])
+        return matches[0]
 
     def get_serializer_class(self):
         if self.action == "retrieve":

@@ -83,6 +83,7 @@ export default function MapPage() {
       await api.patch(
         `/v1/odk/submissions/${mapState.selectedPlot.submission_uuid}/`,
         { approval_status: 1 },
+        { params: { asset_uid: mapState.selectedPlot.form_id } },
       );
       await Promise.all([refetch(), mapState.refetchSelectedPlot()]);
       mapState.setApprovalDialogOpen(false);
@@ -122,7 +123,7 @@ export default function MapPage() {
   }, [mapState.selectedPlotId, stopNotifyPoll]);
 
   const pollNotificationStatus = useCallback(
-    (submissionUuid) => {
+    (submissionUuid, assetUid) => {
       stopNotifyPoll();
       pollCancelledRef.current = false;
       let tries = 0;
@@ -136,6 +137,7 @@ export default function MapPage() {
         try {
           const { data } = await api.get(
             `/v1/odk/submissions/${submissionUuid}/`,
+            { params: { asset_uid: assetUid } },
           );
           status = data?.rejection_audits?.[0]?.telegram_status;
         } catch {
@@ -194,15 +196,23 @@ export default function MapPage() {
   const handleReject = useCallback(
     async ({ selectValue, notes }) => {
       const submissionUuid = mapState.selectedPlot?.submission_uuid;
+      // uuid is unique per form, not globally: Kobo reuses
+      // _uuid across cloned assets, so every submission
+      // request must say which form it means.
+      const assetUid = mapState.selectedPlot?.form_id;
       if (!submissionUuid) {
         return;
       }
       try {
-        await api.patch(`/v1/odk/submissions/${submissionUuid}/`, {
-          approval_status: 2,
-          reason_category: selectValue,
-          reason_text: notes || "",
-        });
+        await api.patch(
+          `/v1/odk/submissions/${submissionUuid}/`,
+          {
+            approval_status: 2,
+            reason_category: selectValue,
+            reason_text: notes || "",
+          },
+          { params: { asset_uid: assetUid } },
+        );
         await Promise.all([refetch(), mapState.refetchSelectedPlot()]);
         mapState.setRejectionDialogOpen(false);
 
@@ -215,6 +225,7 @@ export default function MapPage() {
         try {
           const { data } = await api.get(
             `/v1/odk/submissions/${submissionUuid}/`,
+            { params: { asset_uid: assetUid } },
           );
           status = data?.rejection_audits?.[0]?.telegram_status;
         } catch {
@@ -222,7 +233,7 @@ export default function MapPage() {
         }
         if (status && status !== "disabled") {
           mapState.setToastMessage("Plot rejected. Notifying field team…");
-          pollNotificationStatus(submissionUuid);
+          pollNotificationStatus(submissionUuid, assetUid);
         } else {
           mapState.setToastMessage("Plot rejected");
         }
@@ -245,6 +256,7 @@ export default function MapPage() {
       await api.patch(
         `/v1/odk/submissions/${mapState.selectedPlot.submission_uuid}/`,
         { approval_status: null },
+        { params: { asset_uid: mapState.selectedPlot.form_id } },
       );
       await Promise.all([refetch(), mapState.refetchSelectedPlot()]);
       mapState.setToastMessage("Plot reverted to pending");
@@ -262,11 +274,14 @@ export default function MapPage() {
   // with it.
   const handleConfirmDeleteSubmission = useCallback(async () => {
     const submissionUuid = mapState.selectedPlot?.submission_uuid;
+    const assetUid = mapState.selectedPlot?.form_id;
     if (!submissionUuid) {
       return;
     }
     try {
-      await api.delete(`/v1/odk/submissions/${submissionUuid}/`);
+      await api.delete(`/v1/odk/submissions/${submissionUuid}/`, {
+        params: { asset_uid: assetUid },
+      });
       setDeleteDialogOpen(false);
       mapState.setSelectedPlotId(null);
       router.replace("/dashboard/map", { scroll: false });

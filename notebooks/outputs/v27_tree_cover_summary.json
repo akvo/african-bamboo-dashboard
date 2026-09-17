@@ -1,0 +1,59 @@
+{
+  "poc": "v27",
+  "metric": "tree_cover",
+  "notebook": "notebooks/v27_tree_cover_poc.ipynb",
+  "dataset": {
+    "source": "ESA WorldCover",
+    "source_version": "2021-v200",
+    "source_provider": "ESA WorldCover / Terrascope",
+    "tree_class": 10,
+    "pixel_resolution_m": 10,
+    "refresh_option_exercised": false
+  },
+  "summary": {
+    "valid_input_polygons": 166,
+    "completed_calculations": 166,
+    "flagged_over_20_percent": 4,
+    "plots_with_zero_tree_cover": 160,
+    "min_tree_cover_percent": 0.0,
+    "median_tree_cover_percent": 0.0,
+    "max_tree_cover_percent": 68.88,
+    "min_coverage_percent": 100.0,
+    "low_resolution_confidence_plots": 107,
+    "median_effective_pixel_equivalent": 3.087,
+    "observed_class_share_percent": {
+      "Cropland": 47.96,
+      "Grassland": 34.99,
+      "Shrubland": 14.91,
+      "Tree cover": 2.03,
+      "Built-up": 0.06,
+      "Herbaceous wetland": 0.05
+    }
+  },
+  "single_pixel_sensitivity": {
+    "median_single_pixel_swing_percent": 32.39,
+    "max_single_pixel_swing_percent": 133.51,
+    "plots_where_one_pixel_decides_the_flag": 125,
+    "plots_evaluated": 166
+  },
+  "boundary_demo": [
+    {
+      "scenario": "below_threshold",
+      "controlled_demo_tree_cover_percent": 19.99,
+      "flagged_for_review": false,
+      "note": null
+    },
+    {
+      "scenario": "exactly_at_threshold",
+      "controlled_demo_tree_cover_percent": 20.0,
+      "flagged_for_review": false,
+      "note": null
+    },
+    {
+      "scenario": "above_threshold",
+      "controlled_demo_tree_cover_percent": 20.01,
+      "flagged_for_review": true,
+      "note": "Tree cover is 20.01% (threshold: > 20%). Dataset source: ESA WorldCover 2021-v200."
+    }
+  ]
+}

@@ -5,3 +5,5 @@
 db.dbml
 app.env
 coverage.lcov
+__pycache__/
+*.py[cod]

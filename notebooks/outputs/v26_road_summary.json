@@ -1,0 +1,89 @@
+{
+  "poc": "v26",
+  "metric": "road",
+  "notebook": "notebooks/v26_road_proximity_poc.ipynb",
+  "dataset": {
+    "source": "OpenStreetMap",
+    "source_provider": "Overpass API (POC); Geofabrik extract (production)",
+    "eligible_classes": [
+      "motorway",
+      "motorway_link",
+      "primary",
+      "primary_link",
+      "secondary",
+      "secondary_link",
+      "tertiary",
+      "tertiary_link",
+      "trunk",
+      "trunk_link"
+    ],
+    "observed_eligible_ways": 17,
+    "production_source_note": "Production imports the Geofabrik Ethiopia extract; this POC used a bounding-box Overpass query of the same OSM features."
+  },
+  "summary": {
+    "valid_input_polygons": 166,
+    "completed_calculations": 166,
+    "plots_overlapping_a_road": 0,
+    "min_distance_m": 11.44,
+    "median_distance_m": 289.39,
+    "max_distance_m": 1655.22,
+    "nearest_class_counts": {
+      "tertiary": 166
+    },
+    "threshold_sensitivity": {
+      "10 m": {
+        "flagged_plots": 0,
+        "flagged_percent": 0.0
+      },
+      "25 m": {
+        "flagged_plots": 3,
+        "flagged_percent": 1.8
+      },
+      "50 m": {
+        "flagged_plots": 8,
+        "flagged_percent": 4.8
+      },
+      "100 m": {
+        "flagged_plots": 24,
+        "flagged_percent": 14.5
+      },
+      "200 m": {
+        "flagged_plots": 56,
+        "flagged_percent": 33.7
+      },
+      "500 m": {
+        "flagged_plots": 118,
+        "flagged_percent": 71.1
+      }
+    }
+  },
+  "boundary_demo": [
+    {
+      "scenario": "overlapping_road",
+      "controlled_demo_distance_m": 0.0,
+      "controlled_demo_overlap": true,
+      "flagged_for_review": true,
+      "note": "A tertiary road overlaps this plot (threshold: 100 m). Dataset source: OpenStreetMap."
+    },
+    {
+      "scenario": "exactly_at_threshold",
+      "controlled_demo_distance_m": 100.0,
+      "controlled_demo_overlap": false,
+      "flagged_for_review": true,
+      "note": "The nearest tertiary road is 100.0 m from the plot boundary (threshold: 100 m). Dataset source: OpenStreetMap."
+    },
+    {
+      "scenario": "just_outside_threshold",
+      "controlled_demo_distance_m": 100.01,
+      "controlled_demo_overlap": false,
+      "flagged_for_review": false,
+      "note": null
+    }
+  ],
+  "threshold_only_reevaluation": {
+    "flagged_at_25m": 3,
+    "flagged_at_200m": 56,
+    "is_monotonic_superset": true,
+    "distances_recalculated": false
+  }
+}

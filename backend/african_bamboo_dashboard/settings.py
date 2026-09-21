@@ -196,12 +196,51 @@ SIMPLE_JWT = {
 }
 
 # MAIL SETUP
-EMAIL_BACKEND = "django_mailjet.backends.MailjetBackend"
+# Django's own SMTP backend, in place of django-mailjet. That
+# package was last released in 2015, posts to Mailjet's legacy v3
+# endpoint, treats any HTTP call that does not raise as a
+# delivered message -- so a silently discarded mail is
+# indistinguishable from a sent one -- and exposes no timeout.
+EMAIL_BACKEND = environ.get(
+    "EMAIL_BACKEND",
+    "django.core.mail.backends.smtp.EmailBackend",
+)
 # Read with .get: a missing mail credential must not stop the
 # task worker from importing Django. Sending fails loudly at send
 # time instead of crashing qcluster on boot.
-MAILJET_API_KEY = environ.get("MAILJET_APIKEY", "")
-MAILJET_API_SECRET = environ.get("MAILJET_SECRET", "")
+EMAIL_HOST = environ.get("EMAIL_HOST", "")
+EMAIL_PORT = int(environ.get("EMAIL_PORT") or 587)
+EMAIL_HOST_USER = environ.get("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = environ.get("EMAIL_HOST_PASSWORD", "")
+
+
+def env_flag(name: str, default: bool) -> bool:
+    """Read a boolean env var, treating unset and empty as the
+    default.
+
+    Spelled out rather than inlined because the obvious inline
+    version is silently wrong: bool("false") is True, which
+    would turn implicit SSL on for a server that does not speak
+    it and hang every send until the timeout.
+    """
+    raw = environ.get(name, "").strip().lower()
+    if not raw:
+        return default
+    return raw in ("1", "true", "yes")
+
+
+# The two are mutually exclusive and Django raises if both are
+# set. Implicit SSL from the first byte is port 465; STARTTLS on
+# an initially plaintext connection is 587, which is what the
+# defaults here assume. Deriving TLS from SSL means a deployment
+# moving to 465 sets EMAIL_USE_SSL=true and nothing else, rather
+# than having to remember to switch TLS off in the same breath.
+EMAIL_USE_SSL = env_flag("EMAIL_USE_SSL", default=False)
+EMAIL_USE_TLS = env_flag("EMAIL_USE_TLS", default=not EMAIL_USE_SSL)
+# Seconds. Django's own default is None, i.e. no bound at all,
+# which would park a django_q worker slot for as long as a hung
+# relay cares to hold the socket open.
+EMAIL_TIMEOUT = int(environ.get("EMAIL_TIMEOUT") or 10)
 EMAIL_FROM = environ.get("EMAIL_FROM") or "noreply@akvo.org"
 
 # APP SETUP
@@ -246,7 +285,7 @@ Q_CLUSTER = {
     "sync": Q_IS_SYNC,
 }
 
-# In tests, bypass Mailjet so emails land in mail.outbox.
+# In tests, bypass the mail relay so emails land in mail.outbox.
 if TEST_ENV:
     EMAIL_BACKEND = (
         "django.core.mail.backends.locmem.EmailBackend"

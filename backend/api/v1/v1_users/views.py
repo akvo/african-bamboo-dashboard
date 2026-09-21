@@ -89,14 +89,27 @@ def login(request, version):
         email_was_synthesized=email_was_synthesized,
     )
 
-    if user.status != UserStatus.ACTIVE or not user.is_active:
+    # A soft-deleted row can still read status=ACTIVE, since
+    # deletion never rewrote it. Without this guard such a
+    # login mints a JWT that every later request then rejects,
+    # because SimpleJWT resolves the user through the default
+    # manager, which hides deleted rows.
+    is_deleted = user.deleted_at is not None
+    effective_status = (
+        UserStatus.SUSPENDED if is_deleted else user.status
+    )
+    if (
+        is_deleted
+        or user.status != UserStatus.ACTIVE
+        or not user.is_active
+    ):
         return Response(
             {
                 "message": _PENDING_MESSAGES.get(
-                    user.status, "Access denied."
+                    effective_status, "Access denied."
                 ),
                 "status": UserStatus.fieldStr.get(
-                    user.status, "suspended"
+                    effective_status, "suspended"
                 ),
                 "email": user.email,
             },

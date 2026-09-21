@@ -27,8 +27,6 @@ services:
       - DB_HOST=db
       - DEBUG=True
       - SECRET_KEY=secret
-      - MAILJET_APIKEY=secret
-      - MAILJET_SECRET=secret
       - WEBDOMAIN=notset
       - STORAGE_PATH=./storage
     depends_on:

@@ -115,7 +115,7 @@ def send_email(
             "email/main.html", context
         )
         msg = EmailMultiAlternatives(
-            "EDM - {0}".format(context.get("subject")),
+            "AB - {0}".format(context.get("subject")),
             "Email plain text",
             settings.EMAIL_FROM,
             context.get("send_to"),

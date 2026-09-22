@@ -41,28 +41,42 @@ def create_invite(
 ) -> SystemUser:
     """Create a PENDING row and enqueue the invitation email.
 
-    Raises ValueError if a user with that email already exists
-    (the model enforces unique email).
+    Re-inviting a soft-deleted user revives that same row
+    instead of inserting a second one: `email` is UNIQUE at
+    the database level regardless of `deleted_at`, so the
+    lookup has to run through `objects_with_deleted` or the
+    insert dies on `system_user_email_key`.
+
+    Raises ValueError only if a *live* user owns that email.
     """
     normalized = _normalize_email(email)
-    if SystemUser.objects.filter(
+    existing = SystemUser.objects_with_deleted.filter(
         email__iexact=normalized
-    ).exists():
+    ).first()
+    if existing is not None and existing.deleted_at is None:
         raise ValueError(
             f"A user with email {normalized} already exists."
         )
-    user = SystemUser.objects.create(
-        email=normalized,
-        name=(name or "").strip() or normalized,
-        kobo_url=kobo_url or None,
-        status=UserStatus.PENDING,
-        is_active=False,
-        invited_at=timezone.now(),
-        status_changed_at=timezone.now(),
-        status_changed_by=invited_by,
-    )
+    now = timezone.now()
+    # Reusing the row keeps the primary key, and everything
+    # that references it, intact across the round trip.
+    user = existing or SystemUser(email=normalized)
+    user.deleted_at = None
+    user.name = (name or "").strip() or normalized
+    user.kobo_url = kobo_url or None
+    # A revived row may still carry the Kobo identity it was
+    # deleted with. Clear it: bind_pending_login only
+    # auto-approves an invite whose kobo_username is NULL, so
+    # leaving it set would strand the user on the 403 path.
+    user.kobo_username = None
+    user.kobo_password = None
+    user.status = UserStatus.PENDING
+    user.is_active = False
+    user.invited_at = now
+    user.status_changed_at = now
+    user.status_changed_by = invited_by
     user.set_unusable_password()
-    user.save(update_fields=["password"])
+    user.save()
     queue_email(
         user,
         EmailTypes.account_invited,
@@ -94,12 +108,21 @@ def bind_pending_login(
     - Existing kobo_username + kobo_url row -> refresh password
       (and name when previously synthesized) and return the row
       as-is.
+    - Soft-deleted row for that identity -> returned untouched
+      as SILENT_PENDING, so a deleted user cannot log back in
+      by re-authenticating against Kobo.
     """
     normalized = _normalize_email(email_from_kobo)
-    existing = SystemUser.objects.filter(
+    existing = SystemUser.objects_with_deleted.filter(
         kobo_username=kobo_username, kobo_url=kobo_url
     ).first()
     if existing is not None:
+        if existing.deleted_at is not None:
+            # Left exactly as the admin left it: no password
+            # refresh, no resurrection. The login view turns
+            # this outcome into a 403. Re-admission is an
+            # explicit admin action -- see create_invite.
+            return existing, BindOutcome.SILENT_PENDING
         existing.kobo_password = encrypted_password
         if (
             name_from_kobo

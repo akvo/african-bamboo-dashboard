@@ -1,6 +1,9 @@
+import logging
 from base64 import b64encode
 
 import requests
+
+logger = logging.getLogger(__name__)
 
 
 class KoboUnauthorizedError(Exception):
@@ -43,22 +46,50 @@ class KoboClient:
             )
         resp.raise_for_status()
 
-    def verify_credentials(self) -> bool:
-        """Validate credentials with a lightweight
-        API call."""
+    def verify_credentials(self):
+        """Validate credentials with a lightweight API call.
+
+        Returns the account's identity as a dict, or False
+        when Kobo rejects or cannot answer the request.
+
+        The status check is not optional. /me/ answers a wrong
+        password with 401 and a JSON body, so parsing the body
+        regardless of status made every rejected login look
+        like an accepted one whose email merely happened to be
+        missing -- which is precisely the shape that skips the
+        invite auto-bind and files a silent PENDING row.
+        """
         try:
-            url = f"{self.base_url}/me"
+            url = f"{self.base_url}/me/"
             resp = self.session.get(
                 url,
                 params={"limit": 0},
                 timeout=self.timeout,
             )
-            return {
-                "name": resp.json().get("extra_details", {}).get("name"),
-                "email": resp.json().get("email"),
-            }
-        except requests.RequestException:
+            if resp.status_code == 401:
+                return False
+            resp.raise_for_status()
+            detail = resp.json()
+        except (requests.RequestException, ValueError):
             return False
+        if not isinstance(detail, dict):
+            return False
+        email = detail.get("email") or None
+        if not email:
+            # Without an email there is nothing to match an
+            # invite against, so the user lands in the manual
+            # approval queue. Say so, or the cause is invisible.
+            logger.warning(
+                "Kobo at %s returned no email for user %r; "
+                "invite auto-bind cannot run. Keys returned: %s",
+                self.base_url,
+                detail.get("username"),
+                sorted(detail.keys()),
+            )
+        return {
+            "name": detail.get("extra_details", {}).get("name"),
+            "email": email,
+        }
 
     def get_submissions(
         self,

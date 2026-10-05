@@ -1,0 +1,104 @@
+name: Deploy to Production
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-to-production
+  cancel-in-progress: false
+
+# Production deploy REUSES the container image already built and tested by the
+# "Deploy to Test Cluster" pipeline (which runs on every push to main). Instead
+# of re-running tests and rebuilding/pushing images, we retag the existing
+# test-built image (main.<sha>) to the production tags and roll it out.
+#
+# The african-bamboo-dashboard images are environment-agnostic: no domain/env is
+# baked at build time (nginx uses internal upstreams, backend/worker read config
+# at runtime from the Vault-injected Secret, frontend public config is served at
+# runtime). Production ENV is applied at runtime by the production k8s manifests
+# + Vault-injected Secret (kv/production/african-bamboo-dashboard).
+#
+# A release must be cut from a `main` commit that the Test pipeline already
+# built (promote retags main.<sha> and fails loudly if that image is absent).
+
+jobs:
+  promote:
+    name: Promote Tested Image to Production
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Akvo composite actions
+        uses: actions/checkout@v5
+        with:
+          repository: akvo/composite-actions
+          path: composite-actions
+          ref: 0.0.11
+
+      - name: Promote tested image to production
+        uses: ./composite-actions/.github/actions/promote
+        with:
+          app-name: "african-bamboo-dashboard"
+          services: "nginx frontend backend worker"
+          source-tag: "main.${{ github.sha }}"
+          version-tag: "${{ github.ref_name }}.${{ github.sha }}"
+          cluster-name: "production"
+          gcloud-sa: ${{ secrets.GCLOUD_SERVICE_ACCOUNT_REGISTRY }}
+
+  rollout:
+    name: Rollout to the server
+    needs: [promote]
+    runs-on: ubuntu-latest
+    environment: Production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          path: src
+
+      - name: Checkout Akvo composite actions
+        uses: actions/checkout@v5
+        with:
+          repository: akvo/composite-actions
+          path: composite-actions
+          ref: 0.0.11
+
+      - name: Rollout Nginx
+        uses: ./composite-actions/.github/actions/k8s-rollout
+        with:
+          app-name: "african-bamboo-dashboard"
+          deployment-name: "nginx-deployment"
+          container-name: "nginx"
+          cluster-name: "production"
+          namespace-name: "african-bamboo-dashboard-namespace"
+          gcloud-sa: ${{ secrets.GCLOUD_SERVICE_ACCOUNT_K8S }}
+
+      - name: Rollout Backend
+        uses: ./composite-actions/.github/actions/k8s-rollout
+        with:
+          app-name: "african-bamboo-dashboard"
+          deployment-name: "backend-deployment"
+          container-name: "backend"
+          cluster-name: "production"
+          namespace-name: "african-bamboo-dashboard-namespace"
+          gcloud-sa: ${{ secrets.GCLOUD_SERVICE_ACCOUNT_K8S }}
+
+      - name: Rollout Worker
+        uses: ./composite-actions/.github/actions/k8s-rollout
+        with:
+          app-name: "african-bamboo-dashboard"
+          deployment-name: "worker-deployment"
+          container-name: "worker"
+          cluster-name: "production"
+          namespace-name: "african-bamboo-dashboard-namespace"
+          gcloud-sa: ${{ secrets.GCLOUD_SERVICE_ACCOUNT_K8S }}
+
+      - name: Rollout Frontend
+        uses: ./composite-actions/.github/actions/k8s-rollout
+        with:
+          app-name: "african-bamboo-dashboard"
+          deployment-name: "frontend-deployment"
+          container-name: "frontend"
+          cluster-name: "production"
+          namespace-name: "african-bamboo-dashboard-namespace"
+          gcloud-sa: ${{ secrets.GCLOUD_SERVICE_ACCOUNT_K8S }}

@@ -17,11 +17,53 @@ A full-stack web application with a Next.js frontend, Django REST Framework back
 
 ## Getting Started
 
+Follow these steps in order on a fresh install. Steps 3–5 apply to every environment (local, test, production). Skip them and the app looks like it runs, but parts of it stay empty.
+
+### 1. Configure environment
+
 ```bash
-docker compose up
+cp .env.example .env
 ```
 
-This starts all services:
+At minimum, set `SECRET_KEY`, `SESSION_SECRET` (generate each with `openssl rand -hex 32`) and `NEXT_PUBLIC_MAPBOX_TOKEN`. The other variables have working defaults. See the comments in [.env.example](.env.example).
+
+### 2. Start the services
+
+```bash
+docker compose up -d
+```
+
+The backend applies database migrations on startup.
+
+### 3. Seed default data (required)
+
+```bash
+docker compose exec backend python manage.py seed_field_settings
+```
+
+This seeds the standard plot-detail fields (enumerator, farmer, father's name, etc.). Without it, the **Detail Fields** tab in **Forms → Configure** shows *"No field settings available. Run the seed command first."* and you can't map detail fields. The command is idempotent, so you can safely run it again after every deploy.
+
+### 4. Create the first admin
+
+Users sign in with their KoboToolbox credentials. A new user starts as **pending** and can't sign in until an admin approves them. To create the first admin, register a superuser with the **same email as your KoboToolbox account**:
+
+```bash
+docker compose exec backend python manage.py createsuperuser
+```
+
+Then sign in to the dashboard with your KoboToolbox credentials. The login matches the email, links your Kobo account, and activates you as admin. From then on you can invite and approve other users from the dashboard.
+
+> If your Kobo account has no email set, the login can't match it and your account stays pending. To fix it, sign in at `/admin/` with the superuser email and password you just created, open **System users**, and set your Kobo user's status to **Active**.
+
+### 5. Register and configure a form
+
+1. Go to **Forms**, enter the KoboToolbox asset UID, and click **Register**.
+2. Click **Configure** and map the fields in the **Plot Structure**, **Detail Fields** and **Farmer Fields** tabs.
+3. Click **Sync** to pull submissions and generate plots.
+
+### Services
+
+`docker compose up` starts the following services:
 
 | Service  | URL                       | Description             |
 | -------- | ------------------------- | ----------------------- |
@@ -69,7 +111,8 @@ Commands run inside the `backend/` directory:
 
 ```bash
 python manage.py migrate                 # Apply database migrations
-python manage.py createsuperuser         # Create admin user
+python manage.py seed_field_settings     # Seed default detail fields (idempotent)
+python manage.py createsuperuser         # Create admin user (use your Kobo email)
 python manage.py runserver 0.0.0.0:8000  # Start dev server
 ```
 

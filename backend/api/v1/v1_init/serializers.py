@@ -3,6 +3,7 @@ from rest_framework import serializers
 
 class TelegramGroupSerializer(serializers.Serializer):
     chat_id = serializers.CharField(max_length=64)
+    title = serializers.CharField(read_only=True)
     # [] means all regions.
     regions = serializers.ListField(
         child=serializers.CharField(), required=False

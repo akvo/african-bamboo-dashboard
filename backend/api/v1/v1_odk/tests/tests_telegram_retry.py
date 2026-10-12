@@ -11,6 +11,8 @@ from api.v1.v1_odk.constants import (
 )
 from api.v1.v1_odk.models import (
     FormMetadata,
+    FormOption,
+    FormQuestion,
     Plot,
     RejectionAudit,
     Submission,
@@ -404,6 +406,27 @@ class TelegramRegionRoutingTest(TestCase):
         self.assertIsNone(self.audit.telegram_sent_at)
         # The latent v28 loop: the sweep must not re-enqueue.
         self._sweep().assert_not_called()
+
+    def test_no_route_error_uses_region_option_label(self):
+        form = self.plot.form
+        q = FormQuestion.objects.create(
+            form=form,
+            name="region",
+            label="Region",
+            type="select_one",
+        )
+        FormOption.objects.create(
+            question=q, name="ET16", label="Sidama"
+        )
+        sub = self.audit.submission
+        sub.raw_data = {"region": "ET16"}
+        sub.save()
+        with self.assertLogs(TASKS, level="WARNING"):
+            self._run()
+        self.assertEqual(
+            self.audit.telegram_last_error,
+            "No Telegram group covers region Sidama (ET16)",
+        )
 
     def test_zero_groups_is_no_route(self):
         with self.assertLogs(TASKS, level="WARNING"):

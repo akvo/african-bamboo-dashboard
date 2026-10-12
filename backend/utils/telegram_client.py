@@ -139,6 +139,18 @@ class TelegramClient:
             "type": chat.get("type", ""),
         }
 
+    def get_chat_member_count(self, chat_id):
+        """Number of members in a chat, the bot included.
+
+        The only membership signal the Bot API offers; it
+        never lists members (spec D-7).
+        """
+        return self._request(
+            "GET",
+            "getChatMemberCount",
+            params={"chat_id": chat_id},
+        )
+
     def send_message(
         self, chat_id, text, parse_mode="HTML"
     ):

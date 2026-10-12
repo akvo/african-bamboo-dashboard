@@ -303,7 +303,7 @@ export default function TelegramTab() {
               return (
                 <div key={g._key} className="space-y-2 rounded-md border p-3">
                   <div className="flex gap-2">
-                    {groupChoices.length > 0 ? (
+                    {groups.length > 0 ? (
                       <Select
                         disabled={disabled}
                         value={g.chat_id || undefined}
@@ -347,11 +347,18 @@ export default function TelegramTab() {
                     </Button>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    {typeof count === "number" ? `${count} members` : "—"}
+                    {typeof count === "number" ? `${count} ${count === 1 ? "member" : "members"}` : "—"}
                   </p>
                   <MultiSelectDropdown
                     placeholder="All regions"
-                    items={regionOptions}
+                    items={[
+                      ...regionOptions,
+                      // A code with no option (plots gone, 11th+ form,
+                      // failed filter_options) must stay untickable.
+                      ...g.regions
+                        .filter((c) => !regionOptions.some((o) => o.value === c))
+                        .map((c) => ({ value: c, label: c, badge: c })),
+                    ]}
                     selected={g.regions}
                     onToggle={(value) => toggleRegion(i, value)}
                     getItemKey={(o) => o.value}
@@ -363,7 +370,7 @@ export default function TelegramTab() {
               );
             })}
 
-            {uncovered.length > 0 && (
+            {config.enabled && uncovered.length > 0 && (
               <p
                 role="alert"
                 className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700"

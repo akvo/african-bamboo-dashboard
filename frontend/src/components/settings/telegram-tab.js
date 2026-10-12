@@ -2,6 +2,9 @@
 
 import { useState, useEffect, useCallback } from "react";
 import api from "@/lib/api";
+import { useForms } from "@/hooks/useForms";
+import { mergeRegionOptions, uncoveredRegions } from "@/lib/telegram-regions";
+import { MultiSelectDropdown } from "@/components/multi-select-dropdown";
 import {
   Card,
   CardContent,
@@ -20,22 +23,24 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, RefreshCw, X } from "lucide-react";
+import { Loader2, Plus, RefreshCw, Trash2 } from "lucide-react";
 
 export default function TelegramTab() {
+  const { forms } = useForms();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState(null);
   const [groups, setGroups] = useState([]);
   // An outage used to look identical to "no groups
   // configured": the catch below emptied the list and
   // the UI silently fell back to a bare chat-ID box.
   const [groupsError, setGroupsError] = useState(null);
   const [loadingGroups, setLoadingGroups] = useState(false);
+  const [regionOptions, setRegionOptions] = useState([]);
   const [config, setConfig] = useState({
     enabled: false,
     bot_token: "",
-    supervisor_group_id: "",
-    enumerator_group_id: "",
+    groups: [],
   });
 
   const fetchGroups = useCallback(async (token) => {
@@ -45,9 +50,8 @@ export default function TelegramTab() {
     setLoadingGroups(true);
     setGroupsError(null);
     try {
-      const params = token ? { bot_token: token } : {};
       const { data } = await api.get("/v1/settings/telegram/groups/", {
-        params,
+        params: { bot_token: token },
       });
       setGroups(data);
     } catch (err) {
@@ -80,13 +84,77 @@ export default function TelegramTab() {
     fetchConfig();
   }, [fetchConfig]);
 
+  // ponytail: useForms reads only the first page of forms
+  // (PAGE_SIZE 10); fetch every page if a site ever has
+  // more (spec D-3).
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all(
+      forms.map((f) =>
+        api
+          .get("/v1/odk/plots/filter_options/", {
+            params: { form_id: f.asset_uid },
+          })
+          .then(({ data }) => ({
+            formName: f.name,
+            regions: data.regions || [],
+          }))
+          // One failing form must not hide the others.
+          .catch(() => ({ formName: f.name, regions: [] })),
+      ),
+    ).then((perForm) => {
+      if (!cancelled) {
+        setRegionOptions(mergeRegionOptions(perForm));
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [forms]);
+
+  const updateGroup = (index, patch) =>
+    setConfig((prev) => ({
+      ...prev,
+      groups: prev.groups.map((g, i) =>
+        i === index ? { ...g, ...patch } : g,
+      ),
+    }));
+
+  const toggleRegion = (index, value) => {
+    const { regions } = config.groups[index];
+    updateGroup(index, {
+      regions: regions.includes(value)
+        ? regions.filter((r) => r !== value)
+        : [...regions, value],
+    });
+  };
+
+  const addGroup = () =>
+    setConfig((prev) => ({
+      ...prev,
+      groups: [...prev.groups, { chat_id: "", title: "", regions: [] }],
+    }));
+
+  const removeGroup = (index) =>
+    setConfig((prev) => ({
+      ...prev,
+      groups: prev.groups.filter((_, i) => i !== index),
+    }));
+
   const handleSave = async () => {
     setSaving(true);
+    setSaveError(null);
     try {
-      const { data } = await api.put("/v1/settings/telegram/", config);
+      const { data } = await api.put("/v1/settings/telegram/", {
+        ...config,
+        // A row with no group picked yet is not a group.
+        groups: config.groups.filter((g) => g.chat_id.trim()),
+      });
       setConfig(data);
-    } catch {
-      // TODO: toast error
+    } catch (err) {
+      setSaveError(
+        err?.response?.data?.groups?.[0] || "Could not save settings.",
+      );
     } finally {
       setSaving(false);
     }
@@ -101,6 +169,18 @@ export default function TelegramTab() {
   }
 
   const disabled = !config.enabled;
+  const discovered = Object.fromEntries(groups.map((g) => [g.id, g]));
+  // Configured rows getChat could not resolve still need
+  // to show in their own dropdown.
+  const groupChoices = [
+    ...groups,
+    ...config.groups
+      .filter((g) => g.chat_id && !discovered[g.chat_id])
+      .map((g) => ({ id: g.chat_id, title: g.title || "Unknown group" })),
+  ];
+  const badgeFor = (value) =>
+    regionOptions.find((o) => o.value === value)?.badge || value;
+  const uncovered = uncoveredRegions(regionOptions, config.groups);
 
   return (
     <Card>
@@ -151,7 +231,7 @@ export default function TelegramTab() {
                 size="icon"
                 disabled={disabled || !config.bot_token || loadingGroups}
                 onClick={() => fetchGroups(config.bot_token)}
-                title="Fetch groups from bot"
+                title="Re-sync groups"
               >
                 <RefreshCw
                   className={`size-4 ${loadingGroups ? "animate-spin" : ""}`}
@@ -169,7 +249,7 @@ export default function TelegramTab() {
                 @BotFather
               </a>{" "}
               on Telegram, send <code>/newbot</code>, and paste the token. Then
-              click refresh to load groups.
+              click Re-sync to load groups.
             </p>
           </div>
 
@@ -182,137 +262,117 @@ export default function TelegramTab() {
             </p>
           )}
 
-          <div className="space-y-2">
-            <Label htmlFor="supervisor-group">Supervisor Group</Label>
-            {groups.length > 0 ? (
-              <div className="flex gap-2">
-                <Select
-                  disabled={disabled}
-                  value={config.supervisor_group_id || undefined}
-                  onValueChange={(val) =>
-                    setConfig((prev) => ({
-                      ...prev,
-                      supervisor_group_id: val,
-                    }))
-                  }
-                >
-                  <SelectTrigger id="supervisor-group" className="w-full">
-                    <SelectValue placeholder="Select a group..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {groups.map((g) => (
-                      <SelectItem key={g.id} value={g.id}>
-                        {g.title} ({g.id})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {config.supervisor_group_id && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    disabled={disabled}
-                    onClick={() =>
-                      setConfig((prev) => ({
-                        ...prev,
-                        supervisor_group_id: "",
-                      }))
-                    }
-                    title="Clear selection"
-                    className="shrink-0"
-                  >
-                    <X className="size-4" />
-                  </Button>
-                )}
-              </div>
-            ) : (
-              <Input
-                id="supervisor-group"
-                placeholder="-100123456789"
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <Label>Groups</Label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
                 disabled={disabled}
-                value={config.supervisor_group_id}
-                onChange={(e) =>
-                  setConfig((prev) => ({
-                    ...prev,
-                    supervisor_group_id: e.target.value,
-                  }))
-                }
-              />
-            )}
-            {groups.length === 0 && (
+                onClick={addGroup}
+              >
+                <Plus className="size-4" />
+                Add group
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Each rejection goes to every group whose regions include the
+              plot&apos;s region. Leave regions empty to receive all regions. A
+              newly added group only appears in the list after the bot is in
+              it, someone posts a message there, and you click Re-sync.
+            </p>
+
+            {config.groups.length === 0 && (
               <p className="text-xs text-muted-foreground">
-                Enter a bot token and click refresh to load available groups.
+                No groups yet. Rejection alerts are not sent until you add
+                one.
               </p>
             )}
-          </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="enumerator-group">Enumerator Group</Label>
-            {groups.length > 0 ? (
-              <div className="flex gap-2">
-                <Select
-                  disabled={disabled}
-                  value={config.enumerator_group_id || undefined}
-                  onValueChange={(val) =>
-                    setConfig((prev) => ({
-                      ...prev,
-                      enumerator_group_id: val,
-                    }))
-                  }
-                >
-                  <SelectTrigger id="enumerator-group" className="w-full">
-                    <SelectValue placeholder="Select a group..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {groups.map((g) => (
-                      <SelectItem key={g.id} value={g.id}>
-                        {g.title} ({g.id})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {config.enumerator_group_id && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    disabled={disabled}
-                    onClick={() =>
-                      setConfig((prev) => ({
-                        ...prev,
-                        enumerator_group_id: "",
-                      }))
-                    }
-                    title="Clear selection"
-                    className="shrink-0"
-                  >
-                    <X className="size-4" />
-                  </Button>
-                )}
-              </div>
-            ) : (
-              <Input
-                id="enumerator-group"
-                placeholder="-100987654321"
-                disabled={disabled}
-                value={config.enumerator_group_id}
-                onChange={(e) =>
-                  setConfig((prev) => ({
-                    ...prev,
-                    enumerator_group_id: e.target.value,
-                  }))
-                }
-              />
-            )}
-            {groups.length === 0 && (
-              <p className="text-xs text-muted-foreground">
-                Can be the same group as Supervisor.
+            {config.groups.map((g, i) => {
+              const count = discovered[g.chat_id]?.member_count;
+              return (
+                <div key={i} className="space-y-2 rounded-md border p-3">
+                  <div className="flex gap-2">
+                    {groupChoices.length > 0 ? (
+                      <Select
+                        disabled={disabled}
+                        value={g.chat_id || undefined}
+                        onValueChange={(val) => updateGroup(i, { chat_id: val })}
+                      >
+                        <SelectTrigger
+                          className="w-full"
+                          aria-label="Telegram group"
+                        >
+                          <SelectValue placeholder="Select a group..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {groupChoices.map((c) => (
+                            <SelectItem key={c.id} value={c.id}>
+                              {c.title} ({c.id})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Input
+                        aria-label="Telegram chat ID"
+                        placeholder="-100123456789"
+                        disabled={disabled}
+                        value={g.chat_id}
+                        onChange={(e) =>
+                          updateGroup(i, { chat_id: e.target.value })
+                        }
+                      />
+                    )}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      disabled={disabled}
+                      onClick={() => removeGroup(i)}
+                      title="Remove group"
+                      className="shrink-0"
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {typeof count === "number" ? `${count} members` : "—"}
+                  </p>
+                  <MultiSelectDropdown
+                    placeholder="All regions"
+                    items={regionOptions}
+                    selected={g.regions}
+                    onToggle={(value) => toggleRegion(i, value)}
+                    getItemKey={(o) => o.value}
+                    getItemLabel={(o) => o.label}
+                    getBadgeLabel={badgeFor}
+                    scrollable
+                  />
+                </div>
+              );
+            })}
+
+            {uncovered.length > 0 && (
+              <p
+                role="alert"
+                className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700"
+              >
+                No group covers {uncovered.map((o) => o.badge).join(", ")}.
+                Rejections from these regions will show as failed until a group
+                covers them.
               </p>
             )}
           </div>
         </div>
 
+        {saveError && (
+          <p role="alert" className="text-xs text-destructive">
+            {saveError}
+          </p>
+        )}
         <Button onClick={handleSave} disabled={saving}>
           {saving && <Loader2 className="size-4 animate-spin" />}
           Save changes

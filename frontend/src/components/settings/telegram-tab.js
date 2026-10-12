@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import api from "@/lib/api";
 import { useForms } from "@/hooks/useForms";
 import { mergeRegionOptions, uncoveredRegions } from "@/lib/telegram-regions";
@@ -26,6 +26,12 @@ import {
 import { Loader2, Plus, RefreshCw, Trash2 } from "lucide-react";
 
 export default function TelegramTab() {
+  // Stable row keys: Select/dropdown keep UI state per row.
+  const keySeq = useRef(0);
+  const withKeys = (data) => ({
+    ...data,
+    groups: data.groups.map((g) => ({ ...g, _key: ++keySeq.current })),
+  });
   const { forms } = useForms();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -69,7 +75,7 @@ export default function TelegramTab() {
   const fetchConfig = useCallback(async () => {
     try {
       const { data } = await api.get("/v1/settings/telegram/");
-      setConfig(data);
+      setConfig(withKeys(data));
       if (data.bot_token) {
         fetchGroups(data.bot_token);
       }
@@ -132,7 +138,10 @@ export default function TelegramTab() {
   const addGroup = () =>
     setConfig((prev) => ({
       ...prev,
-      groups: [...prev.groups, { chat_id: "", title: "", regions: [] }],
+      groups: [
+        ...prev.groups,
+        { chat_id: "", title: "", regions: [], _key: ++keySeq.current },
+      ],
     }));
 
   const removeGroup = (index) =>
@@ -150,11 +159,10 @@ export default function TelegramTab() {
         // A row with no group picked yet is not a group.
         groups: config.groups.filter((g) => g.chat_id.trim()),
       });
-      setConfig(data);
+      setConfig(withKeys(data));
     } catch (err) {
-      setSaveError(
-        err?.response?.data?.groups?.[0] || "Could not save settings.",
-      );
+      const msg = err?.response?.data?.groups?.[0];
+      setSaveError(typeof msg === "string" ? msg : "Could not save settings.");
     } finally {
       setSaving(false);
     }
@@ -293,7 +301,7 @@ export default function TelegramTab() {
             {config.groups.map((g, i) => {
               const count = discovered[g.chat_id]?.member_count;
               return (
-                <div key={i} className="space-y-2 rounded-md border p-3">
+                <div key={g._key} className="space-y-2 rounded-md border p-3">
                   <div className="flex gap-2">
                     {groupChoices.length > 0 ? (
                       <Select

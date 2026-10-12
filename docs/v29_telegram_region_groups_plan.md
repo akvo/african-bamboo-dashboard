@@ -10,7 +10,7 @@
 
 ## Feature: Region-Scoped Telegram Groups
 
-**Task ID**: TBD
+**Task ID**: [#57](https://github.com/akvo/african-bamboo-dashboard/issues/57)
 **Author**: Iwan Firmawan
 **Date**: 2026-10-05
 **Status**: Draft
@@ -240,8 +240,16 @@ is a real path, not a corner case.
 | GET | `/api/v1/settings/telegram/groups/` | Discovery: `getUpdates` + `getChat` for every configured row; refreshes `title` | Required (`IsAuthenticated`) |
 | GET | `/api/v1/odk/plots/filter_options/?form_id=…` | **Existing, unchanged** — source of region `{value, label}` for the multiselect | Required |
 
-No new endpoint for region options: the frontend calls `filter_options` per
-form via the existing `useFilterOptions` hook and merges by `value`.
+No new endpoint for region options: the frontend lists forms via `useForms()`
+and calls `filter_options` once per form (`form_id` = `asset_uid`) with a plain
+`api.get` inside one `Promise.all`, then merges by `value`. The existing
+`useFilterOptions` hook serves a single form and cannot be called in a loop
+(rules of hooks), so it is not reused here.
+
+`GET` and `PUT` both add `groups` to the `get_telegram_config()` payload. The
+PUT view pops `groups` out of `validated_data` before its per-key
+`SystemSetting` write loop, so the list is never stringified into a setting
+row.
 
 ### Request/Response Examples
 
@@ -348,7 +356,11 @@ regions, of which only 2 have plots.
 e.g. *Sidama — Parcel Boundary Mapping (SID)*, because the same label recurs
 with a different code per form (D-8). Ceiling — `filter_options` lists regions
 that already have plots; a brand-new site becomes selectable after its first
-synced submission. Upgrade path if ever needed: Option 3.
+synced submission. Upgrade path if ever needed: Option 3. Second ceiling —
+`useForms()` reads only the first page of `/v1/odk/forms/` (DRF `PAGE_SIZE`
+10), so regions from an 11th+ form are missing from the picker and from the
+uncovered-region warning. Accepted for now (5 forms today); upgrade path is
+fetching all pages.
 
 ### D-4: Behaviour when no group covers a plot's region
 
@@ -368,7 +380,24 @@ covers region '<label>'"`, `telegram_attempts = TELEGRAM_MAX_ATTEMPTS`. The
 existing `telegram_status` reports `failed`, and v28's Resend (which resets
 attempts) re-routes against the fixed config. No new status, no new field.
 
-**Impact**: `send_telegram_rejection_notification` gains one branch.
+A second latent loop of the same shape exists: when every target is already
+in the ledger (`outstanding` empty) the task also returns before incrementing
+`telegram_attempts` and never sets `telegram_sent_at`. Scope edits make it
+reachable — delivered to A, B failed, admin removes B from scope, Resend → the
+audit stays `pending` and is re-swept forever. Fix: that branch sets
+`telegram_sent_at` (every current target has been delivered), which is what the
+final "all delivered" check would have concluded.
+
+**Reason in the UI**: `telegram_last_error` stays internal. It also holds
+ordinary send failures (`"<chat_id>: <TelegramSendError>"`), and transport
+errors wrap the raw `requests` exception, whose text can include the request
+URL — and with it the bot token. `RejectionAuditSerializer` instead gains a
+read-only `telegram_failure_reason`: `telegram_last_error` when it starts with
+the fixed no-route prefix, else `null`. `telegram-status-badge.js` shows that
+reason when present and keeps its generic "not delivered" text otherwise.
+
+**Impact**: `send_telegram_rejection_notification` gains a no-route branch and
+the all-delivered branch is fixed; one serializer field; one badge change.
 
 ```mermaid
 stateDiagram-v2
@@ -487,7 +516,7 @@ the list.
 | Region multiselect, nothing selected — *All regions* | `TelegramGroup.regions == []` | `[]` |
 | Region option *Oromia — Parcel Boundary Mapping (ORO)* | `plot.region == "ORO"` | `"ORO"` in `regions` |
 | Region option *Sidama Region — Plantation Site Mapping 2026 (sidama)* | `plot.region == "sidama"` | `"sidama"` in `regions` |
-| Badge `failed` + "No Telegram group covers region …" | `telegram_attempts == TELEGRAM_MAX_ATTEMPTS`, `telegram_last_error` set | existing `RejectionAudit` columns |
+| Badge `failed` + "No Telegram group covers region …" | `telegram_status == "failed"`, `telegram_failure_reason` (no-route prefix only) | existing `telegram_attempts`, `telegram_last_error` columns |
 | Group row title | `TelegramGroup.title` (refreshed via `getChat`) | text |
 
 Matching is an **exact string compare** on the stored raw value. When
@@ -539,6 +568,16 @@ Codes in use on the local database (form → code → label):
 
 ---
 
+### Other files touched
+
+- `README.md:338-381` — besides the env vars, rewrite the supervisor /
+  enumerator prose and the `"Supervisors"/"Enumerators"` example response.
+- Supergroup migration has no task-level test today
+  (`migrate_to_chat_id` is only covered in `tests_telegram_client.py`), so
+  `tests_telegram_migration.py` is new, not a switch.
+
+---
+
 ## 8. Security Considerations
 
 - [ ] **Permission model**: unchanged — `IsAuthenticated` on all settings
@@ -546,7 +585,8 @@ Codes in use on the local database (form → code → label):
 - [ ] **Input validation**: `chat_id` non-blank and unique; `regions` list of
       strings; full-set replace runs in one `transaction.atomic()`.
 - [ ] **No new attack vectors**: no new outbound endpoints; `bot_token` stays
-      out of every non-settings response (v28 rule).
+      out of every non-settings response (v28 rule). `telegram_last_error` is
+      not serialized; only the no-route reason is (D-4).
 - [ ] **Data exposure**: the alert body carries Plot ID, Farm ID, location,
       reason and validator name — no phone numbers or personal data. A
       wrong-site member in a group is noise, not a serious leak.
@@ -567,7 +607,8 @@ Codes in use on the local database (form → code → label):
 | Unit — `utils/tests/tests_telegram_client.py` | `get_chat_member_count` returns int; failure raises `TelegramSendError` |
 | Integration — `v1_init/tests/tests_settings_telegram_endpoint.py` | Replace-set PUT; omitted `groups` untouched; duplicate `chat_id` → 400 |
 | Integration — `v1_init/tests/tests_telegram_groups_endpoint.py` | Every row resolved via `getChat`; title refreshed; `member_count` present, `null` on per-chat failure. Keep v28's class-level settings pin (OOM guard) |
-| Integration — `v1_odk/tests/tests_telegram_retry.py` | Region match; *All regions* match; zero groups → no-route; no match → abandoned with error and not re-swept; scope edit re-routes on resend without re-sending ledgered chats |
+| Integration — `v1_odk/tests/tests_telegram_retry.py` | Region match; *All regions* match; zero groups → no-route; no match → abandoned with error and not re-swept; scope edit re-routes on resend without re-sending ledgered chats; all targets already ledgered → `telegram_sent_at` set, not re-swept |
+| Integration — `v1_odk` rejection-audit serializer | `telegram_failure_reason` returns the no-route reason; `null` for an ordinary send error |
 | Integration — `v1_odk/tests/tests_telegram_migration.py` | Supergroup id updates the row; merge when new id already present |
 | E2E (manual) | Checklist below |
 
@@ -621,9 +662,9 @@ docker compose exec backend ./test.sh api.v1.v1_odk
 | Phase | Scope | Files |
 |---|---|---|
 | 1 | Model + carry-over migration; `get_telegram_config` drops group keys; `migrate_telegram_group_id` on the model (merge if new id exists); remove group env vars | `v1_init/models.py`, `v1_init/migrations/0002_telegram_group.py`, `v1_init/helpers.py`, `settings.py`, `docker-compose.yml`, `.env.example`, `README.md` |
-| 2 | `_telegram_targets(plot)`; no-route branch | `v1_odk/tasks.py` |
+| 2 | `_telegram_targets(plot)`; no-route branch; all-delivered branch sets `telegram_sent_at`; `telegram_failure_reason` field | `v1_odk/tasks.py`, `v1_odk/serializers.py` |
 | 3 | `groups` serializer field; replace-set PUT; discovery over all rows | `v1_init/serializers.py`, `v1_init/views.py` |
-| 4 | Groups table (empty state when none) with group `Select` (+ raw-id `Input` fallback), region `MultiSelectDropdown`, Add/Remove, uncovered-region warning, Re-sync hint; no role wording | `frontend/src/components/settings/telegram-tab.js` |
+| 4 | Groups table (empty state when none) with group `Select` (+ raw-id `Input` fallback), region `MultiSelectDropdown` (fed by `useForms()` + `Promise.all` over `filter_options`), Add/Remove, uncovered-region warning, Re-sync hint; no role wording; badge shows no-route reason | `frontend/src/components/settings/telegram-tab.js`, `frontend/src/components/map/telegram-status-badge.js` |
 | 5 | `get_chat_member_count`; `member_count` in discovery; "12 members" next to each row (D-10) | `backend/utils/telegram_client.py`, `v1_init/views.py`, `telegram-tab.js` |
 
 Phase 2 routing, for reference:
@@ -709,6 +750,8 @@ WHERE "group" = 'telegram' AND key LIKE '%group_id';
 | Per-person direct messages | Only way to target individuals with certainty, but needs every recipient to `/start` the bot and an account-to-Kobo-user mapping. Separate plan if the group model proves insufficient |
 | Per-form scoping (`{form, value}` pairs) | Not needed: no code is reused across forms with a different meaning (D-8) |
 | Different message per group | Same body to every target, as today |
+| Redacting the bot token from `telegram_last_error` / logs | Pre-existing v28 issue: transport errors embed the request URL. Not exposed by this change (D-4); fix separately |
+| Forms beyond the first page in the region picker | 10-form ceiling (D-3); fetch all pages when needed |
 
 ---
 

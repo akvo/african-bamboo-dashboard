@@ -86,7 +86,10 @@ export default function TelegramStatusBadge({ audit, onResent }) {
     <div className="flex flex-wrap items-center gap-2">
       <p className="flex items-center gap-1.5 text-xs text-amber-600">
         <AlertTriangle className="size-3.5 shrink-0" />
-        <span>Telegram notification not delivered</span>
+        <span>
+          {audit.telegram_failure_reason ||
+            "Telegram notification not delivered"}
+        </span>
       </p>
       {audit.can_resend && (
         <button

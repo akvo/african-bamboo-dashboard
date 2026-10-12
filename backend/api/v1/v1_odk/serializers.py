@@ -9,6 +9,7 @@ from api.v1.v1_init.helpers import get_telegram_config
 from api.v1.v1_odk.constants import (
     ATTACHMENTS_FOLDER,
     EXCLUDED_QUESTION_TYPES,
+    TELEGRAM_NO_ROUTE_ERROR,
     ApprovalStatusTypes,
     RejectionCategory,
     SyncStatus,
@@ -291,6 +292,9 @@ class RejectionAuditSerializer(
         serializers.SerializerMethodField()
     )
     can_resend = serializers.SerializerMethodField()
+    telegram_failure_reason = (
+        serializers.SerializerMethodField()
+    )
 
     def get_telegram_status(self, obj):
         """Delivery state for the UI.
@@ -328,6 +332,18 @@ class RejectionAuditSerializer(
             and obj.sync_status == SyncStatus.SYNCED
         )
 
+    def get_telegram_failure_reason(self, obj):
+        """The no-route reason, and nothing else.
+
+        telegram_last_error also holds raw send errors,
+        and a transport error can embed the request URL,
+        which carries the bot token.
+        """
+        error = obj.telegram_last_error or ""
+        if error.startswith(TELEGRAM_NO_ROUTE_ERROR):
+            return error
+        return None
+
     class Meta:
         model = RejectionAudit
         fields = [
@@ -340,6 +356,7 @@ class RejectionAuditSerializer(
             "telegram_sent_at",
             "telegram_status",
             "can_resend",
+            "telegram_failure_reason",
             "validator_name",
         ]
         read_only_fields = fields

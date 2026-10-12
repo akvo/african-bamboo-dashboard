@@ -347,7 +347,7 @@ When a plot is rejected, the system can send notifications to Telegram groups af
    TELEGRAM_BOT_TOKEN=<your_bot_token>
    ```
 
-   DB settings (saved via the UI) override environment variables. Groups are managed only in Settings; deployments upgrading from an earlier version must keep `TELEGRAM_SUPERVISOR_GROUP_ID` / `TELEGRAM_ENUMERATOR_GROUP_ID` set until `migrate` has run once, after which they can be removed.
+   DB settings (saved via the UI) override environment variables.
 
 4. **Fetch groups via API** (optional) — if you prefer the CLI:
 
@@ -376,6 +376,13 @@ When a plot is rejected, the system can send notifications to Telegram groups af
 - After successful Kobo sync, a Telegram notification is queued automatically
 - Each rejection is sent to every group whose regions include the plot's region, plus every *All regions* group; if none covers it, the badge shows the notification as failed with the reason
 - If `TELEGRAM_ENABLED=False` (default), no notifications are sent
+
+### Upgrading from fixed supervisor/enumerator groups
+
+Groups are managed only in Settings. The one-time `migrate` carries the old two groups over into group rows.
+
+- Deployments that inject `TELEGRAM_SUPERVISOR_GROUP_ID` / `TELEGRAM_ENUMERATOR_GROUP_ID` into the container environment (e.g. Kubernetes secrets) must keep them until `migrate` has run once. After that they can be deleted.
+- Local docker-compose no longer forwards these variables. A group configured only through `.env` is not carried over; re-add it in **Settings > Telegram** after upgrading. Groups saved earlier through the Settings UI are carried over regardless.
 
 ## Image Attachments
 

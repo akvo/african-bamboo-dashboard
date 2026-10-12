@@ -502,10 +502,12 @@ def _resolve_plot_location(submission, plot):
     return region or sub_region or "Unknown Location"
 
 
-def _deliver_to_chat(client, chat_id, message, audit):
+def _deliver_to_chat(client, chat_id, message, audit, delivered):
     """Send to one chat, following a supergroup move.
 
-    Returns (chat_id_used, message_id). Raises
+    Returns (chat_id_used, message_id). message_id is None
+    when the move landed on a chat already in `delivered`,
+    so nothing was sent. Raises
     TelegramSendError -- including for transport faults,
     which TelegramClient now normalises -- so the caller
     records the failure and lets the sweep retry.
@@ -539,6 +541,8 @@ def _deliver_to_chat(client, chat_id, message, audit):
         migrate_telegram_group_id(
             chat_id, new_chat_id
         )
+        if new_chat_id in delivered:
+            return new_chat_id, None
         return new_chat_id, client.send_message(
             new_chat_id, message
         )
@@ -736,7 +740,7 @@ def send_telegram_rejection_notification(audit_id):
             continue
         try:
             used_id, msg_id = _deliver_to_chat(
-                client, chat_id, message, audit
+                client, chat_id, message, audit, delivered
             )
         except TelegramSendError as e:
             last_error = f"{chat_id}: {e}"
@@ -761,6 +765,10 @@ def send_telegram_rejection_notification(audit_id):
                     else ""
                 ),
             )
+            continue
+
+        if msg_id is None:
+            # The move merged into a chat that already has it.
             continue
 
         # Saved per chat, not once at the end: a crash

@@ -388,7 +388,9 @@ class TelegramRegionRoutingTest(TestCase):
 
     def test_no_covering_group_abandons_with_reason(self):
         TelegramGroup.objects.create(chat_id="-3", regions=["ET04"])
-        self.assertEqual(self._run(), [])
+        with self.assertLogs(TASKS, level="WARNING"):
+            sent = self._run()
+        self.assertEqual(sent, [])
         self.assertEqual(
             self.audit.telegram_attempts,
             settings.TELEGRAM_MAX_ATTEMPTS,
@@ -404,7 +406,9 @@ class TelegramRegionRoutingTest(TestCase):
         self._sweep().assert_not_called()
 
     def test_zero_groups_is_no_route(self):
-        self.assertEqual(self._run(), [])
+        with self.assertLogs(TASKS, level="WARNING"):
+            sent = self._run()
+        self.assertEqual(sent, [])
         self.assertEqual(
             self.audit.telegram_attempts,
             settings.TELEGRAM_MAX_ATTEMPTS,
@@ -414,7 +418,8 @@ class TelegramRegionRoutingTest(TestCase):
         group = TelegramGroup.objects.create(
             chat_id="-3", regions=["ET04"]
         )
-        self._run()
+        with self.assertLogs(TASKS, level="WARNING"):
+            self._run()
         group.regions = ["ET04", "ET16"]
         group.save()
         # What the resend endpoint does before enqueueing.

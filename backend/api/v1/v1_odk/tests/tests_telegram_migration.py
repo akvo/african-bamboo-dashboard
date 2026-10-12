@@ -49,12 +49,15 @@ class TelegramSupergroupMigrationTest(TestCase):
         with patch(
             f"{TASKS}.get_telegram_config",
             return_value={"enabled": True, "bot_token": "tok"},
-        ), patch(f"{TASKS}.TelegramClient") as cls:
+        ), patch(f"{TASKS}.TelegramClient") as cls, self.assertLogs(
+            TASKS, level="WARNING"
+        ):
             client = MagicMock()
             client.send_message.side_effect = [moved, 7]
             cls.return_value = client
             send_telegram_rejection_notification(self.audit.pk)
         self.audit.refresh_from_db()
+        return client
 
     def test_row_follows_new_id_and_keeps_regions(self):
         TelegramGroup.objects.create(
@@ -79,5 +82,30 @@ class TelegramSupergroupMigrationTest(TestCase):
     def test_merge_with_all_regions_row_stays_all_regions(self):
         TelegramGroup.objects.create(chat_id="-100111", regions=["ORO"])
         TelegramGroup.objects.create(chat_id="-100999", regions=[])
-        self._run_with_migration()
+        client = self._run_with_migration()
         self.assertEqual(TelegramGroup.objects.get().regions, [])
+        self.assertEqual(client.send_message.call_count, 2)
+        self.assertEqual(self.audit.telegram_chat_ids, ["-100999"])
+
+    def test_move_onto_already_delivered_chat_is_not_resent(self):
+        """The new id's row has a lower pk, so it is delivered
+        first; the old row then migrates onto it."""
+        TelegramGroup.objects.create(chat_id="-100999", regions=[])
+        TelegramGroup.objects.create(chat_id="-100111", regions=["ORO"])
+        moved = TelegramSendError(
+            "upgraded", migrate_to_chat_id=-100999
+        )
+        with patch(
+            f"{TASKS}.get_telegram_config",
+            return_value={"enabled": True, "bot_token": "tok"},
+        ), patch(f"{TASKS}.TelegramClient") as cls, self.assertLogs(
+            TASKS, level="WARNING"
+        ):
+            client = MagicMock()
+            client.send_message.side_effect = [7, moved]
+            cls.return_value = client
+            send_telegram_rejection_notification(self.audit.pk)
+        self.audit.refresh_from_db()
+        self.assertEqual(client.send_message.call_count, 2)
+        self.assertEqual(self.audit.telegram_chat_ids, ["-100999"])
+        self.assertIsNotNone(self.audit.telegram_sent_at)

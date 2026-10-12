@@ -1,7 +1,7 @@
 from django.test import TestCase
 from django.test.utils import override_settings
 
-from api.v1.v1_init.models import SystemSetting
+from api.v1.v1_init.models import SystemSetting, TelegramGroup
 from api.v1.v1_init.tests.mixins import V1InitTestHelperMixin
 
 
@@ -10,8 +10,6 @@ from api.v1.v1_init.tests.mixins import V1InitTestHelperMixin
     TEST_ENV=True,
     TELEGRAM_ENABLED=False,
     TELEGRAM_BOT_TOKEN="env-token",
-    TELEGRAM_SUPERVISOR_GROUP_ID="env-sup",
-    TELEGRAM_ENUMERATOR_GROUP_ID="env-enum",
 )
 class TelegramSettingsTest(V1InitTestHelperMixin, TestCase):
     URL = "/api/v1/settings/telegram/"
@@ -30,20 +28,14 @@ class TelegramSettingsTest(V1InitTestHelperMixin, TestCase):
         data = resp.json()
         self.assertFalse(data["enabled"])
         self.assertEqual(data["bot_token"], "env-token")
-        self.assertEqual(
-            data["supervisor_group_id"], "env-sup"
-        )
-        self.assertEqual(
-            data["enumerator_group_id"], "env-enum"
-        )
+        self.assertEqual(data["groups"], [])
+        self.assertNotIn("supervisor_group_id", data)
 
     def test_put_saves_and_get_returns_updated(self):
         auth = self.login()
         payload = {
             "enabled": True,
             "bot_token": "new-token",
-            "supervisor_group_id": "-100111",
-            "enumerator_group_id": "-100222",
         }
         resp = self.client.put(
             self.URL,
@@ -61,7 +53,7 @@ class TelegramSettingsTest(V1InitTestHelperMixin, TestCase):
             SystemSetting.objects.filter(
                 group="telegram"
             ).count(),
-            4,
+            2,
         )
 
         # Subsequent GET returns updated values
@@ -78,14 +70,121 @@ class TelegramSettingsTest(V1InitTestHelperMixin, TestCase):
         )
         self.assertEqual(resp.status_code, 401)
 
+    def _put(self, payload):
+        return self.client.put(
+            self.URL,
+            payload,
+            content_type="application/json",
+            **self.login(),
+        )
+
+    def test_put_groups_replaces_full_set(self):
+        TelegramGroup.objects.create(
+            chat_id="-100111", title="AB Management"
+        )
+        TelegramGroup.objects.create(chat_id="-100999")
+        resp = self._put(
+            {
+                "groups": [
+                    {"chat_id": "-100111", "regions": []},
+                    {
+                        "chat_id": "-100222",
+                        "regions": ["ORO", "ET04"],
+                    },
+                ]
+            }
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(
+            resp.json()["groups"],
+            [
+                {
+                    "chat_id": "-100111",
+                    "title": "AB Management",
+                    "regions": [],
+                },
+                {
+                    "chat_id": "-100222",
+                    "title": "",
+                    "regions": ["ORO", "ET04"],
+                },
+            ],
+        )
+        self.assertFalse(
+            TelegramGroup.objects.filter(
+                chat_id="-100999"
+            ).exists()
+        )
+        self.assertFalse(
+            SystemSetting.objects.filter(key="groups").exists()
+        )
+
+    def test_put_without_groups_leaves_rows(self):
+        TelegramGroup.objects.create(
+            chat_id="-100111", regions=["SID"]
+        )
+        self._put({"enabled": True})
+        self.assertEqual(
+            TelegramGroup.objects.get().regions, ["SID"]
+        )
+
+    def test_put_empty_groups_deletes_all(self):
+        TelegramGroup.objects.create(chat_id="-100111")
+        resp = self._put({"groups": []})
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(TelegramGroup.objects.exists())
+
+    def test_put_duplicate_chat_id_is_400(self):
+        TelegramGroup.objects.create(chat_id="-100111")
+        resp = self._put(
+            {
+                "groups": [
+                    {"chat_id": "-100222", "regions": []},
+                    {"chat_id": "-100222", "regions": ["ORO"]},
+                ]
+            }
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(
+            resp.json(),
+            {"groups": ["Duplicate chat_id: -100222"]},
+        )
+        # Nothing half-applied.
+        self.assertEqual(
+            list(
+                TelegramGroup.objects.values_list(
+                    "chat_id", flat=True
+                )
+            ),
+            ["-100111"],
+        )
+
+    def test_put_blank_chat_id_is_400(self):
+        resp = self._put(
+            {"groups": [{"chat_id": " ", "regions": []}]}
+        )
+        self.assertEqual(resp.status_code, 400)
+
+    def test_put_blank_region_is_400(self):
+        resp = self._put(
+            {"groups": [{"chat_id": "-1", "regions": [""]}]}
+        )
+        self.assertEqual(resp.status_code, 400)
+
+    def test_role_keys_no_longer_accepted(self):
+        self._put({"supervisor_group_id": "-100111"})
+        self.assertFalse(
+            SystemSetting.objects.filter(
+                key="supervisor_group_id"
+            ).exists()
+        )
+
 
 @override_settings(
     USE_TZ=False,
     TEST_ENV=True,
     TELEGRAM_ENABLED=True,
     TELEGRAM_BOT_TOKEN="env-token",
-    TELEGRAM_SUPERVISOR_GROUP_ID="env-sup",
-    TELEGRAM_ENUMERATOR_GROUP_ID="env-enum",
 )
 class TelegramSettingsFallbackTest(
     V1InitTestHelperMixin, TestCase

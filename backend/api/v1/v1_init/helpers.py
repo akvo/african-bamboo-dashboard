@@ -7,12 +7,6 @@ TELEGRAM_GROUP = "telegram"
 TELEGRAM_DEFAULTS = {
     "enabled": lambda: settings.TELEGRAM_ENABLED,
     "bot_token": lambda: settings.TELEGRAM_BOT_TOKEN,
-    "supervisor_group_id": (
-        lambda: settings.TELEGRAM_SUPERVISOR_GROUP_ID
-    ),
-    "enumerator_group_id": (
-        lambda: settings.TELEGRAM_ENUMERATOR_GROUP_ID
-    ),
 }
 
 

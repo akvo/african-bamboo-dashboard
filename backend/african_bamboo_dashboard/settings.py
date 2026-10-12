@@ -355,12 +355,6 @@ TELEGRAM_ENABLED = (
 TELEGRAM_BOT_TOKEN = environ.get(
     "TELEGRAM_BOT_TOKEN", ""
 )
-TELEGRAM_SUPERVISOR_GROUP_ID = environ.get(
-    "TELEGRAM_SUPERVISOR_GROUP_ID", ""
-)
-TELEGRAM_ENUMERATOR_GROUP_ID = environ.get(
-    "TELEGRAM_ENUMERATOR_GROUP_ID", ""
-)
 
 # Retry bounds for the delivery sweep.
 # MAX_ATTEMPTS caps how many times an undelivered

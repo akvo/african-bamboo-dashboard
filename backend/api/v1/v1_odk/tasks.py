@@ -14,11 +14,12 @@ from PIL import Image, ImageOps
 
 from api.v1.v1_init.helpers import (get_telegram_config,
                                     migrate_telegram_group_id)
+from api.v1.v1_init.models import TelegramGroup
 from api.v1.v1_jobs.constants import JobStatus, JobTypes
 from api.v1.v1_jobs.models import Jobs
 from api.v1.v1_odk.constants import (ATTACHMENTS_FOLDER, PREFIX_FARM_ID,
-                                     PREFIX_SUBM_ID, ApprovalStatusTypes,
-                                     SyncStatus)
+                                     PREFIX_SUBM_ID, TELEGRAM_NO_ROUTE_ERROR,
+                                     ApprovalStatusTypes, SyncStatus)
 from api.v1.v1_odk.export import (build_export_filename,
                                   cleanup_old_exports, generate_geojson,
                                   generate_shapefile, generate_xlsx)
@@ -407,21 +408,38 @@ def on_kobo_sync_complete(task):
         )
 
 
-def _telegram_targets(tg_config):
-    """Chat ids to notify, de-duplicated, in order.
+def _telegram_targets(plot):
+    """Chat ids whose scope covers plot.region, in order.
 
-    Both group ids routinely point at the same chat;
-    sending twice would double-post.
+    regions == [] means all regions. chat_id is unique,
+    so the list needs no de-duplication.
     """
-    targets = []
-    for key in (
-        "supervisor_group_id",
-        "enumerator_group_id",
-    ):
-        chat_id = tg_config.get(key)
-        if chat_id and chat_id not in targets:
-            targets.append(chat_id)
-    return targets
+    # ponytail: exact match on the stored raw value; the
+    # settings picker offers exactly those values, so they
+    # agree. Per-form {form, value} pairs if a code is ever
+    # reused with a different meaning (spec D-8).
+    return [
+        g.chat_id
+        for g in TelegramGroup.objects.order_by("pk")
+        if not g.regions or plot.region in g.regions
+    ]
+
+
+def _region_label(audit):
+    """Plot region as the admin sees it in the picker,
+    e.g. "Sidama (ET16)"."""
+    form = audit.submission.form
+    option_map, type_map = build_option_lookup(form)
+    label = _resolve_field_spec(
+        audit.submission.raw_data or {},
+        form.region_field or "region",
+        option_map,
+        type_map,
+    )
+    code = audit.plot.region
+    if label and label != code:
+        return f"{label} ({code})"
+    return code or "(none)"
 
 
 def _resolve_field_spec(raw_data, field_spec, option_map, type_map):
@@ -639,11 +657,28 @@ def send_telegram_rejection_notification(audit_id):
         )
         return
 
-    targets = _telegram_targets(tg_config)
+    targets = _telegram_targets(audit.plot)
     if not targets:
+        # Abandon now instead of returning: an early return
+        # leaves attempts under the cap, so the sweep would
+        # re-enqueue this audit every cooldown forever.
+        # Resend zeroes attempts once a scope is fixed.
+        audit.telegram_attempts = settings.TELEGRAM_MAX_ATTEMPTS
+        audit.telegram_last_attempt_at = timezone.now()
+        audit.telegram_last_error = (
+            f"{TELEGRAM_NO_ROUTE_ERROR} {_region_label(audit)}"
+        )
+        audit.save(
+            update_fields=[
+                "telegram_attempts",
+                "telegram_last_attempt_at",
+                "telegram_last_error",
+            ]
+        )
         logger.warning(
-            "No Telegram group ID configured — no "
-            "notification sent for audit %s",
+            "%s — audit %s abandoned until a group covers "
+            "it and it is resent",
+            audit.telegram_last_error,
             audit_id,
         )
         return
@@ -653,6 +688,18 @@ def send_telegram_rejection_notification(audit_id):
         c for c in targets if c not in delivered
     ]
     if not outstanding:
+        # Every current target already has it, e.g. the one
+        # failing group was taken out of scope. Mark it sent,
+        # or the sweep re-enqueues it forever.
+        if not audit.telegram_sent_at:
+            audit.telegram_sent_at = timezone.now()
+            audit.telegram_last_error = None
+            audit.save(
+                update_fields=[
+                    "telegram_sent_at",
+                    "telegram_last_error",
+                ]
+            )
         logger.info(
             "Audit %s already delivered to every "
             "configured group — nothing to send",
@@ -683,6 +730,10 @@ def send_telegram_rejection_notification(audit_id):
     retry_after = None
 
     for chat_id in outstanding:
+        # A supergroup move can merge this chat into one
+        # already delivered earlier in this loop.
+        if chat_id in delivered:
+            continue
         try:
             used_id, msg_id = _deliver_to_chat(
                 client, chat_id, message, audit
@@ -740,7 +791,12 @@ def send_telegram_rejection_notification(audit_id):
         if retry_after
         else None
     )
-    if all(c in delivered for c in targets):
+    # Recomputed, not `targets`: a supergroup move inside
+    # the loop renamed a target, and the ledger holds the
+    # new id.
+    if all(
+        c in delivered for c in _telegram_targets(audit.plot)
+    ):
         audit.telegram_sent_at = timezone.now()
     audit.save(
         update_fields=[

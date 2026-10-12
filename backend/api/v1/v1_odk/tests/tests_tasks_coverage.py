@@ -14,6 +14,7 @@ from api.v1.v1_jobs.constants import (
     JobTypes,
 )
 from api.v1.v1_jobs.models import Jobs
+from api.v1.v1_init.models import TelegramGroup
 from api.v1.v1_odk.constants import (
     ApprovalStatusTypes,
     SyncStatus,
@@ -820,8 +821,6 @@ class TelegramNotificationEdgeCasesTest(
     @override_settings(
         TELEGRAM_ENABLED=True,
         TELEGRAM_BOT_TOKEN="test-token",
-        TELEGRAM_SUPERVISOR_GROUP_ID="-100001",
-        TELEGRAM_ENUMERATOR_GROUP_ID="-100002",
     )
     @patch(
         "api.v1.v1_odk.tasks.TelegramClient"
@@ -831,6 +830,8 @@ class TelegramNotificationEdgeCasesTest(
     ):
         """When reason_text is empty, message
         should contain only category display."""
+        TelegramGroup.objects.create(chat_id="-100001")
+        TelegramGroup.objects.create(chat_id="-100002")
         form = FormMetadata.objects.create(
             asset_uid="formRNT",
             name="RNT",
@@ -891,8 +892,6 @@ class TelegramNotificationEdgeCasesTest(
     @override_settings(
         TELEGRAM_ENABLED=True,
         TELEGRAM_BOT_TOKEN="test-token",
-        TELEGRAM_SUPERVISOR_GROUP_ID="-100001",
-        TELEGRAM_ENUMERATOR_GROUP_ID="-100002",
     )
     @patch(
         "api.v1.v1_odk.tasks.TelegramClient"
@@ -902,6 +901,8 @@ class TelegramNotificationEdgeCasesTest(
     ):
         """When validator is None, message shows
         'Unknown'."""
+        TelegramGroup.objects.create(chat_id="-100001")
+        TelegramGroup.objects.create(chat_id="-100002")
         form = FormMetadata.objects.create(
             asset_uid="formNV",
             name="NV",

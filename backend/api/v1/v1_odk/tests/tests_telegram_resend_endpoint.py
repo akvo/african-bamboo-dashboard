@@ -18,8 +18,6 @@ SERIALIZERS = "api.v1.v1_odk.serializers"
 CONFIG = {
     "enabled": True,
     "bot_token": "tok",
-    "supervisor_group_id": "-100111",
-    "enumerator_group_id": "-100222",
 }
 
 

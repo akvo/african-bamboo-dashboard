@@ -26,6 +26,7 @@ from unittest.mock import MagicMock, patch
 from django.test import TestCase, override_settings
 from requests import HTTPError
 
+from api.v1.v1_init.models import TelegramGroup
 from api.v1.v1_odk.constants import (
     ApprovalStatusTypes,
     SyncStatus,
@@ -49,8 +50,6 @@ from api.v1.v1_odk.utils.plot_id import (
 TELEGRAM_ON = override_settings(
     TELEGRAM_ENABLED=True,
     TELEGRAM_BOT_TOKEN="test-token",
-    TELEGRAM_SUPERVISOR_GROUP_ID="-100001",
-    TELEGRAM_ENUMERATOR_GROUP_ID="-100002",
 )
 
 REASON_TEXT = "Boundary overlap detected"
@@ -86,6 +85,9 @@ class RejectionNotificationChainTest(
         # so create one to assert the Plot ID appears.
         create_main_plot_for_submission(self.sub)
         self.sub.refresh_from_db()
+
+        TelegramGroup.objects.create(chat_id="-100001")
+        TelegramGroup.objects.create(chat_id="-100002")
 
     def _reject(self):
         """PATCH the submission to rejected.

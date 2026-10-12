@@ -127,3 +127,9 @@ ALLOWED_ORDERINGS = {
     "main_plot_uid": "sort_main_plot_uid",
     "instance_name": "instance_name",
 }
+
+# Prefix of telegram_last_error when no TelegramGroup
+# scope covers a plot's region. The serializer exposes
+# only errors carrying this prefix, so it must not change
+# without updating RejectionAuditSerializer.
+TELEGRAM_NO_ROUTE_ERROR = "No Telegram group covers region"

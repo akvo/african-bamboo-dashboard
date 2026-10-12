@@ -1,7 +1,7 @@
 from django.db import IntegrityError
 from django.test import TestCase
 
-from api.v1.v1_init.models import SystemSetting
+from api.v1.v1_init.models import SystemSetting, TelegramGroup
 
 
 class SystemSettingModelTest(TestCase):
@@ -26,3 +26,15 @@ class SystemSettingModelTest(TestCase):
                 key="bot_token",
                 value="xyz",
             )
+
+
+class TelegramGroupModelTest(TestCase):
+    def test_defaults_to_all_regions(self):
+        g = TelegramGroup.objects.create(chat_id="-100111")
+        self.assertEqual(g.regions, [])
+        self.assertEqual(g.title, "")
+
+    def test_chat_id_unique(self):
+        TelegramGroup.objects.create(chat_id="-100111")
+        with self.assertRaises(IntegrityError):
+            TelegramGroup.objects.create(chat_id="-100111")

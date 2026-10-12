@@ -30,7 +30,14 @@ def kobo_item(kobo_id, uuid_str):
     }
 
 
-@override_settings(USE_TZ=False, TEST_ENV=True)
+# Deletion is a deployment choice, so pin it off here:
+# these tests are about flagging, and must not depend on
+# whether the developer has SYNC_DELETE_STALE_AFTER_DAYS set.
+@override_settings(
+    USE_TZ=False,
+    TEST_ENV=True,
+    SYNC_DELETE_STALE_AFTER_DAYS=None,
+)
 class ClonedFormSyncTest(OdkTestHelperMixin, TestCase):
     """Kobo's _uuid identifies a submission within an asset.
 
@@ -182,7 +189,14 @@ class ClonedFormSyncTest(OdkTestHelperMixin, TestCase):
         )
 
 
-@override_settings(USE_TZ=False, TEST_ENV=True)
+# Deletion is a deployment choice, so pin it off here:
+# these tests are about flagging, and must not depend on
+# whether the developer has SYNC_DELETE_STALE_AFTER_DAYS set.
+@override_settings(
+    USE_TZ=False,
+    TEST_ENV=True,
+    SYNC_DELETE_STALE_AFTER_DAYS=None,
+)
 class ClonedFormLookupTest(OdkTestHelperMixin, TestCase):
     """A bare /submissions/<uuid>/ is ambiguous once a clone
     exists. Answering with whichever row sorted first would

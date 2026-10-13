@@ -458,3 +458,36 @@ class TelegramClientTest(TestCase):
             "https://api.telegram.org/"
             "bottest-bot-token/getUpdates",
         )
+
+    @patch("utils.telegram_client.requests.request")
+    def test_get_chat_member_count_returns_int(
+        self, mock_request
+    ):
+        mock_resp = MagicMock()
+        mock_resp.ok = True
+        mock_resp.json.return_value = {"ok": True, "result": 12}
+        mock_request.return_value = mock_resp
+
+        self.assertEqual(
+            self.tg_client.get_chat_member_count("-100001"), 12
+        )
+        self.assertEqual(
+            mock_request.call_args.kwargs["params"],
+            {"chat_id": "-100001"},
+        )
+
+    @patch("utils.telegram_client.requests.request")
+    def test_get_chat_member_count_failure_raises(
+        self, mock_request
+    ):
+        mock_resp = MagicMock()
+        mock_resp.ok = False
+        mock_resp.status_code = 400
+        mock_resp.json.return_value = {
+            "ok": False,
+            "description": "chat not found",
+        }
+        mock_request.return_value = mock_resp
+
+        with self.assertRaises(TelegramSendError):
+            self.tg_client.get_chat_member_count("-100001")

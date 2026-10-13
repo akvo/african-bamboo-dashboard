@@ -2,6 +2,7 @@ from unittest.mock import MagicMock, patch
 
 from django.test import TestCase, override_settings
 
+from api.v1.v1_init.models import TelegramGroup
 from api.v1.v1_odk.constants import SyncStatus
 from api.v1.v1_odk.models import (
     FormMetadata,
@@ -173,11 +174,12 @@ class TelegramNotificationTaskTest(TestCase):
             reason_text="Bad polygon shape",
         )
 
+        TelegramGroup.objects.create(chat_id="-100001")
+        TelegramGroup.objects.create(chat_id="-100002")
+
     @override_settings(
         TELEGRAM_ENABLED=True,
         TELEGRAM_BOT_TOKEN="test-token",
-        TELEGRAM_SUPERVISOR_GROUP_ID="-100001",
-        TELEGRAM_ENUMERATOR_GROUP_ID="-100002",
     )
     @patch(
         "api.v1.v1_odk.tasks.TelegramClient"
@@ -205,8 +207,6 @@ class TelegramNotificationTaskTest(TestCase):
     @override_settings(
         TELEGRAM_ENABLED=True,
         TELEGRAM_BOT_TOKEN="test-token",
-        TELEGRAM_SUPERVISOR_GROUP_ID="-100001",
-        TELEGRAM_ENUMERATOR_GROUP_ID="-100002",
     )
     @patch(
         "api.v1.v1_odk.tasks.TelegramClient"
@@ -242,8 +242,6 @@ class TelegramNotificationTaskTest(TestCase):
     @override_settings(
         TELEGRAM_ENABLED=True,
         TELEGRAM_BOT_TOKEN="test-token",
-        TELEGRAM_SUPERVISOR_GROUP_ID="-100001",
-        TELEGRAM_ENUMERATOR_GROUP_ID="-100002",
     )
     @patch(
         "api.v1.v1_odk.tasks.TelegramClient"
@@ -290,8 +288,6 @@ class TelegramNotificationTaskTest(TestCase):
     @override_settings(
         TELEGRAM_ENABLED=True,
         TELEGRAM_BOT_TOKEN="test-token",
-        TELEGRAM_SUPERVISOR_GROUP_ID="-100001",
-        TELEGRAM_ENUMERATOR_GROUP_ID="-100002",
     )
     @patch(
         "api.v1.v1_odk.tasks.TelegramClient"
@@ -322,8 +318,6 @@ class TelegramNotificationTaskTest(TestCase):
     @override_settings(
         TELEGRAM_ENABLED=True,
         TELEGRAM_BOT_TOKEN="test-token",
-        TELEGRAM_SUPERVISOR_GROUP_ID="-100001",
-        TELEGRAM_ENUMERATOR_GROUP_ID="-100002",
     )
     @patch(
         "api.v1.v1_odk.tasks.TelegramClient"
@@ -368,43 +362,10 @@ class TelegramNotificationTaskTest(TestCase):
             "fail", self.audit.telegram_last_error
         )
 
-    @override_settings(
-        TELEGRAM_ENABLED=True,
-        TELEGRAM_BOT_TOKEN="test-token",
-        TELEGRAM_SUPERVISOR_GROUP_ID="-100001",
-        TELEGRAM_ENUMERATOR_GROUP_ID="-100001",
-    )
-    @patch(
-        "api.v1.v1_odk.tasks.TelegramClient"
-    )
-    def test_duplicate_group_sends_once(
-        self, mock_client_cls
-    ):
-        mock_client = MagicMock()
-        mock_client.send_message.return_value = (
-            12345
-        )
-        mock_client_cls.return_value = (
-            mock_client
-        )
-
-        send_telegram_rejection_notification(
-            self.audit.pk
-        )
-
-        mock_client.send_message.assert_called_once()
-        self.audit.refresh_from_db()
-        self.assertEqual(
-            self.audit.telegram_chat_ids,
-            ["-100001"],
-        )
-
 
 @override_settings(
     TELEGRAM_ENABLED=True,
     TELEGRAM_BOT_TOKEN="test-token",
-    TELEGRAM_SUPERVISOR_GROUP_ID="-100001",
-    TELEGRAM_ENUMERATOR_GROUP_ID="-100002",
 )
 class TelegramMessageContentTest(TestCase):
     """TC19 expects the PlotID and the exact reason."""
@@ -437,6 +398,9 @@ class TelegramMessageContentTest(TestCase):
                 name="msg-validator",
             )
         )
+
+        TelegramGroup.objects.create(chat_id="-100001")
+        TelegramGroup.objects.create(chat_id="-100002")
 
     def _audit(self, reason_text="Boundary overlap"):
         return RejectionAudit.objects.create(

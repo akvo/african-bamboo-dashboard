@@ -332,12 +332,12 @@ When a plot is rejected, the system can send notifications to Telegram groups af
 
 1. **Create a bot** — message [@BotFather](https://t.me/BotFather) on Telegram, send `/newbot`, and follow the prompts. Copy the bot token.
 
-2. **Add the bot to your group(s)** — add the bot to the Telegram group(s) you want to receive notifications, then send at least one message in each group so the bot can see it.
+2. **Add the bot to your group(s)** — add the bot to the Telegram group(s) you want to receive notifications, then send at least one message in each group so the bot can see it. A new group appears in the dropdown only after a message has been posted in it and Re-sync is clicked.
 
 3. **Configure via the UI** — go to **Settings > Telegram** in the dashboard:
    - Enable notifications
    - Paste the bot token and click the refresh button to load available groups
-   - Select supervisor and enumerator groups from the dropdowns
+   - Add a row per group, pick the group, and pick the regions it covers (leave empty for *All regions*)
    - Save
 
    Alternatively, configure via environment variables in `.env`:
@@ -345,8 +345,6 @@ When a plot is rejected, the system can send notifications to Telegram groups af
    ```env
    TELEGRAM_ENABLED=True
    TELEGRAM_BOT_TOKEN=<your_bot_token>
-   TELEGRAM_SUPERVISOR_GROUP_ID=<group_id>
-   TELEGRAM_ENUMERATOR_GROUP_ID=<group_id>
    ```
 
    DB settings (saved via the UI) override environment variables.
@@ -367,8 +365,8 @@ When a plot is rejected, the system can send notifications to Telegram groups af
 
    ```json
    [
-     { "id": "-100123456789", "title": "Supervisors", "type": "supergroup" },
-     { "id": "-100987654321", "title": "Enumerators", "type": "group" }
+     { "id": "-100123456789", "title": "AB Oromia", "type": "supergroup", "member_count": 12 },
+     { "id": "-100987654321", "title": "AB Sidama", "type": "group", "member_count": 12 }
    ]
    ```
 
@@ -376,8 +374,15 @@ When a plot is rejected, the system can send notifications to Telegram groups af
 
 - Rejections create a `RejectionAudit` record and dispatch a Kobo validation sync
 - After successful Kobo sync, a Telegram notification is queued automatically
-- Messages are sent to both supervisor and enumerator groups
+- Each rejection is sent to every group whose regions include the plot's region, plus every *All regions* group; if none covers it, the badge shows the notification as failed with the reason
 - If `TELEGRAM_ENABLED=False` (default), no notifications are sent
+
+### Upgrading from fixed supervisor/enumerator groups
+
+Groups are managed only in Settings. The one-time `migrate` carries the old two groups over into group rows.
+
+- Deployments that inject `TELEGRAM_SUPERVISOR_GROUP_ID` / `TELEGRAM_ENUMERATOR_GROUP_ID` into the container environment (e.g. Kubernetes secrets) must keep them until `migrate` has run once. After that they can be deleted.
+- Local docker-compose no longer forwards these variables. A group configured only through `.env` is not carried over; re-add it in **Settings > Telegram** after upgrading. Groups saved earlier through the Settings UI are carried over regardless.
 
 ## Image Attachments
 

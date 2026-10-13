@@ -1,5 +1,6 @@
 import logging
 
+from django.db import transaction
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.decorators import (
@@ -13,7 +14,7 @@ from api.v1.v1_init.helpers import (
     TELEGRAM_GROUP,
     get_telegram_config,
 )
-from api.v1.v1_init.models import SystemSetting
+from api.v1.v1_init.models import SystemSetting, TelegramGroup
 from api.v1.v1_init.serializers import (
     TelegramSettingsSerializer,
 )
@@ -36,6 +37,17 @@ def health_check(request, version):
     )
 
 
+def _telegram_settings_payload():
+    return {
+        **get_telegram_config(),
+        "groups": list(
+            TelegramGroup.objects.order_by("pk").values(
+                "chat_id", "title", "regions"
+            )
+        ),
+    }
+
+
 @extend_schema(
     request=TelegramSettingsSerializer,
     responses=TelegramSettingsSerializer,
@@ -45,34 +57,47 @@ def health_check(request, version):
 @permission_classes([IsAuthenticated])
 def telegram_settings(request, version):
     if request.method == "GET":
-        config = get_telegram_config()
-        return Response(config)
+        return Response(_telegram_settings_payload())
 
     serializer = TelegramSettingsSerializer(
         data=request.data
     )
     serializer.is_valid(raise_exception=True)
     data = serializer.validated_data
+    groups = data.pop("groups", None)
 
-    for key, value in data.items():
-        if key == "enabled":
-            value = str(bool(value)).lower()
-        # Clearing a field means "unset" — delete the
-        # row so get_telegram_config falls back to the
-        # env default instead of being shadowed by "".
-        if not str(value).strip():
-            SystemSetting.objects.filter(
-                group=TELEGRAM_GROUP, key=key
+    with transaction.atomic():
+        for key, value in data.items():
+            if key == "enabled":
+                value = str(bool(value)).lower()
+            # Clearing a field means "unset" — delete the
+            # row so get_telegram_config falls back to the
+            # env default instead of being shadowed by "".
+            if not str(value).strip():
+                SystemSetting.objects.filter(
+                    group=TELEGRAM_GROUP, key=key
+                ).delete()
+                continue
+            SystemSetting.objects.update_or_create(
+                group=TELEGRAM_GROUP,
+                key=key,
+                defaults={"value": value},
+            )
+
+        if groups is not None:
+            keep = [g["chat_id"] for g in groups]
+            TelegramGroup.objects.exclude(
+                chat_id__in=keep
             ).delete()
-            continue
-        SystemSetting.objects.update_or_create(
-            group=TELEGRAM_GROUP,
-            key=key,
-            defaults={"value": value},
-        )
+            for g in groups:
+                # update_or_create keeps the cached title
+                # and pk order of rows that already exist.
+                TelegramGroup.objects.update_or_create(
+                    chat_id=g["chat_id"],
+                    defaults={"regions": g.get("regions", [])},
+                )
 
-    config = get_telegram_config()
-    return Response(config)
+    return Response(_telegram_settings_payload())
 
 
 @extend_schema(
@@ -111,47 +136,60 @@ def telegram_groups(request, version):
         groups = []
         discovery_error = str(e)
 
-    # Configured ids are resolved with getChat, which
-    # is authoritative and permanent.
+    # Every configured row is resolved with getChat, which
+    # is authoritative and permanent, and its cached title
+    # refreshed so the settings table renders offline.
     by_id = {g["id"]: g for g in groups}
     resolved_any = False
-    for key in (
-        "supervisor_group_id",
-        "enumerator_group_id",
-    ):
-        chat_id = config.get(key)
-        if not chat_id or chat_id in by_id:
-            continue
+    for row in TelegramGroup.objects.order_by("pk"):
         try:
-            chat = client.get_chat(chat_id)
-            # Only ever hand the renderer a plain dict of the
-            # three fields we use. Anything else is a bug in
-            # the client, and letting it reach the JSON
-            # encoder turns that bug into an unbounded
-            # allocation rather than a clear error.
+            chat = client.get_chat(row.chat_id)
+            # get_chat returns the normalised {id, title, type}
+            # dict. Anything else is a bug in the client, and
+            # letting it reach the JSON encoder turns that bug
+            # into an unbounded allocation rather than a clear
+            # error.
             if not isinstance(chat, dict):
                 raise TelegramSendError(
                     f"getChat returned {type(chat).__name__}, "
                     f"expected dict"
                 )
-            by_id[chat_id] = {
-                "id": str(chat.get("id", chat_id)),
-                "title": chat.get("title", "Untitled"),
-                "type": chat.get("type", ""),
-            }
-            resolved_any = True
         except TelegramSendError as e:
             # One unreachable chat must not empty the
             # whole list.
             logger.warning(
                 "Telegram getChat failed for %s: %s",
-                chat_id,
+                row.chat_id,
                 e,
             )
+            continue
+        title = chat["title"]
+        by_id[row.chat_id] = chat
+        resolved_any = True
+        if row.title != title:
+            row.title = title
+            row.save(update_fields=["title", "updated_at"])
 
     if discovery_error and not resolved_any:
         return Response(
             {"detail": discovery_error},
             status=status.HTTP_502_BAD_GATEWAY,
+        )
+
+    for group in by_id.values():
+        try:
+            count = client.get_chat_member_count(group["id"])
+        except TelegramSendError as e:
+            logger.warning(
+                "Telegram getChatMemberCount failed for "
+                "%s: %s",
+                group["id"],
+                e,
+            )
+            count = None
+        # Same guard as getChat: only a plain int may
+        # reach the encoder.
+        group["member_count"] = (
+            count if isinstance(count, int) else None
         )
     return Response(list(by_id.values()))

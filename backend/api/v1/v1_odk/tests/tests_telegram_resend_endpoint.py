@@ -18,8 +18,6 @@ SERIALIZERS = "api.v1.v1_odk.serializers"
 CONFIG = {
     "enabled": True,
     "bot_token": "tok",
-    "supervisor_group_id": "-100111",
-    "enumerator_group_id": "-100222",
 }
 
 
@@ -174,3 +172,36 @@ class ResendNotificationEndpointTest(
             audit["telegram_status"], "disabled"
         )
         self.assertFalse(audit["can_resend"])
+
+    def _audit_json(self):
+        with patch(
+            f"{SERIALIZERS}.get_telegram_config",
+            return_value=config(),
+        ):
+            resp = self.client.get(
+                "/api/v1/odk/submissions/sub-rs-001/",
+                **self.get_auth_header(),
+            )
+        return resp.json()["rejection_audits"][0]
+
+    def test_failure_reason_exposes_no_route(self):
+        self.audit.telegram_last_error = (
+            "No Telegram group covers region Sidama (ET16)"
+        )
+        self.audit.save()
+        self.assertEqual(
+            self._audit_json()["telegram_failure_reason"],
+            "No Telegram group covers region Sidama (ET16)",
+        )
+
+    def test_failure_reason_hides_send_errors(self):
+        """Transport errors can embed the request URL, and
+        with it the bot token."""
+        self.audit.telegram_last_error = (
+            "-100111: Telegram request failed: "
+            "https://api.telegram.org/botSECRET/sendMessage"
+        )
+        self.audit.save()
+        data = self._audit_json()
+        self.assertIsNone(data["telegram_failure_reason"])
+        self.assertNotIn("telegram_last_error", data)

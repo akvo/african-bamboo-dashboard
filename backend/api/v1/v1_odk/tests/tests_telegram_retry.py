@@ -1,11 +1,18 @@
 from unittest.mock import MagicMock, patch
 
+from django.conf import settings
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
-from api.v1.v1_odk.constants import SyncStatus
+from api.v1.v1_init.models import TelegramGroup
+from api.v1.v1_odk.constants import (
+    TELEGRAM_NO_ROUTE_ERROR,
+    SyncStatus,
+)
 from api.v1.v1_odk.models import (
     FormMetadata,
+    FormOption,
+    FormQuestion,
     Plot,
     RejectionAudit,
     Submission,
@@ -24,8 +31,6 @@ ENUMERATOR = "-100222"
 CONFIG = {
     "enabled": True,
     "bot_token": "tok",
-    "supervisor_group_id": SUPERVISOR,
-    "enumerator_group_id": ENUMERATOR,
 }
 
 
@@ -74,6 +79,9 @@ class TelegramDeliveryLedgerTest(TestCase):
             reason_text="Bad polygon",
             sync_status=SyncStatus.SYNCED,
         )
+
+        TelegramGroup.objects.create(chat_id=SUPERVISOR)
+        TelegramGroup.objects.create(chat_id=ENUMERATOR)
 
     def _run(self, side_effect=None, return_value=1):
         with patch(
@@ -191,6 +199,9 @@ class TelegramRetrySweepTest(TestCase):
             sync_status=SyncStatus.SYNCED,
         )
 
+        TelegramGroup.objects.create(chat_id=SUPERVISOR)
+        TelegramGroup.objects.create(chat_id=ENUMERATOR)
+
     def _sweep(self, cfg=None):
         with patch(
             f"{TASKS}.get_telegram_config",
@@ -298,3 +309,172 @@ class TelegramRetrySweepTest(TestCase):
         self._sweep(
             cfg=config(bot_token="")
         ).assert_not_called()
+
+
+@override_settings(
+    USE_TZ=False,
+    TEST_ENV=True,
+    TELEGRAM_MAX_ATTEMPTS=5,
+    TELEGRAM_RETRY_COOLDOWN_MINUTES=5,
+)
+class TelegramRegionRoutingTest(TestCase):
+    """Spec v29: a group receives an alert only when its
+    scope covers plot.region; [] covers everything."""
+
+    def setUp(self):
+        form = FormMetadata.objects.create(
+            asset_uid="formRR", name="Form RR"
+        )
+        sub = Submission.objects.create(
+            uuid="sub-rr-001",
+            form=form,
+            kobo_id="902",
+            submission_time=1700000000000,
+            raw_data={},
+        )
+        self.plot = Plot.objects.create(
+            plot_name="RR Plot",
+            form=form,
+            region="ET16",
+            sub_region="S",
+            created_at=1700000000000,
+            submission=sub,
+        )
+        self.audit = RejectionAudit.objects.create(
+            plot=self.plot,
+            submission=sub,
+            reason_category="overlap",
+            sync_status=SyncStatus.SYNCED,
+        )
+
+    def _run(self, side_effect=None):
+        with patch(
+            f"{TASKS}.get_telegram_config",
+            return_value={"enabled": True, "bot_token": "tok"},
+        ), patch(f"{TASKS}.TelegramClient") as cls:
+            client = MagicMock()
+            client.send_message.side_effect = side_effect
+            client.send_message.return_value = 1
+            cls.return_value = client
+            send_telegram_rejection_notification(self.audit.pk)
+        self.audit.refresh_from_db()
+        return [c[0][0] for c in client.send_message.call_args_list]
+
+    def _sweep(self):
+        with patch(
+            f"{TASKS}.get_telegram_config",
+            return_value={"enabled": True, "bot_token": "tok"},
+        ), patch(f"{TASKS}.async_task") as mock_async:
+            retry_pending_telegram_notifications()
+        return mock_async
+
+    def test_scoped_and_all_regions_groups_receive(self):
+        TelegramGroup.objects.create(chat_id="-1", regions=[])
+        TelegramGroup.objects.create(
+            chat_id="-2", regions=["SID", "ET16"]
+        )
+        TelegramGroup.objects.create(
+            chat_id="-3", regions=["ORO", "ET04"]
+        )
+        self.assertEqual(self._run(), ["-1", "-2"])
+        self.assertIsNotNone(self.audit.telegram_sent_at)
+
+    def test_empty_plot_region_reaches_only_all_regions_groups(
+        self,
+    ):
+        self.plot.region = ""
+        self.plot.save()
+        TelegramGroup.objects.create(chat_id="-1", regions=[])
+        TelegramGroup.objects.create(chat_id="-2", regions=["ET16"])
+        self.assertEqual(self._run(), ["-1"])
+
+    def test_no_covering_group_abandons_with_reason(self):
+        TelegramGroup.objects.create(chat_id="-3", regions=["ET04"])
+        with self.assertLogs(TASKS, level="WARNING"):
+            sent = self._run()
+        self.assertEqual(sent, [])
+        self.assertEqual(
+            self.audit.telegram_attempts,
+            settings.TELEGRAM_MAX_ATTEMPTS,
+        )
+        self.assertTrue(
+            self.audit.telegram_last_error.startswith(
+                TELEGRAM_NO_ROUTE_ERROR
+            )
+        )
+        self.assertIn("ET16", self.audit.telegram_last_error)
+        self.assertIsNone(self.audit.telegram_sent_at)
+        # The latent v28 loop: the sweep must not re-enqueue.
+        self._sweep().assert_not_called()
+
+    def test_no_route_error_uses_region_option_label(self):
+        form = self.plot.form
+        q = FormQuestion.objects.create(
+            form=form,
+            name="region",
+            label="Region",
+            type="select_one",
+        )
+        FormOption.objects.create(
+            question=q, name="ET16", label="Sidama"
+        )
+        sub = self.audit.submission
+        sub.raw_data = {"region": "ET16"}
+        sub.save()
+        with self.assertLogs(TASKS, level="WARNING"):
+            self._run()
+        self.assertEqual(
+            self.audit.telegram_last_error,
+            "No Telegram group covers region Sidama (ET16)",
+        )
+
+    def test_zero_groups_is_no_route(self):
+        with self.assertLogs(TASKS, level="WARNING"):
+            sent = self._run()
+        self.assertEqual(sent, [])
+        self.assertEqual(
+            self.audit.telegram_attempts,
+            settings.TELEGRAM_MAX_ATTEMPTS,
+        )
+
+    def test_resend_after_scope_fix_delivers(self):
+        group = TelegramGroup.objects.create(
+            chat_id="-3", regions=["ET04"]
+        )
+        with self.assertLogs(TASKS, level="WARNING"):
+            self._run()
+        group.regions = ["ET04", "ET16"]
+        group.save()
+        # What the resend endpoint does before enqueueing.
+        self.audit.telegram_attempts = 0
+        self.audit.save()
+        self.assertEqual(self._run(), ["-3"])
+        self.assertIsNotNone(self.audit.telegram_sent_at)
+        self.assertIsNone(self.audit.telegram_last_error)
+
+    def test_scope_edit_never_resends_ledgered_chat(self):
+        TelegramGroup.objects.create(chat_id="-1", regions=[])
+        moved = TelegramGroup.objects.create(
+            chat_id="-2", regions=["ET16"]
+        )
+        self._run(side_effect=[1, TelegramSendError("down")])
+        moved.regions = ["ET04"]
+        moved.save()
+        TelegramGroup.objects.create(chat_id="-4", regions=["ET16"])
+        self.assertEqual(self._run(), ["-4"])
+        self.assertEqual(self.audit.telegram_chat_ids, ["-1", "-4"])
+        self.assertIsNotNone(self.audit.telegram_sent_at)
+
+    def test_all_targets_ledgered_marks_sent(self):
+        """Spec D-4 second loop: the only failing group is
+        removed from scope; nothing is outstanding."""
+        TelegramGroup.objects.create(chat_id="-1", regions=[])
+        failing = TelegramGroup.objects.create(
+            chat_id="-2", regions=["ET16"]
+        )
+        self._run(side_effect=[1, TelegramSendError("down")])
+        failing.delete()
+        self.assertEqual(self._run(), [])
+        self.assertIsNotNone(self.audit.telegram_sent_at)
+        self.assertIsNone(self.audit.telegram_last_error)
+        self._sweep().assert_not_called()

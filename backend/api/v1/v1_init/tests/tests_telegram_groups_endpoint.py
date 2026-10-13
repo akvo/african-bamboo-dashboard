@@ -3,22 +3,20 @@ from unittest.mock import MagicMock, patch
 from django.test import TestCase
 from django.test.utils import override_settings
 
+from api.v1.v1_init.models import TelegramGroup
 from api.v1.v1_init.tests.mixins import V1InitTestHelperMixin
 from utils.telegram_client import TelegramSendError
 
 
-# Every Telegram setting is pinned, including the group ids.
-# Without that the real values from .env leak in, the view
-# calls get_chat for them, and an unconfigured MagicMock comes
-# back — which DRF then tries to JSON-encode. hasattr() is
-# always true on a MagicMock, so the encoder recurses into
+# Groups now come only from the DB, so the token pin is what
+# matters. An unconfigured MagicMock reaching the renderer
+# (get_chat or get_chat_member_count) is JSON-encoded by DRF.
+# hasattr() is always true on a MagicMock, so the encoder recurses into
 # auto-created attributes until the process is OOM-killed.
 @override_settings(
     USE_TZ=False,
     TEST_ENV=True,
     TELEGRAM_BOT_TOKEN="saved-token",
-    TELEGRAM_SUPERVISOR_GROUP_ID="",
-    TELEGRAM_ENUMERATOR_GROUP_ID="",
 )
 class TelegramGroupsTest(V1InitTestHelperMixin, TestCase):
     URL = "/api/v1/settings/telegram/groups/"
@@ -47,12 +45,12 @@ class TelegramGroupsTest(V1InitTestHelperMixin, TestCase):
         mock_client.get_groups.return_value = [
             {
                 "id": "-100111",
-                "title": "Supervisors",
+                "title": "Field A",
                 "type": "supergroup",
             },
             {
                 "id": "-100222",
-                "title": "Enumerators",
+                "title": "Field B",
                 "type": "group",
             },
         ]
@@ -63,7 +61,7 @@ class TelegramGroupsTest(V1InitTestHelperMixin, TestCase):
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
         self.assertEqual(len(data), 2)
-        self.assertEqual(data[0]["title"], "Supervisors")
+        self.assertEqual(data[0]["title"], "Field A")
         self.assertEqual(data[1]["id"], "-100222")
         mock_cls.assert_called_once_with("saved-token")
 
@@ -137,11 +135,8 @@ class TelegramGroupsTest(V1InitTestHelperMixin, TestCase):
             "Connection refused", resp.json()["detail"]
         )
 
-    @override_settings(
-        TELEGRAM_SUPERVISOR_GROUP_ID="-100999",
-    )
     @patch("api.v1.v1_init.views.TelegramClient")
-    def test_configured_id_resolved_via_get_chat(
+    def test_configured_row_resolved_via_get_chat(
         self, mock_cls
     ):
         """getUpdates only sees the last 24h of activity.
@@ -150,6 +145,7 @@ class TelegramGroupsTest(V1InitTestHelperMixin, TestCase):
         name after a quiet day, which is what getChat
         provides.
         """
+        TelegramGroup.objects.create(chat_id="-100999")
         mock_client = MagicMock()
         mock_client.get_groups.return_value = []
         mock_client.get_chat.return_value = {
@@ -157,26 +153,79 @@ class TelegramGroupsTest(V1InitTestHelperMixin, TestCase):
             "title": "Akvo Testing",
             "type": "group",
         }
+        mock_client.get_chat_member_count.return_value = 6
         mock_cls.return_value = mock_client
 
         auth = self.login()
         resp = self.client.get(self.URL, **auth)
         self.assertEqual(resp.status_code, 200)
-        data = resp.json()
-        self.assertEqual(len(data), 1)
-        self.assertEqual(data[0]["title"], "Akvo Testing")
-        mock_client.get_chat.assert_called_once_with(
-            "-100999"
+        self.assertEqual(
+            resp.json(),
+            [
+                {
+                    "id": "-100999",
+                    "title": "Akvo Testing",
+                    "type": "group",
+                    "member_count": 6,
+                }
+            ],
         )
 
-    @override_settings(
-        TELEGRAM_SUPERVISOR_GROUP_ID="-100999",
-    )
+    @patch("api.v1.v1_init.views.TelegramClient")
+    def test_every_row_resolved_even_if_discovered(
+        self, mock_cls
+    ):
+        """Spec: getChat for every configured row, not
+        only the ones getUpdates missed."""
+        TelegramGroup.objects.create(chat_id="-100111")
+        TelegramGroup.objects.create(chat_id="-100222")
+        mock_client = MagicMock()
+        mock_client.get_groups.return_value = [
+            {"id": "-100111", "title": "Old", "type": "group"},
+        ]
+        mock_client.get_chat.side_effect = lambda cid: {
+            "id": cid,
+            "title": f"T{cid}",
+            "type": "supergroup",
+        }
+        mock_client.get_chat_member_count.return_value = 3
+        mock_cls.return_value = mock_client
+
+        auth = self.login()
+        resp = self.client.get(self.URL, **auth)
+        self.assertEqual(
+            [c.args[0] for c in mock_client.get_chat.call_args_list],
+            ["-100111", "-100222"],
+        )
+        self.assertEqual(
+            [g["title"] for g in resp.json()],
+            ["T-100111", "T-100222"],
+        )
+
+    @patch("api.v1.v1_init.views.TelegramClient")
+    def test_title_cached_on_row(self, mock_cls):
+        TelegramGroup.objects.create(chat_id="-100999")
+        mock_client = MagicMock()
+        mock_client.get_groups.return_value = []
+        mock_client.get_chat.return_value = {
+            "id": "-100999",
+            "title": "AB Sidama",
+            "type": "group",
+        }
+        mock_client.get_chat_member_count.return_value = 6
+        mock_cls.return_value = mock_client
+
+        self.client.get(self.URL, **self.login())
+        self.assertEqual(
+            TelegramGroup.objects.get().title, "AB Sidama"
+        )
+
     @patch("api.v1.v1_init.views.TelegramClient")
     def test_get_chat_rescues_failed_discovery(
         self, mock_cls
     ):
         """A getUpdates outage no longer empties the list."""
+        TelegramGroup.objects.create(chat_id="-100999")
         mock_client = MagicMock()
         mock_client.get_groups.side_effect = (
             TelegramSendError("getUpdates exploded")
@@ -186,38 +235,70 @@ class TelegramGroupsTest(V1InitTestHelperMixin, TestCase):
             "title": "Akvo Testing",
             "type": "group",
         }
+        mock_client.get_chat_member_count.return_value = 6
         mock_cls.return_value = mock_client
 
         auth = self.login()
-        resp = self.client.get(self.URL, **auth)
+        with self.assertLogs("api.v1.v1_init.views", "WARNING"):
+            resp = self.client.get(self.URL, **auth)
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(
             resp.json()[0]["title"], "Akvo Testing"
         )
 
-    @override_settings(
-        TELEGRAM_SUPERVISOR_GROUP_ID="-100999",
-    )
     @patch("api.v1.v1_init.views.TelegramClient")
     def test_get_chat_failure_drops_only_that_entry(
         self, mock_cls
     ):
+        TelegramGroup.objects.create(chat_id="-100999")
         mock_client = MagicMock()
         mock_client.get_groups.return_value = [
             {
                 "id": "-100111",
-                "title": "Supervisors",
+                "title": "Field",
                 "type": "supergroup",
             },
         ]
         mock_client.get_chat.side_effect = (
             TelegramSendError("chat not found")
         )
+        mock_client.get_chat_member_count.return_value = 6
         mock_cls.return_value = mock_client
 
         auth = self.login()
-        resp = self.client.get(self.URL, **auth)
+        with self.assertLogs("api.v1.v1_init.views", "WARNING"):
+            resp = self.client.get(self.URL, **auth)
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
         self.assertEqual(len(data), 1)
         self.assertEqual(data[0]["id"], "-100111")
+
+    @patch("api.v1.v1_init.views.TelegramClient")
+    def test_member_count_failure_is_null(self, mock_cls):
+        mock_client = MagicMock()
+        mock_client.get_groups.return_value = [
+            {"id": "-100111", "title": "A", "type": "group"},
+        ]
+        mock_client.get_chat_member_count.side_effect = (
+            TelegramSendError("forbidden")
+        )
+        mock_cls.return_value = mock_client
+
+        with self.assertLogs("api.v1.v1_init.views", "WARNING"):
+            resp = self.client.get(self.URL, **self.login())
+        self.assertEqual(resp.status_code, 200)
+        self.assertIsNone(resp.json()[0]["member_count"])
+
+    @patch("api.v1.v1_init.views.TelegramClient")
+    def test_non_int_member_count_is_null(self, mock_cls):
+        """Anything but an int must never reach the JSON
+        encoder (see the OOM note on this class)."""
+        mock_client = MagicMock()
+        mock_client.get_groups.return_value = [
+            {"id": "-100111", "title": "A", "type": "group"},
+        ]
+        mock_cls.return_value = mock_client
+
+        resp = self.client.get(self.URL, **self.login())
+        self.assertEqual(resp.status_code, 200)
+        self.assertIsNone(resp.json()[0]["member_count"])

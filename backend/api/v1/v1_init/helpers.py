@@ -1,18 +1,12 @@
 from django.conf import settings
 
-from api.v1.v1_init.models import SystemSetting
+from api.v1.v1_init.models import SystemSetting, TelegramGroup
 
 TELEGRAM_GROUP = "telegram"
 
 TELEGRAM_DEFAULTS = {
     "enabled": lambda: settings.TELEGRAM_ENABLED,
     "bot_token": lambda: settings.TELEGRAM_BOT_TOKEN,
-    "supervisor_group_id": (
-        lambda: settings.TELEGRAM_SUPERVISOR_GROUP_ID
-    ),
-    "enumerator_group_id": (
-        lambda: settings.TELEGRAM_ENUMERATOR_GROUP_ID
-    ),
 }
 
 
@@ -48,7 +42,7 @@ def get_telegram_config():
 
 
 def migrate_telegram_group_id(old_chat_id, new_chat_id):
-    """Repoint any group setting matching old_chat_id.
+    """Repoint the group row matching old_chat_id.
 
     Telegram issues a brand new id when a basic group is
     upgraded to a supergroup, and every send to the old
@@ -56,20 +50,26 @@ def migrate_telegram_group_id(old_chat_id, new_chat_id):
     the replacement is the difference between a blip and
     a total outage of the feature.
 
-    Returns the setting keys that were updated.
+    chat_id is unique, so when the new id is already a
+    row the two are merged: the old row's regions are
+    folded in and [] (all regions) wins.
     """
-    config = get_telegram_config()
-    updated = []
-    for key in (
-        "supervisor_group_id",
-        "enumerator_group_id",
-    ):
-        if str(config.get(key)) != str(old_chat_id):
-            continue
-        SystemSetting.objects.update_or_create(
-            group=TELEGRAM_GROUP,
-            key=key,
-            defaults={"value": str(new_chat_id)},
-        )
-        updated.append(key)
-    return updated
+    old = TelegramGroup.objects.filter(
+        chat_id=str(old_chat_id)
+    ).first()
+    if old is None:
+        return
+    new = TelegramGroup.objects.filter(
+        chat_id=str(new_chat_id)
+    ).first()
+    if new is None:
+        old.chat_id = str(new_chat_id)
+        old.save(update_fields=["chat_id", "updated_at"])
+        return
+    new.regions = (
+        list(dict.fromkeys(new.regions + old.regions))
+        if old.regions and new.regions
+        else []
+    )
+    new.save(update_fields=["regions", "updated_at"])
+    old.delete()

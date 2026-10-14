@@ -484,6 +484,11 @@ class TelegramMessageContentTest(TestCase):
         self.assertIn("&lt;a&gt;", sent)
         self.assertIn("&amp;", sent)
         self.assertIn("<b>Plot Rejected</b>", sent)
+        self.assertIn(
+            "<i>Please resync in the AB Validation app. "
+            "Then review and recollect if needed.</i>",
+            sent,
+        )
         # Raw specials pass through untouched now.
         self.assertIn("(see plot [B])", sent)
 

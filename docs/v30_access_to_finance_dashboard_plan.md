@@ -110,7 +110,7 @@ Columns not used by any metric (e.g. `polygon_geojson`, `green_flag`) are
 still stored; the snapshot mirrors the file.
 
 Running in a deployed environment: copy the file into the backend pod and run
-the command there (documented in the README section added by this work).
+the command there. The command's `help` text says so; no README section.
 
 ### 3.3 Metric definitions
 
@@ -246,14 +246,13 @@ Ratios are fractions (0–1); the frontend formats them.
 
 ### 4.2 Components (`frontend/src/components/a2f/`)
 
-- `a2f-section.js` — "Data as of 30 Sep 2026", filter row, KPI cards, cards.
-- `a2f-filters.js` — seven `Select`s (woreda options depend on region;
-  changing region clears woreda). Youth label shows the cut-off.
+- `a2f-section.js` — "Data as of 30 Sep 2026", the seven filter `Select`s
+  (woreda options depend on region; changing region clears woreda; youth
+  label shows the cut-off), KPI cards, the five cards, and the format
+  helpers (`ETB 995,500`, `14.3%`).
 - `a2f-card.js` — card shell with a Chart/Table `StatTabs` toggle; each card
-  passes a `chart` and a `table` render. Toggle state is per card.
-- `a2f-bar.js` — label, value, sub-label and a Tailwind bar
-  (`width: pct%`).
-- Format helpers (`ETB 995,500`, `14.3%`) live next to the section.
+  passes a `chart` and a `table` render. Toggle state is per card. Also
+  exports `Bar`: label, value, sub-label and a Tailwind bar (`width: pct%`).
 
 Card contents follow the two mockups row for row. `null` values render "—"
 or "Not shown (n < 5)" for comparison groups.
@@ -264,7 +263,6 @@ or "Not shown (n < 5)" for comparison groups.
 - `docker-compose.yml` backend: `A2F_ENABLED=${A2F_ENABLED:-False}`.
 - Test cluster: set `A2F_ENABLED=True` in its Vault secret. Production:
   leave unset until sign-off. (Ops step, outside this repo.)
-- README: how to run `import_a2f` locally and in a pod.
 
 ## 6. Data inconsistencies
 

@@ -24,8 +24,8 @@ describe("PlantingSection", () => {
     ];
     for (const [name, seedlings, survival] of rows) {
       const row = screen.getByText(name).closest("li");
-      expect(row).toHaveTextContent(seedlings);
-      expect(row).toHaveTextContent(survival);
+      expect(row).toHaveTextContent(`Seedlings: ${seedlings}`);
+      expect(row).toHaveTextContent(`Survival: ${survival}`);
     }
   });
 

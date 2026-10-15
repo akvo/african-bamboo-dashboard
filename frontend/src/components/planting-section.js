@@ -93,7 +93,7 @@ function Kpi({ title, value, note, footer, highlight = false }) {
 export function PlantingSection() {
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         {KPIS.map((kpi) => (
           <Kpi key={kpi.title} {...kpi} />
         ))}
@@ -118,9 +118,13 @@ export function PlantingSection() {
                   <ShareBar share={s.seedlings / TOTAL_SEEDLINGS} />
                 </div>
                 <span className="w-20 text-right text-sm">
+                  <span className="sr-only">Seedlings: </span>
                   {num(s.seedlings)}
                 </span>
-                <span className="w-16 text-right text-sm">{s.survival}</span>
+                <span className="w-16 text-right text-sm">
+                  <span className="sr-only">Survival: </span>
+                  {s.survival}
+                </span>
               </li>
             ))}
           </ul>

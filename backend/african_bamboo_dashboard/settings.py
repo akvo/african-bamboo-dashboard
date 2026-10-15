@@ -48,6 +48,7 @@ API_APPS = [
     "api.v1.v1_users",
     "api.v1.v1_odk",
     "api.v1.v1_jobs",
+    "api.v1.v1_a2f",
 ]
 
 # Add third party apps below

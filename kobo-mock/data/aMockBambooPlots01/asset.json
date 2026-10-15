@@ -1,0 +1,238 @@
+{
+  "name": "Mock Bamboo Plot Registration",
+  "content": {
+    "survey": [
+      {
+        "type": "select_one",
+        "name": "enumerator",
+        "select_from_list_name": "enumerators",
+        "label": [
+          "Enumerator"
+        ]
+      },
+      {
+        "type": "select_one",
+        "name": "region",
+        "select_from_list_name": "regions",
+        "label": [
+          "Region"
+        ]
+      },
+      {
+        "type": "select_one",
+        "name": "woreda",
+        "select_from_list_name": "woredas",
+        "label": [
+          "Woreda"
+        ]
+      },
+      {
+        "type": "text",
+        "name": "farmer_name",
+        "label": [
+          "Farmer name"
+        ]
+      },
+      {
+        "type": "text",
+        "name": "father_name",
+        "label": [
+          "Father's name"
+        ]
+      },
+      {
+        "type": "text",
+        "name": "grandfather_name",
+        "label": [
+          "Grandfather's name"
+        ]
+      },
+      {
+        "type": "integer",
+        "name": "age_of_farmer",
+        "label": [
+          "Age of farmer"
+        ]
+      },
+      {
+        "type": "text",
+        "name": "phone_number",
+        "label": [
+          "Phone number"
+        ]
+      },
+      {
+        "type": "text",
+        "name": "title_deed_1",
+        "label": [
+          "Title deed 1"
+        ]
+      },
+      {
+        "type": "text",
+        "name": "title_deed_2",
+        "label": [
+          "Title deed 2"
+        ]
+      },
+      {
+        "type": "select_one",
+        "name": "bamboo_species",
+        "select_from_list_name": "species",
+        "label": [
+          "Bamboo species"
+        ]
+      },
+      {
+        "type": "select_multiple",
+        "name": "land_use",
+        "select_from_list_name": "land_use",
+        "label": [
+          "Current land use"
+        ]
+      },
+      {
+        "type": "image",
+        "name": "plot_photo",
+        "label": [
+          "Plot photo"
+        ]
+      },
+      {
+        "type": "geoshape",
+        "name": "plot_boundary",
+        "label": [
+          "Plot boundary"
+        ]
+      }
+    ],
+    "choices": [
+      {
+        "list_name": "enumerators",
+        "name": "abebe",
+        "label": [
+          "Abebe Kebede"
+        ]
+      },
+      {
+        "list_name": "enumerators",
+        "name": "meron",
+        "label": [
+          "Meron Tadesse"
+        ]
+      },
+      {
+        "list_name": "enumerators",
+        "name": "dawit",
+        "label": [
+          "Dawit Alemu"
+        ]
+      },
+      {
+        "list_name": "enumerators",
+        "name": "hana",
+        "label": [
+          "Hana Girma"
+        ]
+      },
+      {
+        "list_name": "regions",
+        "name": "sidama",
+        "label": [
+          "Sidama"
+        ]
+      },
+      {
+        "list_name": "regions",
+        "name": "oromia",
+        "label": [
+          "Oromia"
+        ]
+      },
+      {
+        "list_name": "regions",
+        "name": "amhara",
+        "label": [
+          "Amhara"
+        ]
+      },
+      {
+        "list_name": "woredas",
+        "name": "hawassa_zuria",
+        "label": [
+          "Hawassa Zuria"
+        ]
+      },
+      {
+        "list_name": "woredas",
+        "name": "bensa",
+        "label": [
+          "Bensa"
+        ]
+      },
+      {
+        "list_name": "woredas",
+        "name": "jimma_arjo",
+        "label": [
+          "Jimma Arjo"
+        ]
+      },
+      {
+        "list_name": "woredas",
+        "name": "chora",
+        "label": [
+          "Chora"
+        ]
+      },
+      {
+        "list_name": "woredas",
+        "name": "injibara",
+        "label": [
+          "Injibara"
+        ]
+      },
+      {
+        "list_name": "woredas",
+        "name": "bahir_dar_zuria",
+        "label": [
+          "Bahir Dar Zuria"
+        ]
+      },
+      {
+        "list_name": "species",
+        "name": "highland",
+        "label": [
+          "Highland bamboo (Y. alpina)"
+        ]
+      },
+      {
+        "list_name": "species",
+        "name": "lowland",
+        "label": [
+          "Lowland bamboo (O. abyssinica)"
+        ]
+      },
+      {
+        "list_name": "land_use",
+        "name": "crop",
+        "label": [
+          "Crop land"
+        ]
+      },
+      {
+        "list_name": "land_use",
+        "name": "grazing",
+        "label": [
+          "Grazing"
+        ]
+      },
+      {
+        "list_name": "land_use",
+        "name": "fallow",
+        "label": [
+          "Fallow"
+        ]
+      }
+    ]
+  }
+}

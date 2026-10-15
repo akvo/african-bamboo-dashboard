@@ -74,6 +74,72 @@ Then sign in to the dashboard with your KoboToolbox credentials. The login match
 
 PgAdmin credentials: `dev@akvo.org` / `password`
 
+## Local Kobo Mock
+
+For local development without a KoboToolbox account, `kobo-mock/` is a
+small fake Kobo server (Go, ~8 MB image). It is opt-in through a compose
+profile:
+
+```bash
+docker compose --profile kobo-mock up -d --build
+```
+
+Log in to the dashboard with **KoboToolbox Server URL**
+`http://localhost:8090` and a user from `kobo-mock/data/users.json`
+(`admin` / `Test#123`, or `newuser` / `Test#123`, which lands as pending
+so you can try the approval flow). To make `admin` a dashboard admin on a
+fresh database, create the superuser with the same email first:
+`docker compose exec backend python manage.py createsuperuser` with
+`admin@localapp.test`.
+
+Login matches a dashboard user by Kobo username **and** server URL. If
+your dashboard user is already linked to another Kobo account (you have
+logged in with real Kobo before), logging in to the mock creates a second,
+pending user instead. Either approve that user from your existing admin
+session, or point your user at the mock (this unlinks it from real Kobo
+until you point it back):
+
+```bash
+docker compose exec backend python manage.py shell -c "from api.v1.v1_users.models import SystemUser; SystemUser.objects.filter(email='you@example.org').update(kobo_username='admin', kobo_url='http://localhost:8090')"
+```
+
+Then register the sample form `aMockBambooPlots01` under **Forms**, map
+Plot Structure (polygon `plot_boundary`, region `region`, sub-region
+`woreda`, plot name `farmer_name`, `father_name`) and click **Sync**.
+
+### Data
+
+```
+kobo-mock/data/
+  users.json                 # [{username, password, name, email}]
+  <asset_uid>/               # one folder per form; folder name = asset uid
+    asset.json               # Kobo asset detail; needs "content": {survey, choices}
+    submissions.json         # array of Kobo submission records
+    attachments/<file>       # files named by _attachments[].media_file_basename
+```
+
+- Each submission needs `_id` (unique), `_uuid` and `_submission_time`.
+  `_validation_status` is optional; leave it `{}` for pending.
+- In `_attachments` write only `uid`, `media_file_basename`, `mimetype`,
+  `question_xpath`; the mock fills in the download URLs.
+- Files are read once at start: any change (a new form, a removed or
+  edited submission) takes effect only after
+  `docker compose restart kobo-mock`. If a file is invalid the mock exits;
+  `docker compose logs kobo-mock` names the file and the problem.
+- Real Kobo responses can be pasted in as they are
+  (`/api/v2/assets/<uid>/?format=json` and its `data.json` results).
+
+### Writes and reset
+
+Approve, reject and edit in the dashboard update the mock **in memory**,
+so a later Sync keeps them. `docker compose restart kobo-mock` throws
+those changes away and serves the files again. A Sync after a restart
+puts local approval states and edited fields back to the files' values;
+Plot IDs and rejection history already created locally stay.
+
+To stop the stack including the mock, pass the profile so the mock is
+stopped too: `docker compose --profile kobo-mock down`.
+
 ## Project Structure
 
 ```

@@ -5,6 +5,7 @@ services:
       - 8000:8000
       - 5050:5050
       - 3000:3000
+      - 8090:8090
   backend:
     network_mode: service:mainnetwork
     volumes:
@@ -29,5 +30,11 @@ services:
     depends_on:
       - db
     network_mode: service:mainnetwork
+  kobo-mock:
+    build: ./kobo-mock
+    profiles: ["kobo-mock"]
+    network_mode: service:mainnetwork
+    volumes:
+      - ./kobo-mock/data:/data:ro
 volumes:
   pg-admin-data:

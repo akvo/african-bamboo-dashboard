@@ -31,6 +31,8 @@ import {
 } from "@/components/ui/select";
 import { useMapState } from "@/hooks/useMapState";
 import { useStats } from "@/hooks/useStats";
+import { useA2FMetrics } from "@/hooks/useA2FMetrics";
+import { A2FSection } from "@/components/a2f/a2f-section";
 import {
   Card,
   CardContent,
@@ -73,6 +75,9 @@ const DashboardPage = () => {
   const [approvalTab, setApprovalTab] = useState("percentage");
   const [search, setSearch] = useState("");
   const [ordering, setOrdering] = useState(null);
+  const [dashboardTab, setDashboardTab] = useState("planting");
+  const [a2fFilters, setA2fFilters] = useState({});
+  const a2f = useA2FMetrics(a2fFilters);
 
   const { regions, sub_regions, dynamic_filters, available_filters } =
     useFilterOptions({
@@ -243,6 +248,26 @@ const DashboardPage = () => {
           </CardContent>
         </Card>
       </div>
+
+      {a2f.isEnabled && (
+        <>
+          <Tabs value={dashboardTab} onValueChange={setDashboardTab}>
+            <TabsList>
+              <TabsTrigger value="planting">Planting &amp; carbon</TabsTrigger>
+              <TabsTrigger value="finance">Access to finance</TabsTrigger>
+            </TabsList>
+          </Tabs>
+          {dashboardTab === "finance" && (
+            <A2FSection
+              data={a2f.data}
+              filters={a2fFilters}
+              onFiltersChange={setA2fFilters}
+              isLoading={a2f.isLoading}
+              error={a2f.error}
+            />
+          )}
+        </>
+      )}
 
       {/* Filters */}
       <FilterBar

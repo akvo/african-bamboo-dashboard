@@ -28,6 +28,11 @@ urlpatterns = [
         name="v1_jobs",
     ),
     path(
+        "api/v1/a2f/",
+        include("api.v1.v1_a2f.urls"),
+        name="v1_a2f",
+    ),
+    path(
         "api/schema/",
         SpectacularAPIView.as_view(),
         name="schema",

@@ -48,6 +48,7 @@ API_APPS = [
     "api.v1.v1_users",
     "api.v1.v1_odk",
     "api.v1.v1_jobs",
+    "api.v1.v1_a2f",
 ]
 
 # Add third party apps below
@@ -369,3 +370,8 @@ TELEGRAM_RETRY_COOLDOWN_MINUTES = int(
         "TELEGRAM_RETRY_COOLDOWN_MINUTES", 5
     )
 )
+
+# Access to finance dashboard (#60). Off until the client signs it
+# off; set per environment in its secret, not at build time, since
+# production reuses the image built for the test cluster.
+A2F_ENABLED = env_flag("A2F_ENABLED", default=False)

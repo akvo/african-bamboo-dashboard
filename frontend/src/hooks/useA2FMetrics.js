@@ -5,7 +5,6 @@ import api from "@/lib/api";
 
 export function useA2FMetrics(filters = {}) {
   const [data, setData] = useState(null);
-  const [isEnabled, setIsEnabled] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(false);
   const key = JSON.stringify(filters);
@@ -21,7 +20,6 @@ export function useA2FMetrics(filters = {}) {
       .then((res) => {
         if (!cancelled) {
           setData(res.data);
-          setIsEnabled(true);
           setError(false);
         }
       })
@@ -32,7 +30,6 @@ export function useA2FMetrics(filters = {}) {
         }
         if (err.response?.status === 404) {
           setData(null);
-          setIsEnabled(false);
         } else {
           // Keep the last figures but flag them as not matching
           // the chosen filters.
@@ -49,5 +46,5 @@ export function useA2FMetrics(filters = {}) {
     };
   }, [key]);
 
-  return { data, isEnabled, isLoading, error };
+  return { data, isEnabled: data !== null, isLoading, error };
 }

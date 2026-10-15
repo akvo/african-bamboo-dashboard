@@ -36,11 +36,10 @@ def a2f_metrics(request):
             {"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND
         )
     filters = {
-        name: request.query_params.get(name, "").strip()
+        name: value
         for name in FILTER_PARAMS
+        if (value := request.query_params.get(name, "").strip())
     }
-    data = compute_metrics(
-        snapshot, {k: v for k, v in filters.items() if v}
-    )
+    data = compute_metrics(snapshot, filters)
     data["filter_options"] = filter_options(snapshot)
     return Response(data)

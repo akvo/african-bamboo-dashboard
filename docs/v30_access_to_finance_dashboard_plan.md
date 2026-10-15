@@ -11,7 +11,7 @@
 **Task ID**: [#60](https://github.com/akvo/african-bamboo-dashboard/issues/60)
 **Author**: Zuhdil Herry Kurnia
 **Date**: 2026-10-15
-**Status**: Draft
+**Status**: Approved — implemented on branch `60-access-to-finance-dashboard`
 
 ---
 

@@ -1,15 +1,34 @@
 import os
 import shutil
 import tempfile
+from io import StringIO
 
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import TestCase
 from openpyxl import load_workbook
 
+from api.v1.v1_a2f.management.commands.import_a2f import (
+    SHEETS,
+    read_sheet,
+)
 from api.v1.v1_a2f.models import A2FSnapshot
 
 FIXTURE = "api/v1/v1_a2f/tests/fixtures/a2f_dummy.xlsx"
+
+
+class FakeSheet:
+    def __init__(self, rows):
+        self.rows = rows
+
+    def iter_rows(self, values_only=True):
+        return iter(self.rows)
+
+
+class FakeWorkbook(dict):
+    @property
+    def sheetnames(self):
+        return list(self)
 
 
 class ImportA2FCommandTest(TestCase):
@@ -96,3 +115,25 @@ class ImportA2FCommandTest(TestCase):
         with open(path, "w") as f:
             f.write("not a workbook")
         self._assert_rejected(path, "Cannot open")
+
+    def test_short_rows_keep_every_column(self):
+        """Read-only openpyxl trims a row to its last non-empty cell
+        when the file has no <dimension>; trailing columns must
+        still be stored, as blanks."""
+        columns = SHEETS["cooperatives"]
+        wb = FakeWorkbook(
+            cooperatives=FakeSheet([tuple(columns), ("CO001", "Coop")])
+        )
+        [record] = read_sheet(wb, "cooperatives", columns)
+        self.assertEqual(list(record), columns)
+        self.assertIsNone(record["updated_at"])
+
+    def test_warns_about_unknown_and_duplicate_members(self):
+        def corrupt(wb):
+            wb["loans"]["B2"] = "M9999"
+            wb["members"]["A3"] = "M0001"
+
+        out = StringIO()
+        call_command("import_a2f", self._variant(corrupt), stdout=out)
+        self.assertIn("M9999", out.getvalue())
+        self.assertIn("Duplicate member_id: M0001", out.getvalue())

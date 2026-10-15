@@ -76,6 +76,22 @@ describe("A2FSection", () => {
   });
 });
 
+describe("A2FSection stale figures", () => {
+  it("says the figures failed to load for the chosen filters", () => {
+    render(
+      <A2FSection
+        data={DATA}
+        filters={{ region: "Sidama" }}
+        onFiltersChange={() => {}}
+        error
+      />,
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Could not load figures for these filters",
+    );
+  });
+});
+
 describe("nextFilters", () => {
   it("clears woreda when region changes", () => {
     expect(

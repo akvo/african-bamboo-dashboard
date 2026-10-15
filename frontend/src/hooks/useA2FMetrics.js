@@ -7,6 +7,7 @@ export function useA2FMetrics(filters = {}) {
   const [data, setData] = useState(null);
   const [isEnabled, setIsEnabled] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(false);
   const key = JSON.stringify(filters);
 
   useEffect(() => {
@@ -21,13 +22,21 @@ export function useA2FMetrics(filters = {}) {
         if (!cancelled) {
           setData(res.data);
           setIsEnabled(true);
+          setError(false);
         }
       })
       .catch((err) => {
         // 404 = feature off or nothing imported: hide the tab.
-        if (!cancelled && err.response?.status === 404) {
+        if (cancelled) {
+          return;
+        }
+        if (err.response?.status === 404) {
           setData(null);
           setIsEnabled(false);
+        } else {
+          // Keep the last figures but flag them as not matching
+          // the chosen filters.
+          setError(true);
         }
       })
       .finally(() => {
@@ -40,5 +49,5 @@ export function useA2FMetrics(filters = {}) {
     };
   }, [key]);
 
-  return { data, isEnabled, isLoading };
+  return { data, isEnabled, isLoading, error };
 }

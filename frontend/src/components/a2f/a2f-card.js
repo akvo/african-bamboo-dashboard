@@ -81,7 +81,7 @@ export function ShareBar({ share, muted = false }) {
         className={`h-full rounded-full ${
           muted ? "bg-amber-300" : "bg-amber-500"
         }`}
-        style={{ width: `${Math.min(share, 1) * 100}%` }}
+        style={{ width: `${Math.max(0, Math.min(share, 1)) * 100}%` }}
       />
     </div>
   );

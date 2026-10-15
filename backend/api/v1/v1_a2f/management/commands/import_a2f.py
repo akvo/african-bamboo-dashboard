@@ -1,5 +1,6 @@
 import datetime
 import zipfile
+from collections import Counter
 
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
@@ -99,7 +100,9 @@ def read_sheet(wb, name, columns):
         )
     records = []
     for number, row in enumerate(rows, start=2):
-        row = row[: len(columns)]
+        # Pad: without a <dimension> in the file, read-only mode
+        # cuts a row short at its last non-empty cell.
+        row = (tuple(row) + (None,) * len(columns))[: len(columns)]
         if all(is_blank(v) for v in row):
             continue
         record = {}
@@ -136,6 +139,33 @@ def read_parameters(wb):
     return params
 
 
+def member_warnings(sheets):
+    """Rows the dashboard cannot attribute to exactly one member.
+
+    Reported, not rejected: the client fixes the data (spec §6).
+    """
+    counts = Counter(m["member_id"] for m in sheets["members"])
+    warnings = [
+        f"Duplicate member_id: {member_id}"
+        for member_id, n in counts.items()
+        if n > 1
+    ]
+    for name in ("loans", "parcels"):
+        unknown = sorted(
+            {
+                str(row["member_id"])
+                for row in sheets[name]
+                if row["member_id"] not in counts
+            }
+        )
+        if unknown:
+            warnings.append(
+                f"{name} with unknown member_id (left out of the "
+                f"dashboard): {', '.join(unknown)}"
+            )
+    return warnings
+
+
 class Command(BaseCommand):
     help = (
         "Replace all access to finance data with the workbook at PATH. "
@@ -170,3 +200,5 @@ class Command(BaseCommand):
         self.stdout.write(
             f"Imported {counts} as of {params['data_as_of']}"
         )
+        for warning in member_warnings(sheets):
+            self.stdout.write(self.style.WARNING(warning))

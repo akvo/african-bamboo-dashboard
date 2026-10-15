@@ -262,6 +262,8 @@ const DashboardPage = () => {
               data={a2f.data}
               filters={a2fFilters}
               onFiltersChange={setA2fFilters}
+              isLoading={a2f.isLoading}
+              error={a2f.error}
             />
           )}
         </>

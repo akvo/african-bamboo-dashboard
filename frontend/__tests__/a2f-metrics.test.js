@@ -40,6 +40,34 @@ describe("useA2FMetrics", () => {
   });
 });
 
+describe("useA2FMetrics errors", () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it("flags an error when a filtered request fails", async () => {
+    api.get.mockResolvedValueOnce({ data: { data_as_of: "2026-09-30" } });
+    const { result, rerender } = renderHook(
+      ({ filters }) => useA2FMetrics(filters),
+      { initialProps: { filters: {} } },
+    );
+    await waitFor(() => expect(result.current.isEnabled).toBe(true));
+    expect(result.current.error).toBe(false);
+    api.get.mockRejectedValueOnce({ response: { status: 500 } });
+    rerender({ filters: { region: "Sidama" } });
+    await waitFor(() => expect(result.current.error).toBe(true));
+    expect(result.current.isEnabled).toBe(true);
+  });
+});
+
+describe("Bar", () => {
+  it("draws no width for a negative share", () => {
+    const { container } = render(
+      <Bar label="Income" value="ETB -500" share={-0.2} />,
+    );
+    const fill = container.querySelector("[style]");
+    expect(fill.style.width).toBe("0%");
+  });
+});
+
 describe("A2FCard", () => {
   it("toggles between chart and table", () => {
     render(

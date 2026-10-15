@@ -33,6 +33,7 @@ import { useMapState } from "@/hooks/useMapState";
 import { useStats } from "@/hooks/useStats";
 import { useA2FMetrics } from "@/hooks/useA2FMetrics";
 import { A2FSection } from "@/components/a2f/a2f-section";
+import { PlantingSection } from "@/components/planting-section";
 import {
   Card,
   CardContent,
@@ -257,6 +258,7 @@ const DashboardPage = () => {
               <TabsTrigger value="finance">Access to finance</TabsTrigger>
             </TabsList>
           </Tabs>
+          {dashboardTab === "planting" && <PlantingSection />}
           {dashboardTab === "finance" && (
             <A2FSection
               data={a2f.data}

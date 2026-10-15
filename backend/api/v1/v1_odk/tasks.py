@@ -608,8 +608,8 @@ def _build_rejection_message(audit):
         f"{escape(validator_name)}\n"
         f"<b>Time:</b> "
         f"{escape(rejected_at_str)}\n\n"
-        f"<i>Please review and recollect "
-        f"if needed.</i>"
+        f"<i>Please resync in the AB Validation app. "
+        f"Then review and recollect if needed.</i>"
     )
 
 

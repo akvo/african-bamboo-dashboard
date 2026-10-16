@@ -217,7 +217,12 @@ export function SubmissionsTable({
       },
     ];
 
-    const dynamic = dynamicQuestions.map((q) => ({
+    // Skip questions whose name collides with a static column key, which
+    // would otherwise produce duplicate React keys in the table header.
+    const baseKeys = new Set(base.map((col) => col.key));
+    const dynamic = dynamicQuestions
+      .filter((q) => !baseKeys.has(q.name))
+      .map((q) => ({
       key: q.name,
       header: sortableFields.includes(q.name) ? (
         <SortableHeader

@@ -140,6 +140,23 @@ Plot IDs and rejection history already created locally stay.
 To stop the stack including the mock, pass the profile so the mock is
 stopped too: `docker compose --profile kobo-mock down`.
 
+## Planting & Carbon Figures
+
+The Planting & carbon tab reads `frontend/src/data/planting.json`,
+rebuilt from the client's workbooks by the rules in
+`AB_KPI_Guidance_AKVO.docx`. When a new year's files arrive, put the
+whole set in `storage/planting/` (git-ignored) and regenerate:
+
+```bash
+docker compose exec -T backend python manage.py build_planting_kpis \
+  /app/storage/planting > frontend/src/data/planting.json
+```
+
+Every `AB_Planting_<year>_<NN>ha.xlsx` adds up; only the latest
+`AB_Survival_Monitoring_<year>.xlsx` and `AB_ER_Model_<year>.xlsx`
+count. A list without a plot size column counts at the `NN` hectares in
+its name. Review the JSON diff and commit it with the release.
+
 ## Project Structure
 
 ```

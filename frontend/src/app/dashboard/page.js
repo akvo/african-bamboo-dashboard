@@ -250,25 +250,23 @@ const DashboardPage = () => {
         </Card>
       </div>
 
-      {a2f.isEnabled && (
-        <>
-          <Tabs value={dashboardTab} onValueChange={setDashboardTab}>
-            <TabsList>
-              <TabsTrigger value="planting">Planting &amp; carbon</TabsTrigger>
-              <TabsTrigger value="finance">Access to finance</TabsTrigger>
-            </TabsList>
-          </Tabs>
-          {dashboardTab === "planting" && <PlantingSection />}
-          {dashboardTab === "finance" && (
-            <A2FSection
-              data={a2f.data}
-              filters={a2fFilters}
-              onFiltersChange={setA2fFilters}
-              isLoading={a2f.isLoading}
-              error={a2f.error}
-            />
+      <Tabs value={dashboardTab} onValueChange={setDashboardTab}>
+        <TabsList>
+          <TabsTrigger value="planting">Planting &amp; carbon</TabsTrigger>
+          {a2f.isEnabled && (
+            <TabsTrigger value="finance">Access to finance</TabsTrigger>
           )}
-        </>
+        </TabsList>
+      </Tabs>
+      {(dashboardTab === "planting" || !a2f.isEnabled) && <PlantingSection />}
+      {dashboardTab === "finance" && a2f.isEnabled && (
+        <A2FSection
+          data={a2f.data}
+          filters={a2fFilters}
+          onFiltersChange={setA2fFilters}
+          isLoading={a2f.isLoading}
+          error={a2f.error}
+        />
       )}
 
       {/* Filters */}

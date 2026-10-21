@@ -157,6 +157,31 @@ Every `AB_Planting_<year>_<NN>ha.xlsx` adds up; only the latest
 count. A list without a plot size column counts at the `NN` hectares in
 its name. Review the JSON diff and commit it with the release.
 
+## Access to Finance Data
+
+The Access to finance tab shows only when `A2F_ENABLED=True` in the
+backend environment **and** a workbook has been imported; otherwise
+`/api/v1/a2f/metrics/` returns 404 and the tab is hidden. Compose
+defaults the flag to `False`; set it in `.env` and recreate the backend
+(`docker compose up -d backend`). On servers it comes from the Vault
+secret per environment.
+
+Each import replaces all finance data. Locally, import the dummy
+workbook:
+
+```bash
+docker compose exec backend python manage.py import_a2f \
+  api/v1/v1_a2f/tests/fixtures/a2f_dummy.xlsx
+```
+
+For a real file, put it in `storage/` (git-ignores `.xlsx`) and pass
+`/app/storage/<file>.xlsx`. In a deployed environment, `kubectl cp` the
+file into the backend pod and run the command there. The workbook needs
+the sheets `cooperatives`, `members`, `loans`, `parcels` and
+`parameters` (with `data_as_of`), with headers exactly as in the
+client's template; see
+`docs/v30_access_to_finance_dashboard_plan.md` §3.2.
+
 ## Project Structure
 
 ```

@@ -27,8 +27,9 @@ describe("PlantingSection", () => {
   it("renders the headline figures", () => {
     render(<PlantingSection />);
     expect(screen.getByText("14,404,611")).toBeInTheDocument();
+    expect(screen.getByText("tCO2e, projected")).toBeInTheDocument();
     expect(
-      screen.getByText("tCO2e, projected Aug 2024 – Jul 2064"),
+      screen.getByText("Crediting period Aug 2024 – Jul 2064"),
     ).toBeInTheDocument();
     expect(screen.getByText("12.5")).toBeInTheDocument();
     expect(screen.getByText("1,234")).toBeInTheDocument();

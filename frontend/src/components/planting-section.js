@@ -34,7 +34,8 @@ const KPIS = [
   {
     title: "Estimated carbon removals over the project lifetime",
     value: num(data.carbon.tco2e),
-    note: `tCO2e, projected ${month(data.carbon.period_start, "short")} – ${month(data.carbon.period_end, "short")}`,
+    note: "tCO2e, projected",
+    footer: `Crediting period ${month(data.carbon.period_start, "short")} – ${month(data.carbon.period_end, "short")}`,
     highlight: true,
   },
   {

@@ -1,0 +1,38 @@
+{
+  "planting_years": [
+    2024,
+    2025
+  ],
+  "hectares": 169.8,
+  "plots": 799,
+  "monitoring_up_to": "2026-07-25",
+  "survival_rate": 90.9,
+  "monitored_plots": 264,
+  "species": [
+    {
+      "name": "Yushania alpina (highland bamboo)",
+      "seedlings": 39520,
+      "survival_rate": 91.3
+    },
+    {
+      "name": "Millettia ferruginea",
+      "seedlings": 26624,
+      "survival_rate": 88.4
+    },
+    {
+      "name": "Hagenia abyssinica",
+      "seedlings": 26624,
+      "survival_rate": 90.8
+    },
+    {
+      "name": "Morus alba (mulberry)",
+      "seedlings": 74288,
+      "survival_rate": 91.6
+    }
+  ],
+  "carbon": {
+    "tco2e": 14404611,
+    "period_start": "2024-08-01",
+    "period_end": "2064-07-31"
+  }
+}

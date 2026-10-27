@@ -8,47 +8,46 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { ShareBar } from "@/components/a2f/a2f-card";
+import data from "@/data/planting.json";
 
-// Static figures (#61), derived from the client's workbooks per
-// AB_KPI_Guidance_AKVO.docx.
-const PLANTING_DATE = "Planting lists as of 19 May 2026";
-const MONITORING_DATE = "Monitoring visits up to June 2026";
+// Figures from the client's workbooks, rebuilt per
+// AB_KPI_Guidance_AKVO.docx by `manage.py build_planting_kpis`.
+const month = (iso, style) =>
+  new Date(iso).toLocaleDateString("en-US", {
+    month: style,
+    year: "numeric",
+    timeZone: "UTC",
+  });
+const [firstYear, lastYear] = data.planting_years;
+const PLANTING_DATE =
+  firstYear === lastYear
+    ? `Planting lists ${firstYear}`
+    : `Planting lists ${firstYear}–${lastYear}`;
+const MONITORING_DATE = `Monitoring visits up to ${month(data.monitoring_up_to, "long")}`;
 
-const SPECIES = [
-  // Seedlings: species columns of the three planting lists.
-  // Survival: latest visit per farmer, AB_Survival_Monitoring_2026.xlsx.
-  {
-    name: "Yushania alpina (highland bamboo)",
-    seedlings: 39520,
-    survival: "91.3%",
-  },
-  { name: "Millettia ferruginea", seedlings: 26624, survival: "88.4%" },
-  { name: "Hagenia abyssinica", seedlings: 26624, survival: "90.8%" },
-  { name: "Morus alba (mulberry)", seedlings: 74288, survival: "91.6%" },
-];
+const SPECIES = data.species;
 const TOTAL_SEEDLINGS = SPECIES.reduce((sum, s) => sum + s.seedlings, 0);
 
 const num = (n) => n.toLocaleString("en-US");
 
 const KPIS = [
   {
-    // AB_ER_Model_2026.xlsx, Net GHG Benefit!S54 (after risk buffer).
     title: "Estimated carbon removals over the project lifetime",
-    value: num(14404611),
-    note: "tCO2e, projected Aug 2024 – Jul 2064",
-    footer: "Source: AB_ER_Model_2026.xlsx, Net GHG Benefit!S54",
+    value: num(data.carbon.tco2e),
+    note: "tCO2e, projected",
+    footer: `Crediting period ${month(data.carbon.period_start, "short")} – ${month(data.carbon.period_end, "short")}`,
     highlight: true,
   },
   {
-    // 99.8 summed plot sizes (100 ha list) + 50 + 20 (ER model Inputs!D20).
+    // Lists without a plot size column count at their nominal area.
     title: "Hectares planted",
-    value: "169.8",
+    value: num(data.hectares),
     note: "Includes estimated plot areas",
     footer: PLANTING_DATE,
   },
   {
     title: "Farmers' plots planted on",
-    value: num(799),
+    value: num(data.plots),
     note: "Plots on the planting lists",
     footer: PLANTING_DATE,
   },
@@ -60,8 +59,8 @@ const KPIS = [
   },
   {
     title: "Survival rate",
-    value: "90.9%",
-    note: "264 monitored plots",
+    value: `${data.survival_rate}%`,
+    note: `${num(data.monitored_plots)} monitored plots`,
     footer: MONITORING_DATE,
   },
 ];
@@ -123,7 +122,7 @@ export function PlantingSection() {
                 </span>
                 <span className="w-16 text-right text-sm">
                   <span className="sr-only">Survival: </span>
-                  {s.survival}
+                  {s.survival_rate}%
                 </span>
               </li>
             ))}

@@ -147,12 +147,10 @@ def read_carbon(path):
         if label.lower() == "total" and vintages:
             start = vintages[0].split(" to ")[0]
             end = vintages[-1].split(" to ")[1]
-            name = os.path.basename(path)
             return {
                 "tco2e": round(row[7].value),
                 "period_start": parse_day(start),
                 "period_end": parse_day(end),
-                "source": f"{name}, {ER_SHEET}!{row[7].coordinate}",
             }
         if " to " in label:
             vintages.append(label)

@@ -20,7 +20,6 @@ jest.mock("../src/data/planting.json", () => ({
     tco2e: 14404611,
     period_start: "2024-08-01",
     period_end: "2064-07-31",
-    source: "AB_ER_Model_2026.xlsx, Net GHG Benefit!S54",
   },
 }));
 

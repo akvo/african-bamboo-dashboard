@@ -1,0 +1,8 @@
+# Keep notebooks (.ipynb) and README committed; never commit the plot data.
+# Farmer/plot geometry is private — data lives only on your machine.
+data/
+*.xlsx
+*.csv
+*.geojson
+__pycache__/
+.ipynb_checkpoints/
